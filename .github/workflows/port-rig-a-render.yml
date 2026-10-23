@@ -97,6 +97,17 @@ jobs:
             -DOPENKO_FETCH_CLIENT_ASSETS=ON
           cmake --build build --parallel --target WarFare
 
+      # The client links d3dx9_43.dll, which only ships in the legacy DirectX
+      # End-User Runtime (not preinstalled on the runner image).
+      - name: Install the DirectX June 2010 runtime
+        shell: pwsh
+        run: |
+          $url = 'https://download.microsoft.com/download/8/4/A/84A35BF1-DAFE-4AE8-82AF-AD2AE20B6B14/directx_Jun2010_redist.exe'
+          Invoke-WebRequest $url -OutFile dxredist.exe
+          Start-Process .\dxredist.exe -ArgumentList '/Q', "/T:$PWD\dxredist" -Wait
+          Start-Process .\dxredist\DXSETUP.exe -ArgumentList '/silent' -Wait
+          Get-ChildItem C:\Windows\System32\d3dx9_43.dll, C:\Windows\SysWOW64\d3dx9_43.dll | Format-Table FullName, Length
+
       - name: Start the client and capture the screen
         shell: pwsh
         run: pwsh -File port/rigs/rig-a/run-client-capture.ps1 -ClientDir build/ClientData -Exe build/bin/Release/KnightOnLine.exe -OutDir rig-a-out
