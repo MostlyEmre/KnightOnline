@@ -41,6 +41,7 @@ jobs:
           Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion, VideoProcessor, AdapterCompatibility, CurrentHorizontalResolution, CurrentVerticalResolution | Tee-Object rig-a-out/adapters.txt
           Start-Process dxdiag -ArgumentList '/t', "$PWD\rig-a-out\dxdiag.txt" -Wait
           query session | Tee-Object rig-a-out/session.txt
+          exit 0  # query returns 1 even when it prints the sessions
 
       - name: Build the spike
         shell: cmd
