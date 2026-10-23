@@ -252,5 +252,9 @@ if(OPENKO_BUILD_TESTS)
   
   if(OPENKO_BUILD_SERVERS)
     add_subdirectory(tests/Server/Ebenezer)
+
+    if(OPENKO_DB_BACKEND STREQUAL "SQLITE")
+      add_subdirectory(src/db-library/sqlite/tests)
+    endif()
   endif() 
 endif()
