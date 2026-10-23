@@ -31,7 +31,7 @@ struct GpuStage
 {
 	uint32_t a[4]; // colorOp, colorArg1, colorArg2, alphaOp
 	uint32_t b[4]; // alphaArg1, alphaArg2, hasTexture, texCoordIndex
-	uint32_t c[4]; // useMips
+	uint32_t c[4]; // useMips, pointSampled
 };
 
 struct Uniforms
@@ -46,6 +46,7 @@ struct Uniforms
 	float fogColor[4], tfactor[4], unboundTex[4];
 	GpuLight lights[2];
 	GpuStage stages[3];
+	uint32_t inject[4]; // deliberate defects for threshold calibration: modulate2x, halfpixel, normalize
 };
 
 const char* kShaderSource = R"MSL(
@@ -63,6 +64,7 @@ struct U {
 	float4 fogColor, tfactor, unboundTex;
 	Light lights[2];
 	Stage stages[3];
+	uint4 inject;
 };
 
 struct VOut {
@@ -113,8 +115,11 @@ vertex VOut vs(uint vid [[vertex_id]], device const uint* vb [[buffer(0)]], cons
 	float4 vp = u.view * (u.world * p);
 	float4 cp = u.proj * vp;
 	// Same half-pixel shift for transformed geometry, applied in clip space.
-	cp.x += cp.w * u.viewport.z;
-	cp.y -= cp.w * u.viewport.w;
+	if (u.inject.y == 0)
+	{
+		cp.x += cp.w * u.viewport.z;
+		cp.y -= cp.w * u.viewport.w;
+	}
 	o.pos = cp;
 	o.eyeDepth = cp.w;
 
@@ -126,6 +131,8 @@ vertex VOut vs(uint vid [[vertex_id]], device const uint* vb [[buffer(0)]], cons
 
 	float3 n = (fvf & FVF_NORMAL) ? float3(f(vb, base + u.v0.z), f(vb, base + u.v0.z + 1), f(vb, base + u.v0.z + 2)) : float3(0.0);
 	float3 N = (u.normalMat * float4(n, 0.0)).xyz; // D3DRS_NORMALIZENORMALS is FALSE in the client
+	if (u.inject.z != 0)
+		N = normalize(N);
 	float3 V = vp.xyz;
 	float4 matD = hasDiffuse ? vdiff : u.matDiffuse; // COLORVERTEX TRUE, DIFFUSEMATERIALSOURCE COLOR1
 	float3 amb = u.ambient.rgb, dif = float3(0.0), spe = float3(0.0);
@@ -203,6 +210,14 @@ static float4 sampleStage(constant U& u, uint i, VOut in, texture2d<float> t, sa
 	if (st.b.z == 0)
 		return u.unboundTex;
 	float2 uv = st.b.w == 0 ? in.uv0 : in.uv1;
+	if (st.c.y != 0)
+	{
+		// WARP picks texel floor(uv * size) even when the interpolated coordinate lands
+		// exactly on a texel edge; Apple GPUs can land a hair below it. Snap to the
+		// centre of the texel WARP would pick.
+		float2 size = float2(t.get_width(), t.get_height());
+		uv = (floor(uv * size + 1.0 / 256.0) + 0.5) / size;
+	}
 	return st.c.x != 0 ? t.sample(s, uv, bias(u.p0.z)) : t.sample(s, uv);
 }
 
@@ -219,7 +234,7 @@ fragment float4 fs(VOut in [[stage_in]], constant U& u [[buffer(1)]],
 			break;
 		float4 c1 = argValue(st.a.y, in.diffuse, current, tex[i], u.tfactor, in.specular);
 		float4 c2 = argValue(st.a.z, in.diffuse, current, tex[i], u.tfactor, in.specular);
-		float3 rgb = combine(st.a.x, c1, c2).rgb;
+		float3 rgb = combine(u.inject.x != 0 && st.a.x == 5 ? 4u : st.a.x, c1, c2).rgb;
 		float a = current.a;
 		if (st.a.w != 1)
 		{
@@ -233,8 +248,8 @@ fragment float4 fs(VOut in [[stage_in]], constant U& u [[buffer(1)]],
 		current.rgb = saturate(current.rgb + in.specular.rgb);
 	if (u.v2.y != 0)
 	{
-		float a8 = rint(saturate(current.a) * 255.0);
-		if (!(a8 > float(u.v2.z))) // D3DCMP_GREATER against D3DRS_ALPHAREF
+		// D3DCMP_GREATER against D3DRS_ALPHAREF; WARP compares the unquantised alpha.
+		if (!(saturate(current.a) > float(u.v2.z) / 255.0))
 			discard_fragment();
 	}
 	if (u.v2.x != 0) // D3DFOG_EXP2 table fog on eye depth (W-friendly projection)
@@ -347,8 +362,75 @@ MTLBlendFactor Blend(uint32_t b)
 	}
 }
 
+// BC1/2/3 decoded on the CPU with the D3D formulas (palette entries rounded to
+// nearest), used to test whether GPU block decoding explains a difference.
+void DecodeBC(const ff::Texture& t, const std::vector<uint8_t>& level, int w, int h, std::vector<uint8_t>& bgra)
+{
+	bgra.assign((size_t) w * h * 4, 0);
+	int bw = (w + 3) / 4, bh = (h + 3) / 4;
+	size_t bs = t.format == ff::FMT_DXT1 ? 8 : 16;
+	for (int by = 0; by < bh; by++)
+		for (int bx = 0; bx < bw; bx++)
+		{
+			const uint8_t* b = &level[((size_t) by * bw + bx) * bs];
+			const uint8_t* cb = t.format == ff::FMT_DXT1 ? b : b + 8;
+			uint16_t c0 = (uint16_t) (cb[0] | cb[1] << 8), c1 = (uint16_t) (cb[2] | cb[3] << 8);
+			float pal[4][4];
+			auto expand = [](uint16_t c, float* o) {
+				o[0] = ((c >> 11) & 31) * 255.0f / 31.0f;
+				o[1] = ((c >> 5) & 63) * 255.0f / 63.0f;
+				o[2] = (c & 31) * 255.0f / 31.0f;
+				o[3] = 255.0f;
+			};
+			expand(c0, pal[0]);
+			expand(c1, pal[1]);
+			bool four = t.format != ff::FMT_DXT1 || c0 > c1;
+			for (int k = 0; k < 4; k++)
+			{
+				if (four)
+				{
+					pal[2][k] = (2 * pal[0][k] + pal[1][k]) / 3.0f;
+					pal[3][k] = (pal[0][k] + 2 * pal[1][k]) / 3.0f;
+				}
+				else
+				{
+					pal[2][k] = (pal[0][k] + pal[1][k]) / 2.0f;
+					pal[3][k] = 0.0f;
+				}
+			}
+			uint32_t bits = (uint32_t) (cb[4] | cb[5] << 8 | cb[6] << 16 | (uint32_t) cb[7] << 24);
+			float apal[8] = {};
+			uint64_t abits = 0;
+			if (t.format == ff::FMT_DXT5)
+			{
+				apal[0] = b[0], apal[1] = b[1];
+				for (int i = 1; i < 7; i++)
+					apal[i + 1] = b[0] > b[1] ? ((7 - i) * b[0] + i * b[1]) / 7.0f : (i < 5 ? ((5 - i) * b[0] + i * b[1]) / 5.0f : (i == 5 ? 0.0f : 255.0f));
+				for (int k = 0; k < 6; k++)
+					abits |= (uint64_t) b[2 + k] << (8 * k);
+			}
+			for (int i = 0; i < 16; i++)
+			{
+				int x = bx * 4 + i % 4, y = by * 4 + i / 4;
+				if (x >= w || y >= h)
+					continue;
+				const float* c = pal[(bits >> (2 * i)) & 3];
+				float a = c[3];
+				if (t.format == ff::FMT_DXT3)
+					a = ((b[i / 2] >> ((i & 1) * 4)) & 15) * 17.0f;
+				else if (t.format == ff::FMT_DXT5)
+					a = apal[(abits >> (3 * i)) & 7];
+				uint8_t* o = &bgra[((size_t) y * w + x) * 4];
+				o[0] = (uint8_t) std::lround(c[2]), o[1] = (uint8_t) std::lround(c[1]), o[2] = (uint8_t) std::lround(c[0]), o[3] = (uint8_t) std::lround(a);
+			}
+		}
+}
+
 struct Renderer
 {
+	bool cpuBC = false;
+	uint32_t inject[4] = {};
+	float fogScale = 1.0f;
 	id<MTLDevice> device;
 	id<MTLCommandQueue> queue;
 	id<MTLLibrary> library;
@@ -420,13 +502,13 @@ struct Renderer
 
 	id<MTLTexture> Upload(const ff::Texture& t)
 	{
-		bool bc = t.format == ff::FMT_DXT1 || t.format == ff::FMT_DXT3 || t.format == ff::FMT_DXT5;
+		bool bc = (t.format == ff::FMT_DXT1 || t.format == ff::FMT_DXT3 || t.format == ff::FMT_DXT5) && !cpuBC;
 		MTLPixelFormat pf = MTLPixelFormatBGRA8Unorm;
-		if (t.format == ff::FMT_DXT1)
+		if (bc && t.format == ff::FMT_DXT1)
 			pf = MTLPixelFormatBC1_RGBA;
-		else if (t.format == ff::FMT_DXT3)
+		else if (bc && t.format == ff::FMT_DXT3)
 			pf = MTLPixelFormatBC2_RGBA;
-		else if (t.format == ff::FMT_DXT5)
+		else if (bc && t.format == ff::FMT_DXT5)
 			pf = MTLPixelFormatBC3_RGBA;
 		MTLTextureDescriptor* d = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pf
 																					   width:(NSUInteger) t.width
@@ -444,6 +526,12 @@ struct Renderer
 			NSUInteger rowBytes;
 			if (bc)
 				rowBytes = (NSUInteger) ((w + 3) / 4) * (t.format == ff::FMT_DXT1 ? 8 : 16);
+			else if (t.format == ff::FMT_DXT1 || t.format == ff::FMT_DXT3 || t.format == ff::FMT_DXT5)
+			{
+				DecodeBC(t, t.levels[l], w, h, conv);
+				src      = conv.data();
+				rowBytes = (NSUInteger) w * 4;
+			}
 			else if (t.format == ff::FMT_A4R4G4B4)
 			{
 				// Expanded by bit replication (x * 17), as D3D/WARP do.
@@ -512,6 +600,8 @@ struct Renderer
 		ColorToFloat(s.fogColor, u.fogColor);
 		ColorToFloat(d.textureFactor, u.tfactor);
 		memcpy(u.unboundTex, unbound, 16);
+		memcpy(u.inject, inject, 16);
+		u.p0[1] *= fogScale;
 		for (int i = 0; i < 2; i++)
 		{
 			const ff::Light& L = s.lights[i];
@@ -536,6 +626,7 @@ struct Renderer
 			g.a[3] = disabled ? ff::TOP_DISABLE : st.alphaOp;
 			g.b[0] = st.alphaArg1, g.b[1] = st.alphaArg2, g.b[2] = st.texture >= 0, g.b[3] = st.texCoordIndex;
 			g.c[0] = st.mipFilter != ff::TEXF_NONE;
+			g.c[1] = st.minFilter == ff::TEXF_POINT && st.magFilter == ff::TEXF_POINT && st.mipFilter == ff::TEXF_NONE;
 			if (st.texture >= 0)
 			{
 				[enc setFragmentTexture:textures[(size_t) st.texture] atIndex:(NSUInteger) i];
@@ -668,6 +759,20 @@ int main(int argc, char** argv)
 		{
 			if (std::strcmp(argv[i], "--out") == 0)
 				out = argv[i + 1];
+			else if (std::strcmp(argv[i], "--inject") == 0)
+			{
+				std::string what = argv[i + 1];
+				if (what == "modulate2x-as-modulate")
+					r.inject[0] = 1;
+				else if (what == "no-half-pixel")
+					r.inject[1] = 1;
+				else if (what == "normalize-normals")
+					r.inject[2] = 1;
+				else if (what == "fog-density-10pct")
+					r.fogScale = 1.1f;
+			}
+			else if (std::strcmp(argv[i], "--cpu-bc") == 0)
+				r.cpuBC = std::strcmp(argv[i + 1], "1") == 0;
 			else if (std::strcmp(argv[i], "--unbound") == 0)
 				std::sscanf(argv[i + 1], "%f,%f,%f,%f", &r.unbound[0], &r.unbound[1], &r.unbound[2], &r.unbound[3]);
 		}
