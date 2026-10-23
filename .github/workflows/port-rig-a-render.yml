@@ -1,0 +1,59 @@
+# Reference rig A: Windows D3D9 renders produced on a GPU-less GitHub runner by
+# Microsoft's WARP software rasterizer. These are the images the macOS renderer
+# is compared against.
+
+name: "Port: rig A (Windows/WARP reference renders)"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - macos-port
+    paths:
+      - '.github/workflows/port-rig-a-render.yml'
+      - 'port/rigs/rig-a/**'
+      - 'port/spikes/ffspike/**'
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  # The real upstream client, unmodified, started on the runner to see whether its
+  # D3D9 device comes up on WARP and the login scene renders.
+  client:
+    runs-on: windows-latest
+    name: "Upstream client on WARP (login screen)"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Configure and build the client
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DOPENKO_BUILD_SERVERS=OFF `
+            -DOPENKO_BUILD_TOOLS=OFF `
+            -DOPENKO_BUILD_CLIENT_TOOLS=OFF `
+            -DOPENKO_BUILD_TESTS=OFF `
+            -DOPENKO_FETCH_CLIENT_ASSETS=ON
+          cmake --build build --parallel --target WarFare
+
+      - name: Start the client and capture the screen
+        shell: pwsh
+        run: pwsh -File port/rigs/rig-a/run-client-capture.ps1 -ClientDir build/ClientData -Exe build/bin/Release/KnightOnLine.exe -OutDir rig-a-out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rig-a-client
+          path: rig-a-out

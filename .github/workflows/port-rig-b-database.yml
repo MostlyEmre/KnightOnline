@@ -1,0 +1,94 @@
+# Reference rig B: the real SQL Server, loaded from OpenKO-db, with the servers
+# built natively on Linux against it via ODBC. This is the oracle the SQLite
+# backend is compared against.
+
+name: "Port: rig B (SQL Server reference)"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - macos-port
+    paths:
+      - '.github/workflows/port-rig-b-database.yml'
+      - 'port/rigs/rig-b/**'
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+env:
+  MSSQL_SA_PASSWORD: "D0ckeIzKn!ght"
+
+jobs:
+  sqlserver_reference:
+    runs-on: ubuntu-latest
+    name: "SQL Server + servers (Linux, ODBC)"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - name: Start SQL Server and import OpenKO-db
+        run: |
+          docker compose up --build -d sqlserver
+          docker compose up --build -d kodb-util
+          for i in $(seq 1 60); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q sqlserver)")
+            echo "sqlserver health: $status"
+            [ "$status" = "healthy" ] && break
+            sleep 5
+          done
+          docker compose exec -T kodb-util /usr/local/bin/cleanImport.sh 2>&1 | tee import.log
+          # Record exactly which OpenKO-db commit was imported
+          docker compose exec -T kodb-util sh -c 'cd /var/lib/app/kodb-util && git submodule status --recursive' | tee openko-db-commit.txt
+
+      - name: Install ODBC driver and configure DSN
+        run: |
+          if ! dpkg -s msodbcsql18 >/dev/null 2>&1; then
+            curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc >/dev/null
+            curl -sSL "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list" | sudo tee /etc/apt/sources.list.d/mssql-release.list >/dev/null
+            sudo apt-get update
+            sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          fi
+          sudo apt-get install -y unixodbc unixodbc-dev
+          printf '%s\n' \
+            '[KN_online]' \
+            'Driver = ODBC Driver 18 for SQL Server' \
+            'Server = 127.0.0.1,1433' \
+            'Database = KN_online' \
+            'Encrypt = no' \
+            'TrustServerCertificate = yes' | sudo tee /etc/odbc.ini
+          isql -v KN_online knight knight <<< "SELECT COUNT(*) FROM TB_USER" | tee isql-check.txt
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Build servers
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE \
+            -DOPENKO_BUILD_TESTS=OFF
+          cmake --build build --parallel --target \
+            AIServer Ebenezer Aujard VersionManager ItemManager copy-server-assets
+
+      - name: Inspect the reference database
+        run: bash port/rigs/rig-b/inspect-db.sh | tee db-inspect.txt
+
+      - name: Run the servers against SQL Server
+        run: bash port/rigs/rig-b/run-servers.sh build/bin/Debug
+
+      - name: Collect results
+        if: always()
+        run: |
+          mkdir -p rig-b-out
+          cp -v import.log openko-db-commit.txt isql-check.txt db-inspect.txt rig-b-out/ 2>/dev/null || true
+          cp -rv build/bin/Debug/run-logs rig-b-out/ 2>/dev/null || true
+          find build/bin/Debug -maxdepth 2 \( -name '*.ini' -o -name '*.log' \) -exec cp -v --parents {} rig-b-out/ \; 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rig-b-out
+          path: rig-b-out
