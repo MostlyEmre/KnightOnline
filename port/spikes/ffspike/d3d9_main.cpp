@@ -7,6 +7,8 @@
 // the WARP-backed Basic Render Driver); "9on12warp" forces D3D9On12 on an explicit
 // D3D12 WARP device.
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
 #include <d3d9.h>
 #include <d3d12.h>
