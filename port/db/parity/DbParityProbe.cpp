@@ -20,7 +20,7 @@
 #include <nanodbc/nanodbc.h>
 
 #include <algorithm>
-#include <cstdio>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -58,9 +58,7 @@ std::string JsonString(const std::string& bytes)
 		}
 		else if (c < 0x20 || c >= 0x7F)
 		{
-			char buf[8];
-			std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-			out += buf;
+			out += std::format("\\u{:04x}", c);
 		}
 		else
 		{
@@ -80,27 +78,19 @@ std::string ReadCell(const nanodbc::result& r, short col, const std::string& nam
 	{
 		std::vector<uint8_t> bytes = r.get<std::vector<uint8_t>>(col);
 		std::string hex            = "\"0x";
-		char buf[4];
 		for (uint8_t b : bytes)
-		{
-			std::snprintf(buf, sizeof(buf), "%02x", b);
-			hex += buf;
-		}
+			hex += std::format("{:02x}", b);
 		return hex + "\"";
 	}
 	if (DateColumns.contains(name))
 	{
 		nanodbc::timestamp ts = r.get<nanodbc::timestamp>(col);
-		char buf[48];
-		std::snprintf(buf, sizeof(buf), "\"%04d-%02d-%02d %02d:%02d:%02d.%03d\"", ts.year, ts.month,
-			ts.day, ts.hour, ts.min, ts.sec, ts.fract / 1000000);
-		return buf;
+		return std::format("\"{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}\"", ts.year, ts.month, ts.day,
+			ts.hour, ts.min, ts.sec, ts.fract / 1000000);
 	}
 	if (FloatColumns.contains(name))
 	{
-		char buf[48];
-		std::snprintf(buf, sizeof(buf), "%.17g", r.get<double>(col));
-		return buf;
+		return std::format("{:.17g}", r.get<double>(col));
 	}
 	return JsonString(r.get<std::string>(col));
 }

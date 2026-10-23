@@ -115,6 +115,9 @@ struct Step
 	long Native = 0;
 };
 
+/// \brief localtime_r / localtime_s.
+std::tm LocalTime(std::time_t when);
+
 /// \brief SQL Server's datetime text form as stored in the SQLite database:
 /// "YYYY-MM-DD HH:MM:SS.fff". smalldatetime values carry ":00.000" seconds.
 std::string FormatDateTime(std::time_t when, int milliseconds, bool smallDateTime);

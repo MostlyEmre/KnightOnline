@@ -148,9 +148,7 @@ Int DateDiffDaysFromNow(const Value& value)
 	if (!ParseDateTime(value.Bytes, y, mo, d, h, mi, s, ms))
 		return std::nullopt;
 
-	std::time_t now = std::time(nullptr);
-	std::tm local {};
-	localtime_r(&now, &local);
+	std::tm local = LocalTime(std::time(nullptr));
 	int64_t today = DaysFromCivil(local.tm_year + 1900, static_cast<unsigned>(local.tm_mon + 1),
 		static_cast<unsigned>(local.tm_mday));
 	return DaysFromCivil(y, static_cast<unsigned>(mo), static_cast<unsigned>(d)) - today;
@@ -347,11 +345,10 @@ void Proc_CREATE_NEW_CHAR(ProcContext& ctx)
 	if (IsTrue(Cmp(bCharNum, Ge, 3)))
 		nRet = 1;
 
-	if (IsTrue(And(Cmp(nation, EqI, 1), Cmp(race, Gt, 10))))
-		nRet = 2;
-	else if (IsTrue(And(Cmp(nation, EqI, 2), Cmp(race, Lt, 10))))
-		nRet = 2;
-	else if (IsTrue(And(Cmp(nation, NeI, 1), Cmp(nation, NeI, 2))))
+	// IF .. SET @nRet = 2 ELSE IF .. SET @nRet = 2 ELSE IF .. SET @nRet = 2
+	if (IsTrue(And(Cmp(nation, EqI, 1), Cmp(race, Gt, 10)))
+		|| IsTrue(And(Cmp(nation, EqI, 2), Cmp(race, Lt, 10)))
+		|| IsTrue(And(Cmp(nation, NeI, 1), Cmp(nation, NeI, 2))))
 		nRet = 2;
 
 	if (IsTrue(Cmp(nRet, Gt, 0)))

@@ -87,7 +87,7 @@ public:
 	void Rows(RowSet rows);
 
 	/// \brief An error raised by a statement; T-SQL carries on to the next statement.
-	void Error(std::string sqlState, long native, std::string message);
+	void Error(std::string sqlState, long native, const std::string& message);
 
 	// --- transaction control ------------------------------------------------------------
 

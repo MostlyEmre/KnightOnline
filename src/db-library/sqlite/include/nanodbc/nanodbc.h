@@ -25,7 +25,9 @@
 #include <type_traits>
 #include <vector>
 
-// Narrow strings only, as nanodbc builds without NANODBC_ENABLE_UNICODE.
+// Narrow strings only, as nanodbc builds without NANODBC_ENABLE_UNICODE. Kept as a macro
+// because the generated code uses nanodbc's macro.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define NANODBC_TEXT(s) s
 
 namespace nanodbc
@@ -114,7 +116,7 @@ private:
 class statement
 {
 public:
-	enum param_direction
+	enum param_direction : uint8_t
 	{
 		PARAM_IN,
 		PARAM_OUT,

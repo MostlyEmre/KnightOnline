@@ -29,6 +29,7 @@ target_link_libraries(nanodbc PRIVATE sqlite3)
 
 # Lets code that needs to know (tests, tools) tell the backends apart.
 target_compile_definitions(nanodbc PUBLIC OPENKO_DB_BACKEND_SQLITE=1)
+target_compile_definitions(nanodbc PRIVATE $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>)
 
 if(OPENKO_COMPILE_WARNINGS_AS_ERROR)
   set_property(TARGET nanodbc PROPERTY COMPILE_WARNING_AS_ERROR ON)

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <span>
 #include <sstream>
 #include <string>
 
@@ -30,19 +31,8 @@ bool Exec(sqlite3* db, const std::string& sql)
 	return true;
 }
 
-} // namespace
-
-int main(int argc, char** argv)
+int Run(const std::filesystem::path& databasePath, const std::filesystem::path& scriptPath)
 {
-	if (argc < 3)
-	{
-		std::cerr << "usage: openko-sqlite-load <database> <script.sql>\n";
-		return 2;
-	}
-
-	const std::filesystem::path databasePath = argv[1];
-	const std::filesystem::path scriptPath   = argv[2];
-
 	std::ifstream script(scriptPath, std::ios::binary);
 	if (!script)
 	{
@@ -98,4 +88,26 @@ int main(int argc, char** argv)
 
 	std::cout << "openko-sqlite-load: wrote " << databasePath.string() << '\n';
 	return 0;
+}
+
+} // namespace
+
+int main(int argc, char** argv)
+{
+	std::span<char*> args(argv, static_cast<size_t>(argc));
+	if (args.size() < 3)
+	{
+		std::cerr << "usage: openko-sqlite-load <database> <script.sql>\n";
+		return 2;
+	}
+
+	try
+	{
+		return Run(args[1], args[2]);
+	}
+	catch (const std::exception& ex)
+	{
+		std::cerr << "openko-sqlite-load: " << ex.what() << '\n';
+		return 1;
+	}
 }

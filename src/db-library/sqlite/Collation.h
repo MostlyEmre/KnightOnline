@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
 #include <string_view>
 
 struct sqlite3;
@@ -19,13 +17,7 @@ inline constexpr const char* KoCollationName = "KO_CI";
 /// varchar values for equality: case-insensitive, accent-sensitive, trailing spaces ignored.
 /// Ordering is by case-folded byte value, which matches SQL Server for the identifiers the
 /// game stores (letters, digits, '_'), but not its dictionary order for punctuation.
-int KoCompare(const uint8_t* lhs, size_t lhsLen, const uint8_t* rhs, size_t rhsLen);
-
-inline int KoCompare(std::string_view lhs, std::string_view rhs)
-{
-	return KoCompare(reinterpret_cast<const uint8_t*>(lhs.data()), lhs.size(),
-		reinterpret_cast<const uint8_t*>(rhs.data()), rhs.size());
-}
+int KoCompare(std::string_view lhs, std::string_view rhs);
 
 inline bool KoEquals(std::string_view lhs, std::string_view rhs)
 {

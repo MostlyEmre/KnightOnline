@@ -14,6 +14,10 @@ namespace db::sqlite
 namespace
 {
 
+// sqlite3.h defines SQLITE_TRANSIENT as a C-style cast of -1 to a destructor pointer.
+// NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast,performance-no-int-to-ptr)
+const sqlite3_destructor_type Transient     = SQLITE_TRANSIENT;
+
 // Whether "SELECT @var = col FROM ..." hands the client a row count, as INSERT/UPDATE/DELETE
 // do while NOCOUNT is OFF. Calibrated against SQL Server by the rig B parity probe.
 constexpr bool AssignSelectProducesRowCount = true;
@@ -32,12 +36,12 @@ void BindValue(sqlite3_stmt* stmt, int index, const Value& value)
 			sqlite3_bind_double(stmt, index, value.Real);
 			break;
 		case Value::Type::Text:
-			sqlite3_bind_text(stmt, index, value.Bytes.data(), static_cast<int>(value.Bytes.size()),
-				SQLITE_TRANSIENT);
+			sqlite3_bind_text(
+				stmt, index, value.Bytes.data(), static_cast<int>(value.Bytes.size()), Transient);
 			break;
 		case Value::Type::Blob:
-			sqlite3_bind_blob(stmt, index, value.Bytes.data(), static_cast<int>(value.Bytes.size()),
-				SQLITE_TRANSIENT);
+			sqlite3_bind_blob(
+				stmt, index, value.Bytes.data(), static_cast<int>(value.Bytes.size()), Transient);
 			break;
 	}
 }
@@ -229,7 +233,7 @@ void ProcContext::Rows(RowSet rows)
 	_steps.push_back(std::move(step));
 }
 
-void ProcContext::Error(std::string sqlState, long native, std::string message)
+void ProcContext::Error(std::string sqlState, long native, const std::string& message)
 {
 	Step step;
 	step.Kind     = Step::Type::Error;

@@ -3,9 +3,10 @@
 
 #include <nanodbc/nanodbc.h>
 
+#include <charconv>
 #include <chrono>
-#include <cstdio>
 #include <cstdlib>
+#include <format>
 #include <string>
 
 #include <sqlite3.h>
@@ -13,20 +14,27 @@
 namespace db::sqlite
 {
 
+std::tm LocalTime(std::time_t when)
+{
+	std::tm parts {};
+#if defined(_WIN32)
+	localtime_s(&parts, &when);
+#else
+	localtime_r(&when, &parts);
+#endif
+	return parts;
+}
+
 std::string FormatDateTime(std::time_t when, int milliseconds, bool smallDateTime)
 {
 	if (smallDateTime)
 	{
 		// smalldatetime is accurate to the minute; 29.998s and up rounds to the next minute.
-		std::tm parts {};
-		localtime_r(&when, &parts);
+		std::tm parts = LocalTime(when);
 		if (parts.tm_sec >= 30 || (parts.tm_sec == 29 && milliseconds >= 998))
-			when += 60;
-		localtime_r(&when, &parts);
-		char buffer[32];
-		std::snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d %02d:%02d:00.000",
-			parts.tm_year + 1900, parts.tm_mon + 1, parts.tm_mday, parts.tm_hour, parts.tm_min);
-		return buffer;
+			parts = LocalTime(when + 60);
+		return std::format("{:04}-{:02}-{:02} {:02}:{:02}:00.000", parts.tm_year + 1900,
+			parts.tm_mon + 1, parts.tm_mday, parts.tm_hour, parts.tm_min);
 	}
 
 	// datetime stores 1/300 s ticks, so milliseconds always end in 0, 3 or 7.
@@ -36,15 +44,11 @@ std::string FormatDateTime(std::time_t when, int milliseconds, bool smallDateTim
 		ticks = 0;
 		++when;
 	}
-	int ms = (ticks * 10 + 1) / 3;
 
-	std::tm parts {};
-	localtime_r(&when, &parts);
-	char buffer[32];
-	std::snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d %02d:%02d:%02d.%03d",
-		parts.tm_year + 1900, parts.tm_mon + 1, parts.tm_mday, parts.tm_hour, parts.tm_min,
-		parts.tm_sec, ms);
-	return buffer;
+	std::tm parts = LocalTime(when);
+	return std::format("{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}", parts.tm_year + 1900,
+		parts.tm_mon + 1, parts.tm_mday, parts.tm_hour, parts.tm_min, parts.tm_sec,
+		(ticks * 10 + 1) / 3);
 }
 
 std::string GetDate(bool smallDateTime)
@@ -53,35 +57,65 @@ std::string GetDate(bool smallDateTime)
 	auto sinceEpochMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 		now.time_since_epoch())
 							.count();
-	std::time_t secs = static_cast<std::time_t>(sinceEpochMs / 1000);
+	auto secs = static_cast<std::time_t>(sinceEpochMs / 1000);
 	return FormatDateTime(secs, static_cast<int>(sinceEpochMs % 1000), smallDateTime);
 }
+
+namespace
+{
+
+// Reads an unsigned decimal field of at most maxDigits digits at text[pos].
+bool ReadField(std::string_view text, size_t& pos, int maxDigits, int& out)
+{
+	size_t end = pos;
+	while (end < text.size() && end - pos < static_cast<size_t>(maxDigits) && text[end] >= '0'
+		   && text[end] <= '9')
+		++end;
+	if (end == pos)
+		return false;
+	std::from_chars(text.data() + pos, text.data() + end,
+		out); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+	pos = end;
+	return true;
+}
+
+bool Expect(std::string_view text, size_t& pos, char separator)
+{
+	if (pos >= text.size() || (text[pos] != separator && !(separator == ' ' && text[pos] == 'T')))
+		return false;
+	++pos;
+	return true;
+}
+
+} // namespace
 
 bool ParseDateTime(std::string_view text, int& year, int& month, int& day, int& hour, int& minute,
 	int& second, int& millisecond)
 {
-	std::string s(text);
 	year = month = day = hour = minute = second = millisecond = 0;
-	int fraction = 0, fractionDigits = 0;
-	char sep = 0;
-	int n    = std::sscanf(
-        s.c_str(), "%d-%d-%d%c%d:%d:%d", &year, &month, &day, &sep, &hour, &minute, &second);
-	if (n < 3)
+	size_t pos                                                = 0;
+	if (!ReadField(text, pos, 4, year) || !Expect(text, pos, '-') || !ReadField(text, pos, 2, month)
+		|| !Expect(text, pos, '-') || !ReadField(text, pos, 2, day))
 		return false;
 
-	size_t dot = s.find('.');
-	if (dot != std::string::npos)
-	{
-		for (size_t i = dot + 1; i < s.size() && fractionDigits < 3; i++, fractionDigits++)
-		{
-			if (s[i] < '0' || s[i] > '9')
-				break;
-			fraction = fraction * 10 + (s[i] - '0');
-		}
-		while (fractionDigits++ < 3)
-			fraction *= 10;
-	}
+	// The time part is optional; each component is too.
+	if (!Expect(text, pos, ' ') || !ReadField(text, pos, 2, hour) || !Expect(text, pos, ':')
+		|| !ReadField(text, pos, 2, minute))
+		return true;
+	if (!Expect(text, pos, ':') || !ReadField(text, pos, 2, second))
+		return true;
+	if (!Expect(text, pos, '.'))
+		return true;
 
+	int digits = 0, fraction = 0;
+	while (pos < text.size() && digits < 3 && text[pos] >= '0' && text[pos] <= '9')
+	{
+		fraction = fraction * 10 + (text[pos] - '0');
+		++pos;
+		++digits;
+	}
+	for (; digits < 3; digits++)
+		fraction *= 10;
 	millisecond = fraction;
 	return true;
 }

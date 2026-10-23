@@ -1,0 +1,48 @@
+# clang-tidy for the macOS port's code under src/ that upstream's clang-tidy-check can't see
+# (it only builds the Windows/ODBC configuration): same .clang-tidy, same clang-tidy major
+# version, with a compile database from a SQLite-backend configuration.
+
+name: "Port: clang-tidy (SQLite backend)"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - macos-port
+    paths:
+      - '.github/workflows/port-lint.yml'
+      - '.clang-tidy'
+      - 'src/db-library/**'
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  tidy:
+    runs-on: ubuntu-latest
+    name: "clang-tidy 19 (src/db-library/sqlite)"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Configure (SQLite backend, compile database)
+        run: |
+          sudo apt-get install -y clang
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE -DOPENKO_BUILD_TESTS=OFF \
+            -DOPENKO_DB_BACKEND=SQLITE -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: clang-tidy
+        run: |
+          pip install --quiet clang-tidy==19.1.0
+          status=0
+          for f in src/db-library/sqlite/*.cpp src/db-library/sqlite/tools/*.cpp; do
+            clang-tidy -p build --quiet "$f" || status=1
+          done
+          exit $status

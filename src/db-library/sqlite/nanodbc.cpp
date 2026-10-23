@@ -5,9 +5,8 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdio>
 #include <cstdlib>
-#include <cstring>
+#include <format>
 #include <regex>
 
 #include <sqlite3.h>
@@ -17,6 +16,13 @@ namespace nanodbc
 
 using db::sqlite::Step;
 using db::sqlite::Value;
+
+namespace
+{
+// sqlite3.h defines SQLITE_TRANSIENT as a C-style cast of -1 to a destructor pointer.
+// NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast,performance-no-int-to-ptr)
+const sqlite3_destructor_type Transient = SQLITE_TRANSIENT;
+} // namespace
 
 // --- database_error ---------------------------------------------------------------------
 
@@ -778,8 +784,11 @@ result statement::execute(long /*batchOperations*/, long /*timeout*/)
 			if (marker >= s.Params.size())
 				return;
 			const detail::bound_param& p = s.Params[marker];
+			// nanodbc takes output buffers as const T* and writes through them; so do we.
 			if (p.Kind == detail::bound_param::kind::scalar && p.Direction != PARAM_IN)
-				outputs.push_back({ const_cast<void*>(p.Ptr), p.ScalarKind, std::move(data) });
+				outputs.push_back(
+					{ const_cast<void*>(p.Ptr), // NOLINT(cppcoreguidelines-pro-type-const-cast)
+						p.ScalarKind, std::move(data) });
 		};
 		for (const auto& [index, data] : ctx.Outputs())
 			addOutput(index + first, data);
@@ -819,12 +828,12 @@ result statement::execute(long /*batchOperations*/, long /*timeout*/)
 				sqlite3_bind_double(s.Stmt, idx, v.Real);
 				break;
 			case Value::Type::Text:
-				sqlite3_bind_text(s.Stmt, idx, v.Bytes.data(), static_cast<int>(v.Bytes.size()),
-					SQLITE_TRANSIENT);
+				sqlite3_bind_text(
+					s.Stmt, idx, v.Bytes.data(), static_cast<int>(v.Bytes.size()), Transient);
 				break;
 			case Value::Type::Blob:
-				sqlite3_bind_blob(s.Stmt, idx, v.Bytes.data(), static_cast<int>(v.Bytes.size()),
-					SQLITE_TRANSIENT);
+				sqlite3_bind_blob(
+					s.Stmt, idx, v.Bytes.data(), static_cast<int>(v.Bytes.size()), Transient);
 				break;
 		}
 	}
@@ -1047,11 +1056,7 @@ std::string result::get_string(short column) const
 		case Value::Type::Integer:
 			return std::to_string(v.Int);
 		case Value::Type::Real:
-		{
-			char buffer[64];
-			std::snprintf(buffer, sizeof(buffer), "%.17g", v.Real);
-			return buffer;
-		}
+			return std::format("{:.17g}", v.Real);
 		case Value::Type::Text:
 		case Value::Type::Blob:
 			return v.Bytes;

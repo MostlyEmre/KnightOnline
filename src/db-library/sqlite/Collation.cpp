@@ -1,6 +1,8 @@
 #include "Collation.h"
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 
 #include <sqlite3.h>
 
@@ -36,39 +38,39 @@ constexpr std::array<uint8_t, 256> BuildFoldTable()
 
 constexpr std::array<uint8_t, 256> FoldTable = BuildFoldTable();
 
-size_t TrimmedLength(const uint8_t* text, size_t len)
+std::string_view TrimTrailingSpaces(std::string_view text)
 {
-	while (len > 0 && text[len - 1] == ' ')
-		--len;
-	return len;
+	while (!text.empty() && text.back() == ' ')
+		text.remove_suffix(1);
+	return text;
 }
 
 int CollationCallback(void* /*arg*/, int lhsLen, const void* lhs, int rhsLen, const void* rhs)
 {
-	return KoCompare(static_cast<const uint8_t*>(lhs), static_cast<size_t>(lhsLen),
-		static_cast<const uint8_t*>(rhs), static_cast<size_t>(rhsLen));
+	return KoCompare(std::string_view(static_cast<const char*>(lhs), static_cast<size_t>(lhsLen)),
+		std::string_view(static_cast<const char*>(rhs), static_cast<size_t>(rhsLen)));
 }
 
 } // namespace
 
-int KoCompare(const uint8_t* lhs, size_t lhsLen, const uint8_t* rhs, size_t rhsLen)
+int KoCompare(std::string_view lhs, std::string_view rhs)
 {
-	lhsLen     = TrimmedLength(lhs, lhsLen);
-	rhsLen     = TrimmedLength(rhs, rhsLen);
+	lhs        = TrimTrailingSpaces(lhs);
+	rhs        = TrimTrailingSpaces(rhs);
 
-	size_t len = lhsLen < rhsLen ? lhsLen : rhsLen;
+	size_t len = lhs.size() < rhs.size() ? lhs.size() : rhs.size();
 	for (size_t i = 0; i < len; i++)
 	{
-		uint8_t a = FoldTable[lhs[i]];
-		uint8_t b = FoldTable[rhs[i]];
+		uint8_t a = FoldTable[static_cast<uint8_t>(lhs[i])];
+		uint8_t b = FoldTable[static_cast<uint8_t>(rhs[i])];
 		if (a != b)
 			return a < b ? -1 : 1;
 	}
 
-	if (lhsLen == rhsLen)
+	if (lhs.size() == rhs.size())
 		return 0;
 
-	return lhsLen < rhsLen ? -1 : 1;
+	return lhs.size() < rhs.size() ? -1 : 1;
 }
 
 int RegisterCollations(sqlite3* db)
