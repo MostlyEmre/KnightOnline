@@ -1,0 +1,76 @@
+# The servers built natively for Apple Silicon against the SQLite backend: upstream's unit
+# tests on arm64, then all five servers started against a seed database converted from
+# OpenKO-db, and the parity probe run against it.
+
+name: "Port: macOS servers (arm64, SQLite)"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - macos-port
+    paths:
+      - '.github/workflows/port-macos-servers.yml'
+      - 'port/rigs/rig-b/**'
+      - 'port/db/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  servers:
+    runs-on: macos-latest
+    name: "Servers + tests (macOS arm64, SQLite)"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Build servers, tests and tools
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE \
+            -DOPENKO_DB_BACKEND=SQLITE -DOPENKO_BUILD_PORT_TOOLS=ON
+          cmake --build build --parallel
+          lipo -archs build/bin/Debug/Ebenezer
+
+      - name: Upstream unit tests (arm64)
+        working-directory: build
+        run: ctest --output-on-failure
+
+      - name: Seed database from OpenKO-db v0.1.2
+        run: |
+          git clone --quiet --depth 1 --branch v0.1.2 https://github.com/Open-KO/OpenKO-db.git openko-db
+          python3 port/db/openkodb_to_sqlite.py openko-db seed.sql | tee seed-convert.txt
+          build/bin/Debug/openko-sqlite-load seed.sqlite seed.sql
+
+      - name: Run the servers
+        run: |
+          cp seed.sqlite servers.sqlite
+          OPENKO_SQLITE_DB="$PWD/servers.sqlite" bash port/rigs/rig-b/run-servers.sh build/bin/Debug 30
+
+      - name: Run the parity probe
+        run: |
+          cp seed.sqlite probe.sqlite
+          OPENKO_SQLITE_DB="$PWD/probe.sqlite" build/bin/Debug/db-parity-probe probe-sqlite-macos.jsonl
+
+      - name: Collect results
+        if: always()
+        run: |
+          mkdir -p macos-out
+          cp -v seed-convert.txt probe-sqlite-macos.jsonl macos-out/ 2>/dev/null || true
+          cp -rv build/bin/Debug/run-logs macos-out/ 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-servers-out
+          path: macos-out

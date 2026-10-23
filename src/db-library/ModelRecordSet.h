@@ -50,6 +50,12 @@ public:
 		return _columnCount;
 	}
 
+	/// \brief number of rows fetched so far with next()
+	int64_t rowsFetched() const
+	{
+		return _rowsFetched;
+	}
+
 	/// \brief binds the current result record to an associated model object and returns it
 	BoundModelType get()
 	{
@@ -69,7 +75,11 @@ public:
 	/// \return Boolean: true if there is a next record, false otherwise
 	bool next()
 	{
-		return _result.next();
+		if (!_result.next())
+			return false;
+
+		++_rowsFetched;
+		return true;
 	}
 
 	/// \brief opens a connection to the model's database and queries its table using
@@ -120,6 +130,7 @@ public:
 	std::shared_ptr<nanodbc::statement> prepare(SqlBuilder<ModelType>& filterObj) noexcept(false)
 	{
 		_columnCount = 0;
+		_rowsFetched = 0;
 		_rowCount.reset();
 
 		if (_poolConn == nullptr)
@@ -180,6 +191,7 @@ private:
 	bool _fetchRowCount {};
 	std::optional<int64_t> _rowCount {};
 	short _columnCount {};
+	int64_t _rowsFetched {};
 	std::string _selectCountQuery {};
 	int64_t _selectLimit {};
 };

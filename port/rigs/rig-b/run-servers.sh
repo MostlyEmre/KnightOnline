@@ -1,57 +1,71 @@
 #!/usr/bin/env bash
 # Starts the five servers headless in upstream's documented order, lets them run,
-# records what they listen on and whether each reached READY, then stops them.
-# Usage: run-servers.sh <bin dir>
+# records what they listen on and whether each stayed up, then stops them.
+# Portable to macOS (bash 3.2, no ss) and Linux.
+#
+# Usage: run-servers.sh <bin dir> [seconds to keep running]
+# For the SQLite backend set OPENKO_SQLITE_DB to the database file first.
 set -uo pipefail
 
 BIN_DIR="$1"
+RUN_SECONDS="${2:-30}"
 cd "$BIN_DIR"
 mkdir -p run-logs
 
-declare -A PIDS
-start() {
-	local name="$1"
+NAMES=(AIServer Ebenezer Aujard VersionManager ItemManager)
+DELAYS=(20 20 10 5 5)
+PIDS=()
+
+for i in "${!NAMES[@]}"; do
+	name="${NAMES[$i]}"
 	./"$name" --headless > "run-logs/$name.stdout.log" 2>&1 &
-	PIDS[$name]=$!
-	echo "started $name (pid ${PIDS[$name]})"
-	sleep "$2"
-}
+	PIDS[$i]=$!
+	echo "started $name (pid ${PIDS[$i]})"
+	sleep "${DELAYS[$i]}"
+done
 
-start AIServer 20
-start Ebenezer 20
-start Aujard 10
-start VersionManager 5
-start ItemManager 5
-
-sleep 30
+sleep "$RUN_SECONDS"
 
 echo "== listening sockets"
-(ss -ltnpu || netstat -ltnpu) 2>/dev/null | tee run-logs/listening.txt
+if command -v ss > /dev/null 2>&1; then
+	ss -ltnpu 2>/dev/null | tee run-logs/listening.txt
+else
+	lsof +c 0 -nP -iTCP -sTCP:LISTEN -iUDP 2>/dev/null | grep -E "$(IFS='|'; echo "${NAMES[*]}")" | tee run-logs/listening.txt
+fi
 
 echo "== process state"
-for name in AIServer Ebenezer Aujard VersionManager ItemManager; do
-	if kill -0 "${PIDS[$name]}" 2>/dev/null; then
-		echo "$name: running"
+: > run-logs/process-state.txt
+for i in "${!NAMES[@]}"; do
+	name="${NAMES[$i]}"
+	if kill -0 "${PIDS[$i]}" 2>/dev/null; then
+		echo "$name: running" | tee -a run-logs/process-state.txt
 	else
-		wait "${PIDS[$name]}"
-		echo "$name: EXITED with $?"
+		wait "${PIDS[$i]}"
+		echo "$name: EXITED with $?" | tee -a run-logs/process-state.txt
 	fi
-done | tee run-logs/process-state.txt
+done
 
 echo "== stopping"
-for name in ItemManager VersionManager Aujard Ebenezer AIServer; do
-	kill -INT "${PIDS[$name]}" 2>/dev/null || true
+for ((i = ${#NAMES[@]} - 1; i >= 0; i--)); do
+	kill -INT "${PIDS[$i]}" 2>/dev/null || true
 	sleep 2
 done
 sleep 5
-for name in "${!PIDS[@]}"; do
-	kill -KILL "${PIDS[$name]}" 2>/dev/null && echo "$name needed SIGKILL"
+for i in "${!NAMES[@]}"; do
+	kill -KILL "${PIDS[$i]}" 2>/dev/null && echo "${NAMES[$i]} needed SIGKILL"
 done
 
-for name in AIServer Ebenezer Aujard VersionManager ItemManager; do
+for name in "${NAMES[@]}"; do
 	echo "===== $name stdout (tail)"
-	tail -n 60 "run-logs/$name.stdout.log"
+	tail -n 40 "run-logs/$name.stdout.log"
 done
+
+# Startup row counts, one "<server> <table> <rows>" per line, for cross-backend comparison.
+for name in "${NAMES[@]}"; do
+	grep -ho "recordset_loader: [A-Za-z0-9_]*: [0-9]* rows" "run-logs/$name.stdout.log" 2>/dev/null |
+		awk -v s="$name" '{gsub(":", "", $2); print s, $2, $3}'
+done | sort > run-logs/startup-row-counts.txt
+echo "== startup row counts ($(wc -l < run-logs/startup-row-counts.txt) tables)"
 
 grep -q EXITED run-logs/process-state.txt && exit 1
 exit 0
