@@ -1,0 +1,69 @@
+# Renderer spike: the fixed-function scene from port/spikes/ffspike rendered by D3D9
+# on WARP, as the reference for the Metal backend of the same spike.
+
+name: "Port: renderer spike (D3D9 on WARP)"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - macos-port
+    paths:
+      - '.github/workflows/port-rig-a-ffspike.yml'
+      - 'port/spikes/ffspike/**'
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  # Fixed-function D3D9 scene (no assets) rendered through both routes to WARP:
+  # the default adapter (Basic Render Driver) and D3D9On12 on an explicit WARP12 device.
+  ffspike:
+    runs-on: windows-latest
+    name: "D3D9 fixed-function spike on WARP"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Record the display adapters
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force rig-a-out | Out-Null
+          Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion, VideoProcessor, AdapterCompatibility, CurrentHorizontalResolution, CurrentVerticalResolution | Tee-Object rig-a-out/adapters.txt
+          Start-Process dxdiag -ArgumentList '/t', "$PWD\rig-a-out\dxdiag.txt" -Wait
+          query session | Tee-Object rig-a-out/session.txt
+          exit 0  # query returns 1 even when it prints the sessions
+
+      - name: Build the spike
+        shell: cmd
+        run: |
+          cl /nologo /std:c++20 /EHsc /W3 /WX /O2 /DUNICODE /D_UNICODE ^
+            port\spikes\ffspike\d3d9_main.cpp ^
+            /Fe:ffspike.exe ^
+            /link d3d9.lib d3d12.lib dxgi.lib user32.lib
+
+      - name: Render (default adapter, then D3D9On12 + WARP), twice each
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          foreach ($path in 'native', '9on12warp') {
+            foreach ($run in 1, 2) {
+              .\ffspike.exe --path $path --out "rig-a-out/ffspike-$path-run$run.png" 2>&1 | Tee-Object "rig-a-out/ffspike-$path-run$run.log"
+              "exit code: $LASTEXITCODE" | Tee-Object -Append "rig-a-out/ffspike-$path-run$run.log"
+            }
+          }
+          Get-FileHash rig-a-out/*.png -Algorithm SHA256 | Format-Table -AutoSize | Out-String -Width 200 | Tee-Object rig-a-out/hashes.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rig-a-ffspike
+          path: rig-a-out
+
