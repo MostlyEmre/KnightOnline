@@ -338,7 +338,7 @@ void CN3Cloak::SetLOD(int nLevel)
 			int nVertexCount = m_pPMesh->GetMaxNumVertices();
 			int nIndexCount  = m_pPMesh->GetMaxNumIndices();
 			m_pVertex        = new __VertexT1[nVertexCount];
-			memcpy(&m_pVertex, m_pPMesh->GetVertices(), sizeof(__VertexT1) * nVertexCount);
+			memcpy(m_pVertex, m_pPMesh->GetVertices(), sizeof(__VertexT1) * nVertexCount);
 			m_pIndex = new uint16_t[nIndexCount];
 			memcpy(m_pIndex, m_pPMesh->GetIndices(), sizeof(uint16_t) * nIndexCount);
 			m_nVertexCount = nVertexCount;
