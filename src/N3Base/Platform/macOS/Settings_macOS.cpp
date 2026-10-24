@@ -1,7 +1,7 @@
 ﻿#include "../Settings.h"
+#include "MacState.h"
 
 #include <algorithm>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
@@ -17,11 +17,9 @@ namespace
 
 std::filesystem::path SettingPath(const std::string& szKey, const char* szValueName)
 {
-	const char* home           = std::getenv("HOME");
-	std::filesystem::path path = std::filesystem::path(home != nullptr ? home : ".") / "Library"
-								 / "Application Support" / "KnightOnline" / "Settings";
+	std::filesystem::path path = macOS::AppSupportDirectory() / "Settings";
 
-	std::string key = szKey;
+	std::string key            = szKey;
 	std::replace(key.begin(), key.end(), '\\', '/');
 	return path / std::filesystem::path(key).relative_path() / szValueName;
 }

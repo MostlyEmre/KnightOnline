@@ -7,6 +7,8 @@
 
 #include "../Application.h"
 
+#include <filesystem>
+
 namespace Platform::macOS
 {
 
@@ -21,6 +23,9 @@ void RequestQuit(int iExitCode);
 
 /// \brief Raises socket events for the open sockets that have something to report (Socket_macOS.cpp).
 void DispatchSocketEvents();
+
+/// \brief ~/Library/Application Support/KnightOnline, the game's own files (AppBundle_macOS.cpp).
+std::filesystem::path AppSupportDirectory();
 
 } // namespace Platform::macOS
 

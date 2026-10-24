@@ -40,6 +40,9 @@ int main()
 
 static int WarFareMain(HINSTANCE hInstance, int nShowCmd)
 {
+	if (!Platform::InitializeProcess())
+		return -1;
+
 	// NOTE: get the current directory and make it known to CN3Base
 	std::error_code ec;
 	CN3Base::PathSet(std::filesystem::current_path(ec).string());

@@ -99,6 +99,12 @@ LRESULT CALLBACK WndProcMain(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
 
 } // namespace
 
+bool InitializeProcess()
+{
+	// The game runs from its own folder, as it always has.
+	return true;
+}
+
 HWND CreateMainWindow(
 	HINSTANCE hInstance, const MainWindowDesc& desc, const EventHandlers& handlers)
 {

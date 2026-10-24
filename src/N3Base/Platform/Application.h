@@ -52,6 +52,12 @@ struct MainWindowDesc
 	int iShowCommand    = 0; // how to show the window first (Win32 SW_*; 0 = default)
 };
 
+/// \brief Prepares the process before the game reads anything; the game then treats its working
+/// directory as the game data folder. Nothing to do on Windows. The macOS app makes a folder in
+/// Application Support its working directory, lays it over the game data inside the bundle and
+/// starts the bundled servers. Returns false if the game can't run (the user has been told why).
+bool InitializeProcess();
+
 /// \brief Creates and shows the main window. The handlers apply from creation on.
 /// Returns nullptr on failure.
 HWND CreateMainWindow(

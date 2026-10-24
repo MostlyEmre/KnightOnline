@@ -151,6 +151,7 @@ elseif(APPLE)
     Platform/Compat/DInputKeys.h
     Platform/Compat/Win32Types.cpp
     Platform/Compat/Win32Types.h
+    Platform/macOS/AppBundle_macOS.cpp
     Platform/macOS/Application_macOS.cpp
     Platform/macOS/Cocoa/CocoaApp.h
     Platform/macOS/Cocoa/CocoaApp.mm
