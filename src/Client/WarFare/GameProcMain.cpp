@@ -55,6 +55,7 @@
 #include "UIItemUpgrade.h"
 #include "UILevelGuide.h"
 #include "UIMsgBoxOkCancel.h"
+#include "UIPowerUpStore.h"
 
 #include "SubProcPerTrade.h"
 #include "CountableItemEditDlg.h"
@@ -1019,6 +1020,10 @@ bool CGameProcMain::ProcessPacket(Packet& pkt)
 			MsgRecv_ItemUpgrade(pkt);
 			return true;
 
+		case WIZ_SHOPPING_MALL:
+			MsgRecv_ShoppingMall(pkt);
+			return true;
+
 		default:
 			break;
 	}
@@ -1043,7 +1048,7 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 	if (m_pSubProcPerTrade->m_ePerTradeState != PER_TRADE_STATE_NONE)
 		return;
 
-	if (!s_bIsWindowInFocus || IsOptionsOpen())
+	if (!s_bIsWindowInFocus || IsModalWindowOpen())
 		return;
 
 	POINT ptPrev = s_pLocalInput->MouseGetPosOld();
@@ -3260,7 +3265,11 @@ bool CGameProcMain::MsgRecv_Dead(Packet& pkt)
 	CPlayerBase* pTarget = nullptr;
 	if (iIDTarget == s_pPlayer->IDNumber())
 	{
-		pTarget           = s_pPlayer;
+		pTarget = s_pPlayer;
+
+		// The store is for the living (the server won't open it for the dead either).
+		if (s_pUIPowerUpStore != nullptr)
+			s_pUIPowerUpStore->Close();
 
 		//		if(m_pUIDead) m_pUIDead->SetVisible(true);
 
@@ -7978,5 +7987,108 @@ void CGameProcMain::MsgRecv_ZoneAbility(Packet& pkt)
 		s_pPlayer->m_InfoExt.eZoneAbilityType         = (e_ZoneAbilityType) pkt.read<uint8_t>();
 		s_pPlayer->m_InfoExt.bCanTalkToOtherNation    = pkt.read<bool>();
 		s_pPlayer->m_InfoExt.sZoneTariff              = pkt.read<int16_t>();
+	}
+}
+
+void CGameProcMain::RequestPowerUpStore()
+{
+	if (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
+		return;
+
+	uint8_t byBuff[4];
+	int iOffset = 0;
+	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_SHOPPING_MALL);
+	CAPISocket::MP_AddByte(byBuff, iOffset, STORE_OPEN);
+	s_pSocket->Send(byBuff, iOffset);
+}
+
+void CGameProcMain::MsgRecv_ShoppingMall(Packet& pkt)
+{
+	constexpr D3DCOLOR COLOR_EARNED = 0xffffff00; // as the experience earned
+	constexpr D3DCOLOR COLOR_ERROR  = 0xffff3b3b;
+
+	switch (pkt.read<uint8_t>())
+	{
+		case STORE_OPEN:
+		{
+			const int16_t sResult = pkt.read<int16_t>();
+			if (sResult != STORE_OPEN_SUCCESS)
+			{
+				std::string szMsg;
+				switch (sResult)
+				{
+					case STORE_OPEN_DEAD:
+						szMsg = "You can't use the Power-up Store while you're dead.";
+						break;
+
+					case STORE_OPEN_TRADING:
+						szMsg = "You can't use the Power-up Store while trading.";
+						break;
+
+					case STORE_OPEN_ZONE:
+						szMsg = "You can't use the Power-up Store here.";
+						break;
+
+					case STORE_OPEN_ALREADY_OPEN:
+						szMsg = "The Power-up Store is opening.";
+						break;
+
+					case STORE_OPEN_INVENTORY_FULL:
+						szMsg = "Your inventory is full. Make some room to use the Power-up Store.";
+						break;
+
+					default:
+						szMsg = "The Power-up Store isn't available right now.";
+						break;
+				}
+
+				MsgOutput(szMsg, COLOR_ERROR);
+				return;
+			}
+
+			const int iFreeSlots  = pkt.read<int16_t>();
+			const int iKnightCash = pkt.read<int32_t>();
+			const int iCount      = pkt.read<int16_t>();
+			std::vector<CUIPowerUpStore::Item> items;
+			for (int i = 0; i < iCount; i++)
+			{
+				CUIPowerUpStore::Item item;
+				item.iItemID = pkt.read<int32_t>();
+				item.iCount  = pkt.read<int16_t>();
+				item.iPrice  = pkt.read<int32_t>();
+				items.push_back(item);
+			}
+
+			if (s_pUIPowerUpStore == nullptr)
+				s_pUIPowerUpStore = new CUIPowerUpStore();
+			s_pUIPowerUpStore->OpenStore(iKnightCash, iFreeSlots, items);
+		}
+		break;
+
+		case STORE_BUY:
+		{
+			const uint8_t byResult = pkt.read<uint8_t>();
+			const int iKnightCash  = pkt.read<int32_t>();
+			const int iFreeSlots   = pkt.read<int16_t>();
+			if (s_pUIPowerUpStore != nullptr)
+				s_pUIPowerUpStore->OnBuyResult(byResult, iKnightCash, iFreeSlots);
+		}
+		break;
+
+		case STORE_KNIGHT_CASH:
+		{
+			const int iEarned     = pkt.read<int32_t>();
+			const int iKnightCash = pkt.read<int32_t>();
+			MsgOutput(fmt::format("Earned {} Knight Cash", iEarned), COLOR_EARNED);
+			if (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
+				s_pUIPowerUpStore->SetKnightCash(iKnightCash);
+		}
+		break;
+
+		// The inventory, as the official server sends it when the store closes: the purchases
+		// are in it already (WIZ_ITEM_COUNT_CHANGE as they were bought).
+		case STORE_CLOSE:
+		default:
+			break;
 	}
 }

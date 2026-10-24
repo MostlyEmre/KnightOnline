@@ -47,7 +47,11 @@ enum e_NewCharResult : int8_t
 	NEW_CHAR_SYNC_ERROR   = 4
 };
 
-namespace model = aujard_model;
+/// \brief The Knight Cash (the Power-up Store's currency) an account starts with, the first time
+/// it's asked for.
+inline constexpr int KNIGHT_CASH_START = 1000;
+
+namespace model                        = aujard_model;
 
 namespace ini
 {

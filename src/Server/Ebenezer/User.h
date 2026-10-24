@@ -214,6 +214,11 @@ public:
 	// Applicable only to exchange type 101.
 	uint8_t m_byLastExchangeNum              = 0;
 
+	// Power-up Store (WIZ_SHOPPING_MALL)
+	uint8_t m_bShoppingMallState             = SHOPPING_MALL_CLOSED;
+	bool m_bShoppingMallBuyPending           = false; // waiting on Aujard for a purchase
+	int m_iKnightCash                        = 0;     // as Aujard last told it
+
 	// Game socket specific:
 	_REGION_BUFFER* _regionBuffer            = nullptr;
 
@@ -286,6 +291,48 @@ public:
 	/// \brief Handles the Aujard response for a User Stipend request
 	/// \return true when user stipend successfully paid, false otherwise
 	bool HandleUserStipendResponse(const char* buffer);
+
+	/// \brief Handles WIZ_SHOPPING_MALL: the Power-up Store
+	/// \see e_StoreOpcode
+	void ShoppingMall(char* pBuf);
+
+	/// \brief STORE_OPEN: with the official server's checks, then the Knight Cash from Aujard
+	void ShoppingMallOpen();
+
+	/// \brief STORE_CLOSE: answers with the inventory, as the official server does
+	void ShoppingMallClose();
+
+	/// \brief STORE_BUY: checks there's room for the item, then has Aujard take its price
+	void ShoppingMallBuy(char* pBuf);
+
+	/// \brief Finishes a purchase once Aujard has answered: gives the item, or the Knight Cash
+	/// back if it no longer fits
+	/// \param result e_KnightCashResult from DB_CUSTOM_KNIGHT_CASH_SPEND_RESPONSE
+	void ShoppingMallBuyResult(
+		uint8_t result, int itemId, int16_t count, int price, int knightCash);
+
+	/// \brief Handles DB_CUSTOM_KNIGHT_CASH_LOAD_RESPONSE: opens the store
+	void RecvKnightCashLoad(const char* pBuf);
+
+	/// \brief Handles DB_CUSTOM_KNIGHT_CASH_ADD_RESPONSE: tells the user what they earned
+	void RecvKnightCashAdd(const char* pBuf);
+
+	/// \brief Knight Cash earned by playing, added to the user's account
+	void AddKnightCash(int amount);
+
+	/// \return the number of empty inventory slots
+	int GetEmptySlotCount() const;
+
+	/// \brief Whether a Power-up Store item fits in the inventory
+	/// \return STORE_BUY_SUCCESS if it does, otherwise STORE_BUY_NO_ROOM or STORE_BUY_TOO_HEAVY
+	uint8_t CheckShoppingMallItemRoom(const model::Item* pTable, int16_t count) const;
+
+	void SendShoppingMallBuyResult(uint8_t result);
+
+	/// \brief Reads the account a DB_CUSTOM_KNIGHT_CASH_* response is for
+	/// \return true when successful, false otherwise
+	static bool ReadKnightCashAccount(
+		const char* pBuf, int& index, char (&accountId)[MAX_ID_SIZE + 1]);
 
 	/// \brief Checks to see if a user's clan ranking is between minRank and maxRank (inclusive).  If
 	/// the user's clan is successfully loaded, syncs the user's m_byKnightsRank value with the clan's m_byRanking

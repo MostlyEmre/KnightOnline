@@ -17,8 +17,11 @@
 #include <shared/TimerThread.h>
 
 #include <db-library/ConnectionManager.h>
+#include <db-library/Exceptions.h>
+#include <db-library/PoolConnection.h>
 #include <db-library/RecordSetLoader_STLMap.h>
 #include <db-library/RecordSetLoader_Vector.h>
+#include <db-library/utils.h>
 
 #include <Ebenezer/binder/EbenezerBinder.h>
 
@@ -474,6 +477,12 @@ bool EbenezerApp::OnStart()
 		spdlog::error("EbenezerApp::OnStart: failed to cache ITEM_EXCHANGE, closing");
 		return false;
 	}
+
+	// The Power-up Store isn't needed to play: without it, the store is closed.
+	spdlog::info("EbenezerApp::OnStart: loading KNIGHT_CASH_SHOP table");
+	if (!LoadShoppingMallTable())
+		spdlog::warn("EbenezerApp::OnStart: failed to cache KNIGHT_CASH_SHOP, the Power-up Store "
+					 "is closed");
 
 	spdlog::info("EbenezerApp::OnStart: loading maps");
 	if (!MapFileLoad())
@@ -2685,6 +2694,224 @@ bool EbenezerApp::LoadItemExchange()
 	}
 
 	return true;
+}
+
+namespace
+{
+
+// The Power-up Store's tables, for databases made before it. The SQLite backend stores text as
+// SQL Server's varchar compares it: case-insensitively (KO_CI).
+#if defined(OPENKO_DB_BACKEND_SQLITE)
+constexpr const char* CREATE_KNIGHT_CASH = "CREATE TABLE KNIGHT_CASH (strAccountID TEXT COLLATE "
+										   "KO_CI NOT NULL PRIMARY KEY, nKnightCash "
+										   "INTEGER NOT NULL) WITHOUT ROWID";
+constexpr const char* CREATE_KNIGHT_CASH_SHOP = "CREATE TABLE KNIGHT_CASH_SHOP (sIndex INTEGER NOT "
+												"NULL PRIMARY KEY, ItemID INTEGER NOT NULL, "
+												"sCount INTEGER NOT NULL, nPrice INTEGER NOT NULL)";
+#else
+constexpr const char* CREATE_KNIGHT_CASH = "CREATE TABLE KNIGHT_CASH (strAccountID varchar(21) NOT "
+										   "NULL PRIMARY KEY, nKnightCash int NOT "
+										   "NULL)";
+constexpr const char* CREATE_KNIGHT_CASH_SHOP = "CREATE TABLE KNIGHT_CASH_SHOP (sIndex smallint "
+												"NOT NULL PRIMARY KEY, ItemID int NOT NULL, "
+												"sCount smallint NOT NULL, nPrice int NOT NULL)";
+#endif
+
+// What KNIGHT_CASH_SHOP starts with: every item in the store's ranges (7xxxxxxxx and 8xxxxxxxx)
+// that the ITEM table and the client both have, with a name and an icon, at a price in Knight
+// Cash. Left out for want of an icon: the Bronze and Silver Premium Services (800037000,
+// 800038000), the Clarity potion (800019000) and the Cake (800055000).
+// clang-format off
+constexpr _SHOPPING_MALL_ITEM SHOPPING_MALL_ITEMS[] = {
+	// Special items
+	{ 800032000, 1, 1000 },  // Name Change Scroll
+	{ 700001000, 1, 1000 },  // Redistribution Item
+	{ 700002000, 1, 500 },   // Trina's Piece
+	{ 800063000, 1, 300 },   // Stat Scroll
+	// Experience
+	{ 800050000, 1, 400 },   // Mount Scroll (+50% for an hour)
+	{ 800051000, 1, 200 },   // Ascent Scroll (+20% for an hour)
+	// Stat scrolls (L)
+	{ 800003000, 1, 300 },   // STR+
+	{ 800004000, 1, 300 },   // HP+
+	{ 800005000, 1, 300 },   // DEX+
+	{ 800006000, 1, 300 },   // INT+
+	{ 800007000, 1, 300 },   // MP+
+	{ 800008000, 1, 500 },   // Power of Lion
+	// Defense and HP scrolls (L)
+	{ 800009000, 1, 300 },   // 150 Defense+
+	{ 800010000, 1, 450 },   // 300 Defense+
+	{ 800011000, 1, 300 },   // 500 HP+
+	{ 800012000, 1, 400 },   // 1000 HP+
+	{ 800013000, 1, 500 },   // 1500 HP+
+	// Attack, speed and the rest
+	{ 800014000, 1, 400 },   // Attack+ Scroll
+	{ 800015000, 1, 200 },   // Speed+ Potion
+	{ 800060000, 1, 300 },   // Weight Scroll
+	{ 800061000, 1, 500 },   // Weapon Enchant Scroll
+	{ 800062000, 1, 500 },   // Armor Enchant Scroll
+	{ 800022000, 1, 300 },   // Duration Item
+	// Stat, defense and HP scrolls (S)
+	{ 800023000, 1, 100 },   // STR+
+	{ 800024000, 1, 100 },   // HP+
+	{ 800025000, 1, 100 },   // DEX+
+	{ 800026000, 1, 100 },   // INT+
+	{ 800027000, 1, 100 },   // MP+
+	{ 800028000, 1, 200 },   // Power of Lion
+	{ 800029000, 1, 100 },   // 150 Defense+
+	{ 800030000, 1, 100 },   // 500 HP+
+	{ 800031000, 1, 150 },   // 1000 HP+
+	// Potions and food
+	{ 800052000, 1, 100 },   // Vegetable Dumplings
+	{ 800053000, 1, 100 },   // Normal Dumplings
+	{ 800054000, 1, 100 },   // Fish Dumplings
+	// Teleporting and resurrection
+	{ 800002000, 1, 50 },    // Re-Spawn Teleport Scroll
+	{ 800021000, 1, 100 },   // Scroll of teleport friend
+	{ 800036000, 1, 200 },   // 60% re-spawn scroll
+	{ 800041000, 5, 200 },   // Resurrection Scroll(50)
+	// Monster summoning
+	{ 700004000, 1, 800 },   // Monster Summon Staff
+	{ 700006000, 1, 800 },   // Monster Summon Staff(Event)
+	// Clan leaders' guardians
+	{ 800056000, 1, 1500 },  // Leader's Guardian [Karus]
+	{ 800057000, 1, 1500 },  // Leader's Guardian [El Morad]
+	{ 800058000, 1, 1000 },  // Co-Leader's Guardian [Karus]
+	{ 800059000, 1, 1000 },  // Co-Leader's Guardian [El Morad]
+	{ 800064000, 1, 6000 },  // Leader's Guardian [Karus 5]
+	{ 800065000, 1, 6000 },  // Leader's Guardian [El Morad 5]
+	{ 800066000, 1, 4000 },  // Co-Leader's Guardian [Karus 5]
+	{ 800067000, 1, 4000 },  // Co-Leader's Guardian [El Morad 5]
+	{ 800068000, 1, 10000 }, // Leader's Guardian [Karus], 10 summons
+	{ 800069000, 1, 10000 }, // Leader's Guardian [El Morad], 10 summons
+	{ 800070000, 1, 7000 },  // Co-Leader's Guardian [Karus], 10 summons
+	{ 800071000, 1, 7000 },  // Co-Leader's Guardian [El Morad], 10 summons
+};
+// clang-format on
+
+// Whether a table is there: a query on it fails if it isn't.
+bool TableExists(PoolConnection& conn, const std::string& table)
+{
+	try
+	{
+		nanodbc::statement stmt = conn.CreateStatement("SELECT COUNT(*) FROM " + table);
+		nanodbc::result result  = stmt.execute();
+		return result.next();
+	}
+	catch (const nanodbc::database_error&)
+	{
+		return false;
+	}
+}
+
+} // namespace
+
+bool EbenezerApp::LoadShoppingMallTable()
+{
+	m_ShoppingMallItems.clear();
+
+	try
+	{
+		auto conn = ConnectionManager::CreatePoolConnection(modelUtil::DbType::GAME);
+		if (conn == nullptr)
+		{
+			throw db::ApplicationError(
+				"EbenezerApp::LoadShoppingMallTable: failed to allocate pool connection");
+		}
+
+		if (!TableExists(*conn, "KNIGHT_CASH"))
+		{
+			spdlog::info("EbenezerApp::LoadShoppingMallTable: creating KNIGHT_CASH");
+			nanodbc::statement stmt = conn->CreateStatement(CREATE_KNIGHT_CASH);
+			stmt.execute();
+		}
+
+		if (!TableExists(*conn, "KNIGHT_CASH_SHOP"))
+		{
+			spdlog::info("EbenezerApp::LoadShoppingMallTable: creating KNIGHT_CASH_SHOP");
+			nanodbc::statement create = conn->CreateStatement(CREATE_KNIGHT_CASH_SHOP);
+			create.execute();
+
+			nanodbc::statement insert = conn->CreateStatement(
+				"INSERT INTO KNIGHT_CASH_SHOP (sIndex, ItemID, sCount, nPrice) VALUES (?, ?, ?, "
+				"?)");
+			int index = 0;
+			for (const _SHOPPING_MALL_ITEM& item : SHOPPING_MALL_ITEMS)
+			{
+				int itemId    = item.itemId;
+				int16_t count = item.count;
+				int price     = item.price;
+				++index;
+				insert.bind(0, &index);
+				insert.bind(1, &itemId);
+				insert.bind(2, &count);
+				insert.bind(3, &price);
+				insert.execute();
+			}
+		}
+
+		nanodbc::statement stmt = conn->CreateStatement(
+			"SELECT ItemID, sCount, nPrice FROM KNIGHT_CASH_SHOP ORDER BY sIndex");
+		nanodbc::result result = stmt.execute();
+		while (result.next())
+		{
+			_SHOPPING_MALL_ITEM item {};
+			item.itemId         = result.get<int>(0);
+			item.count          = static_cast<int16_t>(result.get<int>(1));
+			item.price          = result.get<int>(2);
+
+			// Only what can be given: the item is in ITEM, and the server can stack that many.
+			model::Item* pTable = m_ItemTableMap.GetData(item.itemId);
+			if (pTable == nullptr || item.count < 1 || item.count > MAX_ITEM_COUNT
+				|| (pTable->Countable == 0 && item.count != 1) || item.price < 0)
+			{
+				spdlog::warn("EbenezerApp::LoadShoppingMallTable: skipped invalid item [itemId={} "
+							 "count={} price={}]",
+					item.itemId, item.count, item.price);
+				continue;
+			}
+
+			m_ShoppingMallItems.push_back(item);
+		}
+	}
+	catch (const nanodbc::database_error& dbErr)
+	{
+		db::utils::LogDatabaseError(dbErr, "EbenezerApp::LoadShoppingMallTable()");
+		return false;
+	}
+	catch (const std::exception& ex)
+	{
+		spdlog::error("EbenezerApp::LoadShoppingMallTable: {}", ex.what());
+		return false;
+	}
+
+	spdlog::info(
+		"EbenezerApp::LoadShoppingMallTable: {} items for sale", m_ShoppingMallItems.size());
+	return true;
+}
+
+const _SHOPPING_MALL_ITEM* EbenezerApp::GetShoppingMallItem(int itemId) const
+{
+	for (const _SHOPPING_MALL_ITEM& item : m_ShoppingMallItems)
+	{
+		if (item.itemId == itemId)
+			return &item;
+	}
+
+	return nullptr;
+}
+
+void EbenezerApp::KnightCashAddToAgent(int socketId, const char* accountId, int amount, bool notify)
+{
+	char sendBuffer[128] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, DB_OPENKO_CUSTOM, sendIndex);
+	SetShort(sendBuffer, socketId, sendIndex);
+	SetByte(sendBuffer, DB_CUSTOM_KNIGHT_CASH_ADD_REQUEST, sendIndex);
+	SetString1(sendBuffer, accountId, sendIndex);
+	SetInt(sendBuffer, amount, sendIndex);
+	SetByte(sendBuffer, notify ? 1 : 0, sendIndex);
+	m_LoggerSendQueue.PutData(sendBuffer, sendIndex);
 }
 
 bool EbenezerApp::LoadAllKnights()

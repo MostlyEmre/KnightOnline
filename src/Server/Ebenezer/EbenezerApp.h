@@ -131,6 +131,19 @@ public:
 	/// \return true when successful, false otherwise
 	bool LoadItemExchange();
 
+	/// \brief Loads the m_ShoppingMallItems cache: the Power-up Store's items (KNIGHT_CASH_SHOP).
+	/// Makes the store's tables first, if the database doesn't have them yet.
+	/// \return true when successful, false otherwise (the store is then closed)
+	bool LoadShoppingMallTable();
+
+	/// \brief The Power-up Store's entry for an item, or nullptr if it isn't for sale
+	const _SHOPPING_MALL_ITEM* GetShoppingMallItem(int itemId) const;
+
+	/// \brief Asks Aujard to add amount to an account's Knight Cash (or take it off, when negative)
+	/// \param socketId the user to tell (DB_CUSTOM_KNIGHT_CASH_ADD_RESPONSE), or -1
+	/// \param notify whether the user is told about it in the game
+	void KnightCashAddToAgent(int socketId, const char* accountId, int amount, bool notify);
+
 	void Announcement(uint8_t type, int nation = 0, int chat_type = 8);
 	void ResetBattleZone();
 	void BanishLosers();
@@ -262,6 +275,9 @@ public:
 	EventMap m_EventMap;
 	EventTriggerMap m_EventTriggerMap;
 	ItemExchangeMap m_ItemExchangeMap;
+
+	/// \brief The Power-up Store's items, in the store's order
+	std::vector<_SHOPPING_MALL_ITEM> m_ShoppingMallItems;
 
 	/// \brief User Knights Ranking cache. Officially this is split into two caches
 	/// that track stipend claims in-memory, which means stipends reset on a server crash/restart.

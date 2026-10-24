@@ -204,6 +204,7 @@
     <ClCompile Include="UIPartyOrForce.cpp" />
     <ClCompile Include="UIPerTradeDlg.cpp" />
     <ClCompile Include="UIPointInitDlg.cpp" />
+    <ClCompile Include="UIPowerUpStore.cpp" />
     <ClCompile Include="UIQuestMenu.cpp" />
     <ClCompile Include="UIQuestTalk.cpp" />
     <ClCompile Include="UIRepairTooltipDlg.cpp" />
@@ -317,6 +318,7 @@
     <ClInclude Include="UIPartyOrForce.h" />
     <ClInclude Include="UIPerTradeDlg.h" />
     <ClInclude Include="UIPointInitDlg.h" />
+    <ClInclude Include="UIPowerUpStore.h" />
     <ClInclude Include="UIQuestMenu.h" />
     <ClInclude Include="UIQuestTalk.h" />
     <ClInclude Include="UIRepairTooltipDlg.h" />

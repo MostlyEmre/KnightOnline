@@ -165,6 +165,12 @@ public:
 	/// \see DB_CUSTOM_STIPEND_REQUEST
 	void HandleStipendRequest(const char* data, int16_t userSocketId);
 
+	/// \brief Handles a Knight Cash (the Power-up Store's currency) request.  Custom database
+	/// operation
+	/// \see DB_CUSTOM_KNIGHT_CASH_LOAD_REQUEST, DB_CUSTOM_KNIGHT_CASH_SPEND_REQUEST,
+	/// DB_CUSTOM_KNIGHT_CASH_ADD_REQUEST
+	void HandleKnightCashRequest(uint8_t command, const char* data, int16_t userSocketId);
+
 	SharedMemoryQueue LoggerSendQueue;
 	SharedMemoryQueue LoggerRecvQueue;
 

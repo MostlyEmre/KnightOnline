@@ -63,6 +63,7 @@ public:
 	static class CUILoading* s_pUILoading;           // 로딩바..
 	static class CUIMessageBoxManager* s_pMsgBoxMgr; // MessageBox Manager
 	static class CUIOptions* s_pUIOptions;           // the Options window, where there's no Option.exe
+	static class CUIPowerUpStore* s_pUIPowerUpStore; // the Power-up Store (the P button)
 
 	static class CGameProcLogIn* s_pProcLogIn;
 	static class CGameProcNationSelect* s_pProcNationSelect;
@@ -115,7 +116,11 @@ public:
 	/// Platform::HasOptionsProgram()).
 	static void ShowOptions();
 	static bool IsOptionsOpen();
-	static void RenderOptions();
+
+	/// \brief Whether a window that keeps the input to itself is open: the Options window or the
+	/// Power-up Store.
+	static bool IsModalWindowOpen();
+	static void RenderModalWindows();
 	static void ReConnect();
 
 	static void ReportServerConnectionFailed(const std::string& szServerName, int iErrCode, bool bNeedQuitGame);

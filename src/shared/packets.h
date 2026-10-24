@@ -199,9 +199,28 @@ enum e_DBOpcode : uint8_t
 enum e_CustomOpCode : uint8_t
 {
 	/// User Ranking Stipend Request
-	DB_CUSTOM_STIPEND_REQUEST  = 0,
+	DB_CUSTOM_STIPEND_REQUEST            = 0,
 	/// User Ranking Stipend Response
-	DB_CUSTOM_STIPEND_RESPONSE = 1
+	DB_CUSTOM_STIPEND_RESPONSE           = 1,
+	/// Knight Cash (the Power-up Store's currency) of an account
+	DB_CUSTOM_KNIGHT_CASH_LOAD_REQUEST   = 2,
+	DB_CUSTOM_KNIGHT_CASH_LOAD_RESPONSE  = 3,
+	/// Knight Cash spent on a Power-up Store item
+	DB_CUSTOM_KNIGHT_CASH_SPEND_REQUEST  = 4,
+	DB_CUSTOM_KNIGHT_CASH_SPEND_RESPONSE = 5,
+	/// Knight Cash earned by playing, or given back
+	DB_CUSTOM_KNIGHT_CASH_ADD_REQUEST    = 6,
+	DB_CUSTOM_KNIGHT_CASH_ADD_RESPONSE   = 7
+};
+
+/// \brief Results of the DB_CUSTOM_KNIGHT_CASH_* requests
+enum e_KnightCashResult : uint8_t
+{
+	KNIGHT_CASH_SUCCESS    = 0,
+	/// Not enough Knight Cash for the purchase
+	KNIGHT_CASH_NOT_ENOUGH = 1,
+	/// Unexpected error - likely an issue communicating with the database
+	KNIGHT_CASH_ERROR      = 0xFF
 };
 
 /// \brief The type of stipend being requested
@@ -703,13 +722,54 @@ enum e_AuthorityChangeOpcode : uint8_t
 	COMMAND_AUTHORITY = 1
 };
 
+/// \brief WIZ_SHOPPING_MALL sub-opcodes: the Power-up Store. Open, close and buy are the official
+/// requests; the official server answers open and close only, and the store itself was a web page.
+/// What the server sends past the official replies (the Knight Cash and the items for sale, and
+/// the answers to buy and STORE_KNIGHT_CASH) is OpenKO's.
 enum e_StoreOpcode : uint8_t
 {
-	STORE_OPEN    = 1,
-	STORE_CLOSE   = 2,
-	STORE_BUY     = 3,
-	STORE_MINI    = 4,
-	STORE_PROCESS = 5
+	/// Client: [] -> Server: [int16 e_StoreOpenResult], then on success [int16 free inventory
+	/// slots][int32 Knight Cash][int16 item count] and per item [int32 item ID][int16 count][int32 price]
+	STORE_OPEN        = 1,
+
+	/// Client: [] -> Server: the inventory, per slot (HAVE_MAX) [int32 item ID][int16 durability]
+	/// [int16 count][uint8 flag][int16 time left]
+	STORE_CLOSE       = 2,
+
+	/// Client: [int32 item ID][int16 count] -> Server: [uint8 e_StoreBuyResult][int32 Knight Cash]
+	/// [int16 free inventory slots]
+	STORE_BUY         = 3,
+
+	STORE_MINI        = 4,
+	STORE_PROCESS     = 5,
+
+	/// OpenKO. Server: [int32 Knight Cash gained][int32 Knight Cash]
+	STORE_KNIGHT_CASH = 0x10
+};
+
+/// \brief STORE_OPEN results; sent as int16
+enum e_StoreOpenResult : int8_t
+{
+	STORE_OPEN_SUCCESS        = 1,
+	STORE_OPEN_DEAD           = -2,
+	STORE_OPEN_TRADING        = -3,
+	STORE_OPEN_ZONE           = -5,
+	/// OpenKO: the Knight Cash couldn't be loaded, or nothing is for sale
+	STORE_OPEN_UNAVAILABLE    = -6,
+	STORE_OPEN_ALREADY_OPEN   = -7,
+	STORE_OPEN_INVENTORY_FULL = -8
+};
+
+enum e_StoreBuyResult : uint8_t
+{
+	STORE_BUY_SUCCESS     = 1,
+	STORE_BUY_NO_CASH     = 2,
+	STORE_BUY_NO_ROOM     = 3,
+	STORE_BUY_TOO_HEAVY   = 4,
+	/// Not in the store, a purchase still going through, or the item isn't for sale
+	STORE_BUY_INVALID     = 5,
+	/// The Knight Cash couldn't be reached
+	STORE_BUY_UNAVAILABLE = 6
 };
 
 enum e_RentalOpcode : uint8_t

@@ -28,6 +28,17 @@ void EbenezerReadQueueThread::process_packet(const char* buffer, int len)
 		return;
 	}
 
+	// Knight Cash spent on a purchase has to reach someone, user or not.
+	if (command == DB_OPENKO_CUSTOM)
+	{
+		int customIndex = index;
+		if (GetByte(buffer, customIndex) == DB_CUSTOM_KNIGHT_CASH_SPEND_RESPONSE)
+		{
+			RecvKnightCashSpend(userSocketId, buffer + customIndex);
+			return;
+		}
+	}
+
 	auto pUser = appInstance->GetUserPtr(userSocketId);
 	if (pUser == nullptr)
 		return;
@@ -126,6 +137,16 @@ void EbenezerReadQueueThread::process_packet(const char* buffer, int len)
 						pUser->HandleUserStipendResponse(buffer + index);
 					break;
 
+				case DB_CUSTOM_KNIGHT_CASH_LOAD_RESPONSE:
+					if (pUser != nullptr)
+						pUser->RecvKnightCashLoad(buffer + index);
+					break;
+
+				case DB_CUSTOM_KNIGHT_CASH_ADD_RESPONSE:
+					if (pUser != nullptr)
+						pUser->RecvKnightCashAdd(buffer + index);
+					break;
+
 				default:
 					spdlog::error("EbenezerReadQueueThread::process_packet: Unhandled "
 								  "DB_OPENKO_CUSTOM customOpCode {:02X}",
@@ -138,6 +159,40 @@ void EbenezerReadQueueThread::process_packet(const char* buffer, int len)
 			spdlog::error(
 				"EbenezerReadQueueThread::process_packet: Unhandled opcode {:02X}", command);
 			break;
+	}
+}
+
+void EbenezerReadQueueThread::RecvKnightCashSpend(int userSocketId, const char* buffer)
+{
+	EbenezerApp* appInstance = EbenezerApp::instance();
+
+	int index                = 0;
+	char accountId[MAX_ID_SIZE + 1] {};
+	if (!CUser::ReadKnightCashAccount(buffer, index, accountId))
+		return;
+
+	const uint8_t result = GetByte(buffer, index);
+	const int itemId     = GetInt(buffer, index);
+	const int16_t count  = static_cast<int16_t>(GetShort(buffer, index));
+	const int price      = GetInt(buffer, index);
+	const int knightCash = GetInt(buffer, index);
+
+	auto pUser           = appInstance->GetUserPtr(userSocketId);
+	if (pUser != nullptr && pUser->m_bShoppingMallBuyPending
+		&& strcmp(pUser->m_strAccountID, accountId) == 0)
+	{
+		pUser->ShoppingMallBuyResult(result, itemId, count, price, knightCash);
+		return;
+	}
+
+	// The user left before it went through (or someone else is on the socket now).
+	if (result == KNIGHT_CASH_SUCCESS)
+	{
+		spdlog::warn(
+			"EbenezerReadQueueThread::RecvKnightCashSpend: purchase arrived after the user "
+			"left, Knight Cash given back [accountId={} itemId={} price={}]",
+			accountId, itemId, price);
+		appInstance->KnightCashAddToAgent(-1, accountId, price, false);
 	}
 }
 

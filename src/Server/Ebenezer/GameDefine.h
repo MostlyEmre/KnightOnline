@@ -297,6 +297,14 @@ struct _EXCHANGE_ITEM
 	int64_t nSerialNum = 0; // item serial code
 };
 
+/// \brief An item for sale in the Power-up Store (KNIGHT_CASH_SHOP)
+struct _SHOPPING_MALL_ITEM
+{
+	int itemId    = 0;
+	int16_t count = 0;
+	int price     = 0; // in Knight Cash
+};
+
 struct _PARTY_GROUP
 {
 	uint16_t wIndex;

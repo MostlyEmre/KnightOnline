@@ -188,14 +188,18 @@ void CUser::Initialize()
 	while (!m_arUserEvent.empty())
 		m_arUserEvent.pop_back();
 
-	m_bIsPartyLeader      = false;
-	m_byInvisibilityState = 0;
-	m_sDirection          = 0;
-	m_bIsChicken          = false;
-	m_byKnightsRank       = 0;
-	m_byPersonalRank      = 0;
+	m_bIsPartyLeader          = false;
+	m_byInvisibilityState     = 0;
+	m_sDirection              = 0;
+	m_bIsChicken              = false;
+	m_byKnightsRank           = 0;
+	m_byPersonalRank          = 0;
 
-	m_byLastExchangeNum   = 0;
+	m_byLastExchangeNum       = 0;
+
+	m_bShoppingMallState      = SHOPPING_MALL_CLOSED;
+	m_bShoppingMallBuyPending = false;
+	m_iKnightCash             = 0;
 
 	TcpServerSocket::Initialize();
 }
@@ -688,6 +692,10 @@ void CUser::Parsing(int len, char* pData)
 
 		case WIZ_WAREHOUSE:
 			WarehouseProcess(pData + index);
+			break;
+
+		case WIZ_SHOPPING_MALL:
+			ShoppingMall(pData + index);
 			break;
 
 		case WIZ_REPORT_BUG:
@@ -3908,6 +3916,9 @@ void CUser::LevelChange(int16_t level, bool bLevelUp)
 		SetByte(sendBuffer, m_pUserData->m_bLevel, sendIndex);
 		m_pMain->Send_PartyMember(m_sPartyIndex, sendBuffer, sendIndex);
 	}
+
+	if (bLevelUp)
+		AddKnightCash(level * KNIGHT_CASH_PER_LEVEL);
 }
 
 void CUser::PointChange(char* pBuf)
@@ -15058,6 +15069,315 @@ bool CUser::SaveEvent(e_QuestId questId, e_QuestState questState)
 	}
 
 	return true;
+}
+
+int CUser::GetEmptySlotCount() const
+{
+	int count = 0;
+	for (int i = 0; i < HAVE_MAX; i++)
+	{
+		if (m_pUserData->m_sItemArray[SLOT_MAX + i].nNum == 0)
+			++count;
+	}
+
+	return count;
+}
+
+uint8_t CUser::CheckShoppingMallItemRoom(const model::Item* pTable, int16_t count) const
+{
+	// A countable item goes on its stack, if there is one: it has to fit there.
+	const int pos = GetEmptySlot(pTable->ID, pTable->Countable);
+	if (pos < 0 || pos >= HAVE_MAX)
+		return STORE_BUY_NO_ROOM;
+
+	const _ITEM_DATA& slot = m_pUserData->m_sItemArray[SLOT_MAX + pos];
+	if (pTable->Countable != 0 && slot.nNum == pTable->ID && slot.sCount + count > MAX_ITEM_COUNT)
+		return STORE_BUY_NO_ROOM;
+
+	if ((pTable->Weight * count) + m_iItemWeight > m_iMaxWeight)
+		return STORE_BUY_TOO_HEAVY;
+
+	return STORE_BUY_SUCCESS;
+}
+
+bool CUser::ReadKnightCashAccount(const char* pBuf, int& index, char (&accountId)[MAX_ID_SIZE + 1])
+{
+	const uint8_t accountIdLen = GetByte(pBuf, index);
+	if (accountIdLen == 0 || accountIdLen > MAX_ID_SIZE)
+	{
+		spdlog::error("User::ReadKnightCashAccount: Invalid accountId length [accountIdLen={}]",
+			accountIdLen);
+		return false;
+	}
+
+	GetString(accountId, pBuf, accountIdLen, index);
+	return true;
+}
+
+void CUser::ShoppingMall(char* pBuf)
+{
+	if (GetState() != CONNECTION_STATE_GAMESTART)
+		return;
+
+	int index = 0;
+	switch (GetByte(pBuf, index))
+	{
+		case STORE_OPEN:
+			ShoppingMallOpen();
+			break;
+
+		case STORE_CLOSE:
+			ShoppingMallClose();
+			break;
+
+		case STORE_BUY:
+			ShoppingMallBuy(pBuf + index);
+			break;
+
+		default:
+			break;
+	}
+}
+
+void CUser::ShoppingMallOpen()
+{
+	char sendBuffer[128] {};
+	int sendIndex  = 0;
+	int16_t result = STORE_OPEN_SUCCESS;
+
+	// The official server's checks, in its order. It also turns users away (error -4) for two
+	// fields OpenKO doesn't have.
+	if (m_bResHpType == USER_DEAD || m_pUserData->m_sHp < 1)
+		result = STORE_OPEN_DEAD;
+	else if (m_sExchangeUser != -1)
+		result = STORE_OPEN_TRADING;
+	else if (m_pUserData->m_bZone >= 40 && m_pUserData->m_bZone <= 45)
+		result = STORE_OPEN_ZONE;
+	// Officially also when the store is open already. Here it's opened again then, so that a
+	// client that lost track of it isn't kept out.
+	else if (m_bShoppingMallState == SHOPPING_MALL_OPENING || m_bShoppingMallBuyPending)
+		result = STORE_OPEN_ALREADY_OPEN;
+	else if (GetEmptySlotCount() == 0)
+		result = STORE_OPEN_INVENTORY_FULL;
+	else if (m_pMain->m_ShoppingMallItems.empty())
+		result = STORE_OPEN_UNAVAILABLE;
+
+	if (result != STORE_OPEN_SUCCESS)
+	{
+		SetByte(sendBuffer, WIZ_SHOPPING_MALL, sendIndex);
+		SetByte(sendBuffer, STORE_OPEN, sendIndex);
+		SetShort(sendBuffer, result, sendIndex);
+		Send(sendBuffer, sendIndex);
+		return;
+	}
+
+	// The official server opens the store (a web page) straight away. Here the Knight Cash is
+	// loaded first: RecvKnightCashLoad() opens it.
+	m_bShoppingMallState = SHOPPING_MALL_OPENING;
+	SetByte(sendBuffer, DB_OPENKO_CUSTOM, sendIndex);
+	SetShort(sendBuffer, _socketId, sendIndex);
+	SetByte(sendBuffer, DB_CUSTOM_KNIGHT_CASH_LOAD_REQUEST, sendIndex);
+	SetString1(sendBuffer, m_strAccountID, sendIndex);
+	m_pMain->m_LoggerSendQueue.PutData(sendBuffer, sendIndex);
+}
+
+void CUser::RecvKnightCashLoad(const char* pBuf)
+{
+	int index = 0;
+	char accountId[MAX_ID_SIZE + 1] {};
+	if (!ReadKnightCashAccount(pBuf, index, accountId))
+		return;
+
+	const uint8_t result = GetByte(pBuf, index);
+	const int knightCash = GetInt(pBuf, index);
+
+	// Only for whoever asked: someone else may be on the socket by now.
+	if (m_bShoppingMallState != SHOPPING_MALL_OPENING || strcmp(m_strAccountID, accountId) != 0)
+		return;
+
+	char sendBuffer[MAX_PACKET_SIZE] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_SHOPPING_MALL, sendIndex);
+	SetByte(sendBuffer, STORE_OPEN, sendIndex);
+
+	if (result != KNIGHT_CASH_SUCCESS)
+	{
+		m_bShoppingMallState = SHOPPING_MALL_CLOSED;
+		SetShort(sendBuffer, STORE_OPEN_UNAVAILABLE, sendIndex);
+		Send(sendBuffer, sendIndex);
+		return;
+	}
+
+	m_bShoppingMallState = SHOPPING_MALL_OPEN;
+	m_iKnightCash        = knightCash;
+
+	// As many items as the packet holds: 10 bytes each.
+	const int itemCount  = std::min(
+        static_cast<int>(m_pMain->m_ShoppingMallItems.size()), (MAX_PACKET_SIZE - 64) / 10);
+	SetShort(sendBuffer, STORE_OPEN_SUCCESS, sendIndex);
+	SetShort(sendBuffer, GetEmptySlotCount(), sendIndex);
+	SetInt(sendBuffer, m_iKnightCash, sendIndex);
+	SetShort(sendBuffer, itemCount, sendIndex);
+	for (int i = 0; i < itemCount; i++)
+	{
+		const _SHOPPING_MALL_ITEM& item = m_pMain->m_ShoppingMallItems[i];
+		SetInt(sendBuffer, item.itemId, sendIndex);
+		SetShort(sendBuffer, item.count, sendIndex);
+		SetInt(sendBuffer, item.price, sendIndex);
+	}
+
+	Send(sendBuffer, sendIndex);
+}
+
+void CUser::ShoppingMallClose()
+{
+	if (m_bShoppingMallState == SHOPPING_MALL_CLOSED)
+		return;
+
+	m_bShoppingMallState = SHOPPING_MALL_CLOSED;
+
+	// The official answer: the inventory, which the purchases were put in. Here they're given as
+	// they're bought, so it's the inventory the client has already.
+	char sendBuffer[512] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_SHOPPING_MALL, sendIndex);
+	SetByte(sendBuffer, STORE_CLOSE, sendIndex);
+	for (int i = 0; i < HAVE_MAX; i++)
+	{
+		const _ITEM_DATA& item = m_pUserData->m_sItemArray[SLOT_MAX + i];
+		SetInt(sendBuffer, item.nNum, sendIndex);
+		SetShort(sendBuffer, item.sDuration, sendIndex);
+		SetShort(sendBuffer, item.sCount, sendIndex);
+		SetByte(sendBuffer, item.byFlag, sendIndex);
+		SetShort(sendBuffer, item.sTimeRemaining, sendIndex);
+	}
+
+	Send(sendBuffer, sendIndex);
+}
+
+void CUser::ShoppingMallBuy(char* pBuf)
+{
+	int index                        = 0;
+	const int itemId                 = GetInt(pBuf, index);
+	const int16_t count              = static_cast<int16_t>(GetShort(pBuf, index));
+
+	const _SHOPPING_MALL_ITEM* pItem = m_pMain->GetShoppingMallItem(itemId);
+	const model::Item* pTable        = m_pMain->m_ItemTableMap.GetData(itemId);
+
+	uint8_t result                   = STORE_BUY_SUCCESS;
+	if (m_bShoppingMallState != SHOPPING_MALL_OPEN || m_bShoppingMallBuyPending || pItem == nullptr
+		|| pTable == nullptr || count != pItem->count)
+		result = STORE_BUY_INVALID;
+	else
+		result = CheckShoppingMallItemRoom(pTable, count);
+
+	if (result != STORE_BUY_SUCCESS)
+	{
+		SendShoppingMallBuyResult(result);
+		return;
+	}
+
+	// Aujard takes the price, then ShoppingMallBuyResult() gives the item.
+	m_bShoppingMallBuyPending = true;
+
+	char sendBuffer[128] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, DB_OPENKO_CUSTOM, sendIndex);
+	SetShort(sendBuffer, _socketId, sendIndex);
+	SetByte(sendBuffer, DB_CUSTOM_KNIGHT_CASH_SPEND_REQUEST, sendIndex);
+	SetString1(sendBuffer, m_strAccountID, sendIndex);
+	SetInt(sendBuffer, itemId, sendIndex);
+	SetShort(sendBuffer, count, sendIndex);
+	SetInt(sendBuffer, pItem->price, sendIndex);
+	m_pMain->m_LoggerSendQueue.PutData(sendBuffer, sendIndex);
+}
+
+void CUser::ShoppingMallBuyResult(
+	uint8_t result, int itemId, int16_t count, int price, int knightCash)
+{
+	m_bShoppingMallBuyPending = false;
+	m_iKnightCash             = knightCash;
+
+	uint8_t buyResult         = STORE_BUY_SUCCESS;
+	if (result == KNIGHT_CASH_NOT_ENOUGH)
+	{
+		buyResult = STORE_BUY_NO_CASH;
+	}
+	else if (result != KNIGHT_CASH_SUCCESS)
+	{
+		buyResult = STORE_BUY_UNAVAILABLE;
+	}
+	else
+	{
+		const model::Item* pTable = m_pMain->m_ItemTableMap.GetData(itemId);
+		buyResult                 = pTable != nullptr ? CheckShoppingMallItemRoom(pTable, count)
+													  : STORE_BUY_INVALID;
+		if (buyResult == STORE_BUY_SUCCESS && !GiveItem(itemId, count))
+			buyResult = STORE_BUY_NO_ROOM;
+
+		// It no longer fits (the inventory changed while Aujard was busy): the Knight Cash
+		// goes back.
+		if (buyResult != STORE_BUY_SUCCESS)
+		{
+			m_pMain->KnightCashAddToAgent(-1, m_strAccountID, price, false);
+			m_iKnightCash += price;
+		}
+		else
+		{
+			spdlog::info("User::ShoppingMallBuyResult: bought [charId={} itemId={} count={} "
+						 "price={} knightCash={}]",
+				m_pUserData->m_id, itemId, count, price, m_iKnightCash);
+		}
+	}
+
+	SendShoppingMallBuyResult(buyResult);
+}
+
+void CUser::SendShoppingMallBuyResult(uint8_t result)
+{
+	char sendBuffer[32] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_SHOPPING_MALL, sendIndex);
+	SetByte(sendBuffer, STORE_BUY, sendIndex);
+	SetByte(sendBuffer, result, sendIndex);
+	SetInt(sendBuffer, m_iKnightCash, sendIndex);
+	SetShort(sendBuffer, GetEmptySlotCount(), sendIndex);
+	Send(sendBuffer, sendIndex);
+}
+
+void CUser::AddKnightCash(int amount)
+{
+	if (amount <= 0 || m_strAccountID[0] == '\0')
+		return;
+
+	m_pMain->KnightCashAddToAgent(_socketId, m_strAccountID, amount, true);
+}
+
+void CUser::RecvKnightCashAdd(const char* pBuf)
+{
+	int index = 0;
+	char accountId[MAX_ID_SIZE + 1] {};
+	if (!ReadKnightCashAccount(pBuf, index, accountId))
+		return;
+
+	const uint8_t result = GetByte(pBuf, index);
+	const int amount     = GetInt(pBuf, index);
+	const uint8_t notify = GetByte(pBuf, index);
+	const int knightCash = GetInt(pBuf, index);
+	if (result != KNIGHT_CASH_SUCCESS || strcmp(m_strAccountID, accountId) != 0)
+		return;
+
+	m_iKnightCash = knightCash;
+	if (notify == 0)
+		return;
+
+	char sendBuffer[32] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_SHOPPING_MALL, sendIndex);
+	SetByte(sendBuffer, STORE_KNIGHT_CASH, sendIndex);
+	SetInt(sendBuffer, amount, sendIndex);
+	SetInt(sendBuffer, knightCash, sendIndex);
+	Send(sendBuffer, sendIndex);
 }
 
 } // namespace Ebenezer

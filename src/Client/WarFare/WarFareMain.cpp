@@ -16,6 +16,7 @@
 
 #include "UIManager.h"
 #include "UIMessageBoxManager.h"
+#include "UIPowerUpStore.h"
 
 #include <N3Base/DFont.h>
 #include <N3Base/N3SndMgr.h>
@@ -267,8 +268,13 @@ static bool OnCloseRequested()
 
 static void OnMouseWheel(short delta)
 {
-	if (CGameProcedure::IsOptionsOpen())
+	// Under a modal window only the Power-up Store scrolls (its pages).
+	if (CGameProcedure::IsModalWindowOpen())
+	{
+		if (!CGameProcedure::IsOptionsOpen())
+			CGameProcedure::s_pUIPowerUpStore->OnMouseWheelEvent(delta);
 		return;
+	}
 
 	CN3UIBase* pUI = nullptr;
 	if (CGameProcedure::s_pMsgBoxMgr != nullptr)
@@ -292,7 +298,7 @@ static void OnMouseWheel(short delta)
 static void OnMouseHWheel(short delta)
 {
 	if (CGameProcedure::s_pProcActive != CGameProcedure::s_pProcMain || CGameProcedure::s_pPlayer == nullptr
-		|| !CGameProcedure::s_pPlayer->IsAlive() || CGameProcedure::IsOptionsOpen())
+		|| !CGameProcedure::s_pPlayer->IsAlive() || CGameProcedure::IsModalWindowOpen())
 		return;
 
 	float fRot = DegreesToRadians(10.0f) * (delta / 120.0f);

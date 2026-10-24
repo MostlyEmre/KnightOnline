@@ -145,6 +145,21 @@ public:
 	e_StipendResponseCode ClaimUserRankStipend(
 		uint8_t type, uint8_t rank, uint8_t nation, std::string_view charId);
 
+	/// \brief Loads an account's Knight Cash (KNIGHT_CASH), the Power-up Store's currency. An
+	/// account that has none yet starts with KNIGHT_CASH_START.
+	/// \returns true when successful, false otherwise
+	bool LoadKnightCash(const char* accountId, int& knightCash);
+
+	/// \brief Takes price off an account's Knight Cash, if it has that much.
+	/// \param knightCash the Knight Cash afterwards
+	/// \return e_KnightCashResult result of the database operation
+	e_KnightCashResult SpendKnightCash(const char* accountId, int price, int& knightCash);
+
+	/// \brief Adds amount (or takes it off, when negative) to an account's Knight Cash.
+	/// \param knightCash the Knight Cash afterwards
+	/// \returns true when successful, false otherwise
+	bool AddKnightCash(const char* accountId, int amount, int& knightCash);
+
 	// stored procs not implemented:
 	//bool UpdateCouponEvent(const char* accountId, char* charId, char* cpid, int itemId, int count);
 	//bool CheckCouponEvent(const char* accountId);

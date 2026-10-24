@@ -629,8 +629,10 @@ bool CUIStateBar::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		}
 		else if (pSender == m_pBtn_Power)
 		{
-			//TODO: Launch msgbox with warning message, on confirm -> open store (Web_Browser UI or maybe external?)
-			return false;
+			// The official client asked first, then opened the store's web page; this store is in
+			// the game.
+			CGameProcedure::s_pProcMain->RequestPowerUpStore();
+			return true;
 		}
 	}
 	else if (dwMsg == UIMSG_ICON_DBLCLK)

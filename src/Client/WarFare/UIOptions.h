@@ -3,38 +3,28 @@
 
 #pragma once
 
-#include <N3Base/N3UIBase.h>
+#include "UIArt.h"
 
 #include <functional>
 #include <map>
 #include <string>
 #include <vector>
 
-class CGameProcedure;
-class CLocalInput;
 class CN3UIButton;
-class CN3UIEdit;
 class CN3UIImage;
 class CN3UIString;
-class CUIArtButton;
 
 // The game's Options window, for platforms without Option.exe (Platform::HasOptionsProgram()):
 // Option.exe's settings that the game reads, and the platform's own, on pages. There's no uif for
 // it, so it's put together from the message box art. Every change is saved to Option.ini straight
 // away; the ones marked * take effect when the game restarts, which the window offers to do.
-class CUIOptions : public CN3UIBase
+class CUIOptions : public CUIArtWindow
 {
 public:
 	CUIOptions();
 	~CUIOptions() override;
 
-	void Open();
-	void Close();
-
-	/// \brief Called every frame before anything else reads the input. While the window is open
-	/// it takes the input and hides it from the rest of the game (it's modal), and keeps hiding it
-	/// after it closes until the keys and buttons used to close it are released.
-	void TakeInput(CLocalInput* pInput);
+	void Open() override;
 
 	bool ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg) override;
 
@@ -76,16 +66,11 @@ private:
 	std::vector<CUIArtButton*> m_Tabs;
 	std::vector<CN3UIString*> m_TabLabels;
 	std::vector<Row> m_Rows;
-	int m_iPage                   = 0;
+	int m_iPage                = 0;
 
-	CN3UIButton* m_pBtnCloseX     = nullptr;
-	CN3UIButton* m_pBtnClose      = nullptr;
-	CN3UIButton* m_pBtnRestart    = nullptr;
-	CN3UIString* m_pTextNote      = nullptr;
-
-	CN3UIEdit* m_pEditFocused     = nullptr; // the text field that had the keyboard before opening
-	CGameProcedure* m_pProcOpened = nullptr;
-	bool m_bHoldInput             = false;
+	CN3UIButton* m_pBtnClose   = nullptr;
+	CN3UIButton* m_pBtnRestart = nullptr;
+	CN3UIString* m_pTextNote   = nullptr;
 };
 
 #endif // CLIENT_WARFARE_UIOPTIONS_H

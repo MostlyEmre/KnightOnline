@@ -121,6 +121,8 @@ set(WARFARE_SCENE_INGAME_UI_SOURCES
   UIPerTradeDlg.h
   UIPointInitDlg.cpp
   UIPointInitDlg.h
+  UIPowerUpStore.cpp
+  UIPowerUpStore.h
   UIQuestMenu.cpp
   UIQuestMenu.h
   UIQuestTalk.cpp

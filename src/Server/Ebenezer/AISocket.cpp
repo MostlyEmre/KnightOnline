@@ -1132,6 +1132,10 @@ void CAISocket::RecvUserExp(char* pBuf)
 	CurrencyChange(pUser->m_pUserData->m_iLoyalty, sLoyalty);
 	pUser->ExpChange(sExp);
 
+	// The experience is for a kill: it earns Knight Cash too.
+	if (sExp > 0)
+		pUser->AddKnightCash(std::clamp(sExp / KNIGHT_CASH_KILL_EXP, 1, KNIGHT_CASH_KILL_MAX));
+
 	if (sLoyalty > 0)
 	{
 		char sendBuffer[128] {};

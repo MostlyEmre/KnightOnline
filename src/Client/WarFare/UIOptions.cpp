@@ -1,8 +1,6 @@
 ﻿#include "StdAfx.h"
 #include "UIOptions.h"
-#include "UIArt.h"
 #include "GameProcMain.h"
-#include "LocalInput.h"
 #include "PacketDef.h"
 #include "UIChat.h"
 #include "text_resources.h"
@@ -10,7 +8,6 @@
 #include <FileIO/PathResolver.h>
 #include <N3Base/N3FXBundle.h>
 #include <N3Base/N3UIButton.h>
-#include <N3Base/N3UIEdit.h>
 #include <N3Base/N3UIImage.h>
 #include <N3Base/N3UIString.h>
 #include <N3Base/Platform/PlatformOptions.h>
@@ -22,7 +19,6 @@
 namespace
 {
 
-constexpr D3DCOLOR COLOR_TITLE              = 0xffffffff;
 constexpr D3DCOLOR COLOR_LABEL              = 0xfffae6af;
 constexpr D3DCOLOR COLOR_VALUE              = 0xffffffff;
 constexpr D3DCOLOR COLOR_SELECTED           = 0xffffffff;
@@ -67,10 +63,7 @@ void SaveOption(const char* szSection, const char* szKey, int iValue)
 
 } // namespace
 
-CUIOptions::CUIOptions()
-{
-	m_bVisible = false; // until it's opened
-}
+CUIOptions::CUIOptions()  = default;
 
 CUIOptions::~CUIOptions() = default;
 
@@ -215,28 +208,7 @@ void CUIOptions::Build()
 	}
 
 	const int iHeight = ROW_TOP + static_cast<int>(iRows) * ROW_PITCH + BOTTOM_HEIGHT;
-	SetRegion(UIArt::MakeRect(0, 0, WIDTH, iHeight));
-
-	// Children added later are drawn over the ones added before them, so the frame comes first.
-	// It's drawn three times: the art is see-through (73%), which makes text hard to read over a
-	// busy screen.
-	const int iRight  = WIDTH - UIArt::FRAME_CORNER;
-	const int iBottom = iHeight - UIArt::FRAME_CORNER;
-	for (int i = 0; i < 3; i++)
-	{
-		UIArt::AddImage(this, UIArt::MakeRect(0, 0, UIArt::FRAME_CORNER, UIArt::FRAME_CORNER), UIArt::FRAME_TOP_LEFT);
-		UIArt::AddImage(this, UIArt::MakeRect(iRight, 0, WIDTH, UIArt::FRAME_CORNER), UIArt::FRAME_TOP_RIGHT);
-		UIArt::AddImage(this, UIArt::MakeRect(0, iBottom, UIArt::FRAME_CORNER, iHeight), UIArt::FRAME_BOTTOM_LEFT);
-		UIArt::AddImage(this, UIArt::MakeRect(iRight, iBottom, WIDTH, iHeight), UIArt::FRAME_BOTTOM_RIGHT);
-		UIArt::AddImage(this, UIArt::MakeRect(UIArt::FRAME_CORNER, 0, iRight, UIArt::FRAME_CORNER), UIArt::FRAME_TOP);
-		UIArt::AddImage(this, UIArt::MakeRect(UIArt::FRAME_CORNER, iBottom, iRight, iHeight), UIArt::FRAME_BOTTOM);
-		UIArt::AddImage(this, UIArt::MakeRect(0, UIArt::FRAME_CORNER, UIArt::FRAME_CORNER, iBottom), UIArt::FRAME_LEFT);
-		UIArt::AddImage(this, UIArt::MakeRect(iRight, UIArt::FRAME_CORNER, WIDTH, iBottom), UIArt::FRAME_RIGHT);
-		UIArt::AddImage(this, UIArt::MakeRect(UIArt::FRAME_CORNER, UIArt::FRAME_CORNER, iRight, iBottom), UIArt::FRAME_CENTER);
-	}
-
-	UIArt::AddString(this, UIArt::MakeRect(16, 8, 300, 30), "Options", 12, true, COLOR_TITLE);
-	m_pBtnCloseX        = CUIArtButton::Create(this, UIArt::MakeRect(WIDTH - 28, 4, WIDTH - 5, 28), UIArt::CLOSE);
+	BuildFrame(WIDTH, iHeight, "Options");
 
 	const int iTabs     = static_cast<int>(m_Pages.size());
 	const int iTabsLeft = (WIDTH - (iTabs * UIArt::BAR_WIDTH + (iTabs - 1) * TAB_GAP)) / 2;
@@ -292,55 +264,10 @@ void CUIOptions::Open()
 	SetPosCenter();
 	ShowPage(std::min(m_iPage, static_cast<int>(m_Pages.size()) - 1));
 	m_pBtnClose->SetState(UI_STATE_BUTTON_NORMAL);
-	m_pBtnCloseX->SetState(UI_STATE_BUTTON_NORMAL);
 	m_pBtnRestart->SetState(UI_STATE_BUTTON_NORMAL);
 	UpdateButtons();
 
-	// Typing goes nowhere while the window is open.
-	m_pEditFocused = CN3UIBase::GetFocusedEdit();
-	m_pProcOpened  = CGameProcedure::s_pProcActive;
-	if (m_pEditFocused != nullptr)
-		m_pEditFocused->KillFocus();
-
-	SetVisible(true);
-}
-
-void CUIOptions::Close()
-{
-	if (!IsVisible())
-		return;
-
-	SetVisible(false);
-	m_bHoldInput = true;
-
-	// Give the keyboard back, if the text field is still around.
-	if (m_pEditFocused != nullptr && CGameProcedure::s_pProcActive == m_pProcOpened && m_pEditFocused->IsVisible())
-		m_pEditFocused->SetFocus();
-	m_pEditFocused = nullptr;
-}
-
-void CUIOptions::TakeInput(CLocalInput* pInput)
-{
-	if (IsVisible())
-	{
-		MouseProc(static_cast<uint32_t>(pInput->MouseGetFlag()), pInput->MouseGetPos(), pInput->MouseGetPosOld());
-		Tick();
-		if (IsVisible() && pInput->IsKeyPress(DIK_ESCAPE))
-			Close();
-	}
-	else if (m_bHoldInput)
-	{
-		// Until everything is let go, including the frame it is, so the game sees no releases.
-		constexpr int ANY_BUTTON = MOUSE_LBDOWN | MOUSE_MBDOWN | MOUSE_RBDOWN;
-		if (pInput->IsNoKeyDown() && (pInput->MouseGetFlag() & ANY_BUTTON) == 0)
-			m_bHoldInput = false;
-	}
-	else
-	{
-		return;
-	}
-
-	pInput->Mute(true);
+	CUIArtWindow::Open();
 }
 
 void CUIOptions::ShowPage(int iPage)
@@ -449,10 +376,13 @@ void CUIOptions::Restart()
 
 bool CUIOptions::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 {
+	if (CUIArtWindow::ReceiveMessage(pSender, dwMsg))
+		return true;
+
 	if (dwMsg != UIMSG_BUTTON_CLICK)
 		return false;
 
-	if (pSender == m_pBtnClose || pSender == m_pBtnCloseX)
+	if (pSender == m_pBtnClose)
 	{
 		Close();
 		return true;

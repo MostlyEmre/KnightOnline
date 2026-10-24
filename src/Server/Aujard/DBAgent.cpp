@@ -1385,6 +1385,120 @@ e_StipendResponseCode CDBAgent::ClaimUserRankStipend(
 	return static_cast<e_StipendResponseCode>(responseCode);
 }
 
+bool CDBAgent::LoadKnightCash(const char* accountId, int& knightCash)
+{
+	knightCash = 0;
+	try
+	{
+		auto conn = db::ConnectionManager::CreatePoolConnection(
+			modelUtil::DbType::GAME, DB_PROCESS_TIMEOUT);
+		if (conn == nullptr)
+		{
+			throw db::ApplicationError(
+				"DBAgent::LoadKnightCash: failed to allocate pool connection");
+		}
+
+		// The result is let go before the next statement runs on the connection.
+		{
+			nanodbc::statement stmt = conn->CreateStatement(
+				"SELECT nKnightCash FROM KNIGHT_CASH WHERE strAccountID = ?");
+			stmt.bind(0, accountId);
+			nanodbc::result result = stmt.execute();
+			if (result.next())
+			{
+				knightCash = result.get<int>(0);
+				return true;
+			}
+		}
+
+		// The first time: the account starts with KNIGHT_CASH_START.
+		int start               = KNIGHT_CASH_START;
+		nanodbc::statement stmt = conn->CreateStatement(
+			"INSERT INTO KNIGHT_CASH (strAccountID, nKnightCash) VALUES (?, ?)");
+		stmt.bind(0, accountId);
+		stmt.bind(1, &start);
+		stmt.execute();
+		knightCash = start;
+	}
+	catch (const nanodbc::database_error& dbErr)
+	{
+		db::utils::LogDatabaseError(dbErr, "DBAgent::LoadKnightCash()");
+		return false;
+	}
+
+	return true;
+}
+
+e_KnightCashResult CDBAgent::SpendKnightCash(const char* accountId, int price, int& knightCash)
+{
+	// Also makes sure the account has its row.
+	if (!LoadKnightCash(accountId, knightCash))
+		return KNIGHT_CASH_ERROR;
+
+	try
+	{
+		auto conn = db::ConnectionManager::CreatePoolConnection(
+			modelUtil::DbType::GAME, DB_PROCESS_TIMEOUT);
+		if (conn == nullptr)
+		{
+			throw db::ApplicationError(
+				"DBAgent::SpendKnightCash: failed to allocate pool connection");
+		}
+
+		nanodbc::statement stmt = conn->CreateStatement(
+			"UPDATE KNIGHT_CASH SET nKnightCash = nKnightCash - ? WHERE strAccountID = ? AND "
+			"nKnightCash >= ?");
+		stmt.bind(0, &price);
+		stmt.bind(1, accountId);
+		stmt.bind(2, &price);
+		nanodbc::result result = stmt.execute();
+		if (result.affected_rows() == 0)
+			return KNIGHT_CASH_NOT_ENOUGH;
+	}
+	catch (const nanodbc::database_error& dbErr)
+	{
+		db::utils::LogDatabaseError(dbErr, "DBAgent::SpendKnightCash()");
+		return KNIGHT_CASH_ERROR;
+	}
+
+	// Requests are handled one at a time, so nothing else changed it in between.
+	knightCash -= price;
+	return KNIGHT_CASH_SUCCESS;
+}
+
+bool CDBAgent::AddKnightCash(const char* accountId, int amount, int& knightCash)
+{
+	if (!LoadKnightCash(accountId, knightCash))
+		return false;
+
+	int newKnightCash = knightCash;
+	CurrencyChange(newKnightCash, amount);
+	try
+	{
+		auto conn = db::ConnectionManager::CreatePoolConnection(
+			modelUtil::DbType::GAME, DB_PROCESS_TIMEOUT);
+		if (conn == nullptr)
+		{
+			throw db::ApplicationError(
+				"DBAgent::AddKnightCash: failed to allocate pool connection");
+		}
+
+		nanodbc::statement stmt = conn->CreateStatement(
+			"UPDATE KNIGHT_CASH SET nKnightCash = ? WHERE strAccountID = ?");
+		stmt.bind(0, &newKnightCash);
+		stmt.bind(1, accountId);
+		stmt.execute();
+	}
+	catch (const nanodbc::database_error& dbErr)
+	{
+		db::utils::LogDatabaseError(dbErr, "DBAgent::AddKnightCash()");
+		return false;
+	}
+
+	knightCash = newKnightCash;
+	return true;
+}
+
 /* TODO: Proc does not exist
 bool CDBAgent::CheckCouponEvent(const char* accountId)
 {

@@ -1162,6 +1162,12 @@ void AujardApp::HandleCustomEvent(const char* data)
 			HandleStipendRequest(data + index, userSocketId);
 			break;
 
+		case DB_CUSTOM_KNIGHT_CASH_LOAD_REQUEST:
+		case DB_CUSTOM_KNIGHT_CASH_SPEND_REQUEST:
+		case DB_CUSTOM_KNIGHT_CASH_ADD_REQUEST:
+			HandleKnightCashRequest(command, data + index, userSocketId);
+			break;
+
 		default:
 			spdlog::error("AujardApp::HandleCustomEvent: Invalid DB_OPENKO_CUSTOM command code "
 						  "received: {:X}",
@@ -1207,6 +1213,90 @@ void AujardApp::HandleStipendRequest(const char* data, const int16_t userSocketI
 	SetByte(sendBuffer, rank, sendIndex);
 	SetByte(sendBuffer, nation, sendIndex);
 	SetString1(sendBuffer, charId, sendIndex);
+	LoggerSendQueue.PutData(sendBuffer, sendIndex);
+}
+
+void AujardApp::HandleKnightCashRequest(
+	const uint8_t command, const char* data, const int16_t userSocketId)
+{
+	int index                  = 0;
+	const uint8_t accountIdLen = GetByte(data, index);
+	char accountId[MAX_ID_SIZE + 1] {};
+	if (accountIdLen > 0 && accountIdLen < MAX_ID_SIZE + 1)
+		GetString(accountId, data, accountIdLen, index);
+	else
+	{
+		spdlog::error("AujardApp::HandleKnightCashRequest: Invalid accountId length [command={:X} "
+					  "accountIdLen={}]",
+			command, accountIdLen);
+		return;
+	}
+
+	// The responses carry the account, so that Ebenezer can tell whether the user it was for is
+	// still on that socket.
+	char sendBuffer[128] {};
+	int sendIndex  = 0;
+	int knightCash = 0;
+	SetByte(sendBuffer, DB_OPENKO_CUSTOM, sendIndex);
+	SetShort(sendBuffer, userSocketId, sendIndex);
+
+	switch (command)
+	{
+		case DB_CUSTOM_KNIGHT_CASH_LOAD_REQUEST:
+		{
+			const uint8_t result = _dbAgent.LoadKnightCash(accountId, knightCash)
+									   ? KNIGHT_CASH_SUCCESS
+									   : KNIGHT_CASH_ERROR;
+			SetByte(sendBuffer, DB_CUSTOM_KNIGHT_CASH_LOAD_RESPONSE, sendIndex);
+			SetString1(sendBuffer, accountId, sendIndex);
+			SetByte(sendBuffer, result, sendIndex);
+			SetInt(sendBuffer, knightCash, sendIndex);
+		}
+		break;
+
+		case DB_CUSTOM_KNIGHT_CASH_SPEND_REQUEST:
+		{
+			const int itemId    = GetInt(data, index);
+			const int16_t count = static_cast<int16_t>(GetShort(data, index));
+			const int price     = GetInt(data, index);
+			uint8_t result      = KNIGHT_CASH_ERROR;
+			if (price >= 0)
+				result = _dbAgent.SpendKnightCash(accountId, price, knightCash);
+			else
+				spdlog::error("AujardApp::HandleKnightCashRequest: Invalid price [accountId={} "
+							  "itemId={} price={}]",
+					accountId, itemId, price);
+
+			SetByte(sendBuffer, DB_CUSTOM_KNIGHT_CASH_SPEND_RESPONSE, sendIndex);
+			SetString1(sendBuffer, accountId, sendIndex);
+			SetByte(sendBuffer, result, sendIndex);
+			SetInt(sendBuffer, itemId, sendIndex);
+			SetShort(sendBuffer, count, sendIndex);
+			SetInt(sendBuffer, price, sendIndex);
+			SetInt(sendBuffer, knightCash, sendIndex);
+		}
+		break;
+
+		case DB_CUSTOM_KNIGHT_CASH_ADD_REQUEST:
+		{
+			const int amount     = GetInt(data, index);
+			const uint8_t notify = GetByte(data, index);
+			const uint8_t result = _dbAgent.AddKnightCash(accountId, amount, knightCash)
+									   ? KNIGHT_CASH_SUCCESS
+									   : KNIGHT_CASH_ERROR;
+			SetByte(sendBuffer, DB_CUSTOM_KNIGHT_CASH_ADD_RESPONSE, sendIndex);
+			SetString1(sendBuffer, accountId, sendIndex);
+			SetByte(sendBuffer, result, sendIndex);
+			SetInt(sendBuffer, amount, sendIndex);
+			SetByte(sendBuffer, notify, sendIndex);
+			SetInt(sendBuffer, knightCash, sendIndex);
+		}
+		break;
+
+		default:
+			return;
+	}
+
 	LoggerSendQueue.PutData(sendBuffer, sendIndex);
 }
 

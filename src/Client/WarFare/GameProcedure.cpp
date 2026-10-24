@@ -21,6 +21,7 @@
 #include "UIMessageBoxManager.h"
 #include "UIManager.h"
 #include "UIOptions.h"
+#include "UIPowerUpStore.h"
 #include "UINotice.h"
 #include "UIHelp.h"
 #include "UIHotKeyDlg.h"
@@ -63,6 +64,7 @@ CUIManager* CGameProcedure::s_pUIMgr                             = nullptr; // U
 CUILoading* CGameProcedure::s_pUILoading                         = nullptr; // 로딩바..
 CUIMessageBoxManager* CGameProcedure::s_pMsgBoxMgr               = nullptr; // MessageBox Manager
 CUIOptions* CGameProcedure::s_pUIOptions                         = nullptr;
+CUIPowerUpStore* CGameProcedure::s_pUIPowerUpStore               = nullptr;
 //bool				CGameProcedure::s_bUseSpeedHack = false;
 
 CGameProcedure* CGameProcedure::s_pProcPrev                      = nullptr;
@@ -283,6 +285,8 @@ void CGameProcedure::StaticMemberRelease()
 
 	delete s_pUIOptions;
 	s_pUIOptions = nullptr;
+	delete s_pUIPowerUpStore;
+	s_pUIPowerUpStore = nullptr;
 
 	delete s_pMsgBoxMgr;
 	s_pMsgBoxMgr = nullptr;
@@ -308,9 +312,12 @@ void CGameProcedure::Tick()
 	if (s_pGameCursor != nullptr)
 		s_pGameCursor->Tick();
 
-	// The Options window goes first, and keeps the input from the rest while it's open.
+	// The Options window goes first, and keeps the input from the rest while it's open. So does the
+	// Power-up Store, under it.
 	if (s_pUIOptions != nullptr)
 		s_pUIOptions->TakeInput(s_pLocalInput);
+	if (s_pUIPowerUpStore != nullptr)
+		s_pUIPowerUpStore->TakeInput(s_pLocalInput);
 
 	ProcessUIKeyInput();
 
@@ -388,7 +395,7 @@ void CGameProcedure::Render()
 		s_pUIMgr->Render(); // UI 들 렌더링..
 
 	s_pMsgBoxMgr->Render();
-	RenderOptions();
+	RenderModalWindows();
 	if (s_pGameCursor)
 		s_pGameCursor->Render();
 }
@@ -482,13 +489,22 @@ bool CGameProcedure::IsOptionsOpen()
 	return s_pUIOptions != nullptr && s_pUIOptions->IsVisible();
 }
 
-void CGameProcedure::RenderOptions()
+bool CGameProcedure::IsModalWindowOpen()
 {
-	if (!IsOptionsOpen())
+	return IsOptionsOpen() || (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible());
+}
+
+void CGameProcedure::RenderModalWindows()
+{
+	if (!IsModalWindowOpen())
 		return;
 
+	// The Options window over the store.
 	CUIManager::RenderStateSet();
-	s_pUIOptions->Render();
+	if (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
+		s_pUIPowerUpStore->Render();
+	if (IsOptionsOpen())
+		s_pUIOptions->Render();
 	CUIManager::RenderStateRestore();
 }
 

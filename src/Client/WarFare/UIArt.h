@@ -11,6 +11,9 @@
 #include <string>
 #include <vector>
 
+class CGameProcedure;
+class CLocalInput;
+class CN3UIEdit;
 class CN3UIImage;
 class CN3UIString;
 
@@ -39,8 +42,12 @@ inline constexpr int FRAME_CORNER = 64;
 inline constexpr Piece BAR_DARK { 332, 134, 429, 163 };
 inline constexpr Piece BAR_PRESSED { 332, 163, 429, 192 };
 inline constexpr Piece BAR_BLUE { 332, 192, 429, 221 };
-inline constexpr int BAR_WIDTH         = 97;
-inline constexpr int BAR_HEIGHT        = 29;
+inline constexpr int BAR_WIDTH  = 97;
+inline constexpr int BAR_HEIGHT = 29;
+
+// An item slot (52x52): black, in a gold frame.
+inline constexpr Piece SLOT { 15, 193, 67, 245 };
+inline constexpr int SLOT_SIZE         = 52;
 
 // The help window's close button (23x24) and page arrows (32x17): normal, down, mouse over.
 inline constexpr Piece CLOSE[]         = { { 12, 379, 32, 399 }, { 56, 379, 76, 399 }, { 33, 377, 53, 397 } };
@@ -78,6 +85,43 @@ public:
 
 	/// \brief A selected bar (a tab) looks pressed in.
 	void SetSelected(bool bSelected);
+
+	/// \brief A new label, for a button made with one.
+	void SetLabel(const std::string& szLabel);
+
+private:
+	CN3UIString* m_pLabel  = nullptr;
+	CN3UIString* m_pShadow = nullptr;
+};
+
+/// \brief A window made in code: the frame, a title and a close button. It's modal: while it's open
+/// it takes the input and hides it from the rest of the game.
+class CUIArtWindow : public CN3UIBase
+{
+public:
+	CUIArtWindow();
+
+	virtual void Open();
+	virtual void Close();
+
+	/// \brief Called every frame before anything else reads the input. While the window is open
+	/// it takes the input and hides it from the rest of the game, and keeps hiding it after it
+	/// closes until the keys and buttons used to close it are released.
+	void TakeInput(CLocalInput* pInput);
+
+	bool ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg) override;
+
+protected:
+	/// \brief Sizes the window and puts the frame, the title and the close button in. Children added
+	/// later are drawn over the ones added before them, so this comes first.
+	void BuildFrame(int iWidth, int iHeight, const std::string& szTitle);
+
+	CN3UIButton* m_pBtnCloseX = nullptr;
+
+private:
+	CN3UIEdit* m_pEditFocused     = nullptr; // the text field that had the keyboard before opening
+	CGameProcedure* m_pProcOpened = nullptr;
+	bool m_bHoldInput             = false;
 };
 
 #endif // CLIENT_WARFARE_UIART_H

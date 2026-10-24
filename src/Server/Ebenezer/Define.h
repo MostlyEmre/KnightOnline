@@ -229,6 +229,22 @@ enum e_NpcInOutType : uint8_t
 	NPC_OUT = 2
 };
 
+////////////////// Power-up Store ////////////////////
+// The Knight Cash earned by playing: for each level gained, the new level times
+// KNIGHT_CASH_PER_LEVEL; for each kill, one per KNIGHT_CASH_KILL_EXP experience it gave, from 1 up
+// to KNIGHT_CASH_KILL_MAX.
+inline constexpr int KNIGHT_CASH_PER_LEVEL = 20;
+inline constexpr int KNIGHT_CASH_KILL_EXP  = 100;
+inline constexpr int KNIGHT_CASH_KILL_MAX  = 10;
+
+enum e_ShoppingMallState : uint8_t
+{
+	SHOPPING_MALL_CLOSED  = 0,
+	SHOPPING_MALL_OPENING = 1, // waiting on the Knight Cash from Aujard
+	SHOPPING_MALL_OPEN    = 2
+};
+////////////////////////////////////////////////////////////
+
 ////////////////// Resurrection related ////////////////////
 inline constexpr int BLINK_TIME                 = 10;
 inline constexpr int CLAN_SUMMON_TIME           = 180;
