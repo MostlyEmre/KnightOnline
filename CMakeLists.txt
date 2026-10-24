@@ -176,6 +176,11 @@ if(OPENKO_BUILD_CLIENT)
 
   set(CMAKE_FOLDER "Client")
   add_subdirectory(src/Client/WarFare)
+
+  # The macOS app's server supervisor (port/app/make_app.py builds the bundle).
+  if(APPLE AND OPENKO_BUILD_MACOS_CLIENT)
+    add_subdirectory(port/app)
+  endif()
 endif()
 
 if(OPENKO_BUILD_CLIENT_TOOLS)
