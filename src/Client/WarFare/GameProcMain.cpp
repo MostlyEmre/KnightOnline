@@ -251,8 +251,6 @@ void CGameProcMain::ReleaseUIs()
 	m_pUIUpgradeSelect->Release();
 	m_pUIItemUpgrade->Release();
 	m_pUILevelGuide->Release();
-
-	CN3UIBase::DestroyTooltip();
 }
 
 void CGameProcMain::Init()

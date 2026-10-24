@@ -294,6 +294,10 @@ void CGameProcedure::StaticMemberRelease()
 	delete s_pUIMgr;
 	s_pUIMgr = nullptr;
 
+	// Made in StaticMemberInit() for every scene, so it goes with the rest. (The main scene used to
+	// destroy it on leaving the game, which left character selection and creation without one.)
+	CN3UIBase::DestroyTooltip();
+
 	delete s_pLocalInput;
 	s_pLocalInput = nullptr;
 
