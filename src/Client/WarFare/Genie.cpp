@@ -8,6 +8,7 @@
 #include "PlayerOtherMgr.h"
 #include "UIArt.h"
 #include "UIManager.h"
+#include "UIInventory.h"
 #include "UISkillTreeDlg.h"
 
 #include <FileIO/PathResolver.h>
@@ -142,6 +143,10 @@ void CGenie::Stop(Genie::StopReason eReason)
 
 void CGenie::HaltActions()
 {
+	// Stopping sends packets: not once the connection is gone (the game is closing).
+	if (CGameProcedure::s_pSocket == nullptr || !CGameProcedure::s_pSocket->IsConnected())
+		return;
+
 	m_pMain->CommandEnableAttackContinous(false, nullptr);
 	if (CGameProcedure::s_pPlayer != nullptr && CGameProcedure::s_pPlayer->IsMovingNow())
 		m_pMain->CommandMove(MD_STOP, true);
@@ -221,10 +226,106 @@ void CGenie::Decide()
 		return;
 	}
 
-	if (Fight())
+	if (Survive() || Fight())
 		return;
 
 	ReturnToOrigin();
+}
+
+int CGenie::CountItem(int iItemID) const
+{
+	return iItemID > 0 ? m_pMain->m_pUIInventory->GetIndexItemCount(static_cast<uint32_t>(iItemID / 1000 * 1000)) : 0;
+}
+
+bool CGenie::UsePotion(int iItemID)
+{
+	// A potion is used by casting its item's effect skill, as the hotkey bar does.
+	__TABLE_ITEM_BASIC* pItem = iItemID > 0 ? CGameBase::s_pTbl_Items_Basic.Find(iItemID / 1000 * 1000) : nullptr;
+	__TABLE_UPC_SKILL* pSkill = pItem != nullptr ? CGameBase::s_pTbl_Skill.Find(pItem->dwEffectID1) : nullptr;
+	if (pSkill == nullptr || CountItem(iItemID) <= 0 || m_pMain->m_pMagicSkillMng->GetCooldown(pSkill) >= 0.0f)
+		return false;
+
+	return m_pMain->m_pMagicSkillMng->MsgSend_MagicProcess(CGameProcedure::s_pPlayer->IDNumber(), pSkill);
+}
+
+bool CGenie::IsSkillReady(int iSkillID) const
+{
+	__TABLE_UPC_SKILL* pSkill = iSkillID > 0 ? CGameBase::s_pTbl_Skill.Find(iSkillID) : nullptr;
+	if (pSkill == nullptr)
+		return false;
+
+	auto held = m_HeldSkills.find(iSkillID);
+	return m_pMain->m_pUISkillTreeDlg->HasIDSkill(iSkillID) && m_pMain->m_pMagicSkillMng->GetCooldown(pSkill) < 0.0f
+		   && m_pMain->m_pMagicSkillMng->CheckValidSkillMagic(pSkill) && (held == m_HeldSkills.end() || m_fNow >= held->second);
+}
+
+bool CGenie::CastOnSelf(int iSkillID)
+{
+	if (!IsSkillReady(iSkillID) || m_pMain->m_pMagicSkillMng->IsCasting())
+		return false;
+
+	StopMoving();
+	if (!m_pMain->m_pMagicSkillMng->MsgSend_MagicProcess(CGameProcedure::s_pPlayer->IDNumber(), CGameBase::s_pTbl_Skill.Find(iSkillID)))
+	{
+		m_HeldSkills[iSkillID] = m_fNow + SKILL_HOLD;
+		return false;
+	}
+
+	return true;
+}
+
+bool CGenie::AnyAttackCastable() const
+{
+	if (m_Settings.bBasicAttack)
+		return true;
+
+	return std::any_of(
+		m_Settings.attackSkills.begin(), m_Settings.attackSkills.end(), [this](int iSkillID) { return IsSkillReady(iSkillID); });
+}
+
+bool CGenie::Survive()
+{
+	CPlayerMySelf* pPlayer = CGameProcedure::s_pPlayer;
+	const int iHp = pPlayer->m_InfoBase.iHP, iHpMax = pPlayer->m_InfoBase.iHPMax;
+	const int iMp = pPlayer->m_InfoExt.iMSP, iMpMax = pPlayer->m_InfoExt.iMSPMax;
+
+	// Potions don't take the turn: they're instant.
+	if (m_Settings.bHpPotion && Genie::BelowPercent(iHp, iHpMax, m_Settings.iHpPercent))
+		UsePotion(m_Settings.iHpPotionID);
+	if (m_Settings.bMpPotion && Genie::BelowPercent(iMp, iMpMax, m_Settings.iMpPercent))
+		UsePotion(m_Settings.iMpPotionID);
+
+	if (Genie::BelowPercent(iHp, iHpMax, m_Settings.iHealPercent))
+	{
+		for (int iSkillID : m_Settings.healSkills)
+		{
+			if (CastOnSelf(iSkillID))
+				return true;
+		}
+	}
+
+	// A buff is cast again once its effect is gone from the player.
+	CMagicSkillMng* pMagic = m_pMain->m_pMagicSkillMng;
+	for (int iSkillID : m_Settings.buffSkills)
+	{
+		__TABLE_UPC_SKILL_TYPE_4* pBuff = iSkillID > 0 ? pMagic->m_pTbl_Type_4->Find(iSkillID) : nullptr;
+		if (pBuff != nullptr && pMagic->m_ListBuffTypeID.count(pBuff->iBuffType) == 0 && CastOnSelf(iSkillID))
+			return true;
+	}
+
+	// Nothing to attack with until MP comes back: sit for it, unless something is attacking.
+	if (Genie::ShouldSitToRecover(IsAttackedRecently(), AnyAttackCastable(), iMp, iMpMax, pPlayer->m_bSitDown))
+	{
+		if (!pPlayer->m_bSitDown)
+		{
+			m_pMain->CommandEnableAttackContinous(false, nullptr);
+			StopMoving();
+			m_pMain->CommandSitDown(false, true);
+		}
+		return true;
+	}
+
+	return false;
 }
 
 bool CGenie::Fight()
@@ -262,13 +363,13 @@ bool CGenie::Fight()
 		return false;
 	}
 
+	StandUp();
 	const float fDistance = DistanceXZ(vSelf, pTarget->Position());
 	if (iTarget != m_iTarget)
 	{
 		m_iTarget         = iTarget;
 		m_fTargetDistance = fDistance;
 		m_Progress.Reset(iTarget, m_fNow);
-		StandUp();
 		m_pMain->TargetSelect(iTarget, true);
 	}
 	else if (fDistance < m_fTargetDistance - PROGRESS_STEP)
@@ -404,8 +505,14 @@ void CGenie::ReturnToOrigin()
 
 void CGenie::OnLeaveGame()
 {
-	Stop(Genie::StopReason::LeftGame);
-	m_bAvailable = false;
+	// The main scene is going (and when the game closes, the connection with it): nothing to halt,
+	// only the server to tell.
+	if (m_bRunning)
+		SendGenie(GENIE_STOP);
+
+	m_bRunning      = false;
+	m_bWaitingStart = false;
+	m_bAvailable    = false;
 	m_szSettingsOwner.clear();
 }
 

@@ -77,6 +77,14 @@ private:
 	/// \brief One decision, every DECISION_INTERVAL while running
 	void Decide();
 
+	/// \brief Potions, heals, buffs and sitting for MP; true when that took the turn
+	bool Survive();
+	bool UsePotion(int iItemID);
+	bool CastOnSelf(int iSkillID);
+	bool IsSkillReady(int iSkillID) const;
+	int CountItem(int iItemID) const;
+	bool AnyAttackCastable() const;
+
 	/// \brief Fights the monster ChooseTarget() picks; false when there's none
 	bool Fight();
 	void CastAttack(CPlayerNPC* pTarget, __TABLE_UPC_SKILL* pSkill);
