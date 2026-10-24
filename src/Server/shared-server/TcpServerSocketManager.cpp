@@ -44,6 +44,20 @@ bool TcpServerSocketManager::Listen(int port)
 			return false;
 		}
 
+#if !defined(_WIN32)
+		// Connections from a previous run stay in TIME_WAIT for a while after a server stops.
+		// Windows binds over them anyway; POSIX systems only do when SO_REUSEADDR is set before
+		// bind(). (On Windows it would also let another socket share the port, so not there.)
+		_acceptor->set_option(asio::socket_base::reuse_address(true), ec);
+		if (ec)
+		{
+			spdlog::error(
+				"TcpServerSocketManager({})::Listen: set_option(reuse_address) failed. [error={}]",
+				_implName, ec.message());
+			return false;
+		}
+#endif
+
 		// Attempt to bind the socket.
 		_acceptor->bind(endpoint, ec);
 		if (ec)
