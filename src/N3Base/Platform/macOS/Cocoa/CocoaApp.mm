@@ -1,4 +1,4 @@
-#include "CocoaApp.h"
+﻿#include "CocoaApp.h"
 
 #include "../../Compat/DInputKeys.h"
 
@@ -61,6 +61,9 @@ AppState& App()
 	static AppState state;
 	return state;
 }
+
+// Fullscreen, the game window covers the menu bar while the game is in front.
+constexpr NSWindowLevel FullscreenWindowLevel = NSMainMenuWindowLevel + 1;
 
 // Mac virtual key code (kVK_*) -> DirectInput scan code (DIK_*); 0 = unmapped.
 std::array<uint8_t, 128> BuildKeyMap()
@@ -673,6 +676,8 @@ NSCursor* BlankCursor()
 	AppState& app = App();
 	std::fprintf(stderr, "KnightOnline: app became active (window key: %s)\n",
 		app.window != nil && app.window.isKeyWindow ? "yes" : "no");
+	if (app.window != nil && app.fullscreen)
+		app.window.level = FullscreenWindowLevel;
 	if (app.window != nil && !app.window.isKeyWindow)
 		[app.window makeKeyAndOrderFront:nil];
 }
@@ -680,6 +685,12 @@ NSCursor* BlankCursor()
 - (void)applicationDidResignActive:(NSNotification*)notification
 {
 	std::fprintf(stderr, "KnightOnline: app resigned active\n");
+
+	// Over the menu bar only while the game is in front; otherwise the app Cmd-Tab switches to
+	// would open behind it.
+	AppState& app = App();
+	if (app.window != nil && app.fullscreen)
+		app.window.level = NSNormalWindowLevel;
 }
 
 - (void)showSettings:(id)sender
@@ -801,7 +812,7 @@ bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool 
 			app.layer.magnificationFilter = !options.bSmooth && scale == floor(scale)
 												? kCAFilterNearest
 												: kCAFilterLinear;
-			app.window.level              = NSMainMenuWindowLevel + 1;
+			app.window.level              = FullscreenWindowLevel;
 			NSApp.presentationOptions     = NSApplicationPresentationHideDock
 										| NSApplicationPresentationHideMenuBar;
 		}
