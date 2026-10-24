@@ -107,6 +107,7 @@
   <Folder Name="/tests/Client/">
     <Project Path="tests/Client/Genie/Genie.Tests.vcxproj" Id="5e186b18-db85-4351-b515-d5e837afe54a">
       <BuildDependency Project="deps/fetch-and-build-wrappers/fetch-googletest.vcxproj" />
+      <BuildDependency Project="src/shared/shared.vcxproj" />
     </Project>
   </Folder>
   <Folder Name="/tests/Server/">

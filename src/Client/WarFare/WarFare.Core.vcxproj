@@ -246,6 +246,7 @@
     <ClInclude Include="GameProcMain.h" />
     <ClInclude Include="GameProcNationSelect.h" />
     <ClInclude Include="GenieRules.h" />
+    <ClInclude Include="GenieSettings.h" />
     <ClInclude Include="IconItemSkill.h" />
     <ClInclude Include="N3ClientShapeMgr.h" />
     <ClInclude Include="N3Pond.h" />

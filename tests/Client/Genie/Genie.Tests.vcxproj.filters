@@ -4,9 +4,15 @@
     <ClCompile Include="GenieRules_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GenieSettings_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\src\Client\WarFare\GenieRules.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\Client\WarFare\GenieSettings.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

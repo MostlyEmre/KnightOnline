@@ -53,6 +53,7 @@ set(WARFARE_SCENE_INGAME_SOURCES
   GameProcMain.cpp
   GameProcMain.h
   GenieRules.h
+  GenieSettings.h
 )
 
 set(WARFARE_SCENE_INGAME_UI_SOURCES

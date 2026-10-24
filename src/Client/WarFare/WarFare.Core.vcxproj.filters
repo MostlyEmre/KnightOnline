@@ -706,6 +706,9 @@
     <ClInclude Include="GenieRules.h">
       <Filter>Scene\Ingame</Filter>
     </ClInclude>
+    <ClInclude Include="GenieSettings.h">
+      <Filter>Scene\Ingame</Filter>
+    </ClInclude>
     <ClInclude Include="GameProcedure.h">
       <Filter>Scene</Filter>
     </ClInclude>

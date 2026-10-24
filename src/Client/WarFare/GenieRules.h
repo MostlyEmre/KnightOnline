@@ -114,7 +114,9 @@ struct LootFilter
 {
 	bool bConsumables = true, bEquipment = true, bOther = true;
 	bool bNormal = true, bMagic = true, bRare = true, bUnique = true;
-	int iMinSellPrice = 0;
+	int iMinSellPrice                        = 0;
+
+	bool operator==(const LootFilter&) const = default;
 };
 
 struct LootCandidate
@@ -250,6 +252,8 @@ struct Supplies
 struct TownRules
 {
 	bool bBagFull = true, bNoHpPotions = true, bNoMpPotions = true, bNoArrows = true;
+
+	bool operator==(const TownRules&) const = default;
 };
 
 /// \brief Why Genie has to go to town, if it does: a full bag, then no HP potions, no MP potions,
