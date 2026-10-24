@@ -1,12 +1,14 @@
 ﻿#include "../Application.h"
+#include "../PlatformOptions.h"
 #include "Cocoa/CocoaApp.h"
-#include "Cocoa/OptionsWindow.h"
 #include "InputScript.h"
 #include "MacState.h"
 #include "Options_macOS.h"
 
 #include <chrono>
 #include <thread>
+
+#include <spdlog/fmt/bundled/format.h>
 
 namespace Platform
 {
@@ -15,35 +17,17 @@ namespace
 {
 
 EventHandlers s_handlers;
-bool s_bQuit             = false;
-int s_iExitCode          = 0;
-char s_windowToken       = 0; // HWND points here
-bool s_bOptionsAfterQuit = false;
-bool s_bRelaunch         = false;
-
-// The Settings window. Changes go straight to Option.ini, for the next start.
-bool ShowSettings(bool bAfterQuit)
-{
-	int iFitWidth = 0, iFitHeight = 0;
-	macOS::Cocoa::FullscreenSize(iFitWidth, iFitHeight);
-
-	macOS::Cocoa::OptionsWindowHooks hooks;
-	hooks.OnChange  = [](const macOS::GameOptions& options) { macOS::SaveOptions(options); };
-	hooks.OnRestart = []
-	{
-		s_bRelaunch = true;
-		macOS::RequestQuit(0);
-	};
-	return macOS::Cocoa::ShowOptionsWindow(
-		macOS::LoadOptions(), iFitWidth, iFitHeight, bAfterQuit, hooks);
-}
+bool s_bQuit       = false;
+int s_iExitCode    = 0;
+char s_windowToken = 0; // HWND points here
+bool s_bRelaunch   = false;
 
 // Sleeps out the rest of the frame for the frame rate limits, and keeps the display awake while
 // the game is in front.
 void PaceFrame(std::chrono::steady_clock::time_point frameStart)
 {
-	const macOS::GameOptions& options = macOS::StartupOptions();
-	bool bActive                      = macOS::Cocoa::IsActive();
+	const macOS::MacOptions& options = macOS::CurrentMacOptions();
+	bool bActive                     = macOS::Cocoa::IsActive();
 	macOS::Cocoa::SetKeepAwake(bActive && options.bKeepAwake);
 
 	// Test scripts run unthrottled whatever's in front.
@@ -71,11 +55,6 @@ void RequestQuit(int iExitCode)
 {
 	s_bQuit     = true;
 	s_iExitCode = iExitCode;
-}
-
-void RequestOptionsAfterQuit()
-{
-	s_bOptionsAfterQuit = true;
 }
 
 } // namespace macOS
@@ -109,15 +88,16 @@ HWND CreateMainWindow(
 		if (s_handlers.OnMouseHWheel && !macOS::InputScript::IsActive())
 			s_handlers.OnMouseHWheel(static_cast<short>(iDelta));
 	};
-	events.OnShowSettings             = [] { ShowSettings(false); };
 
-	const macOS::GameOptions& options = macOS::StartupOptions();
-	macOS::Cocoa::InputOptions input;
-	input.bSwipeTurns   = options.bSwipeTurns;
-	input.dSwipeScale   = options.iSwipeSpeed / 100.0 * (options.bSwipeReversed ? -1.0 : 1.0);
-	input.bControlClick = options.bControlClick;
-	macOS::Cocoa::SetInputOptions(input);
+	// The app menu's Settings... opens the game's Options window.
+	events.OnShowSettings = []
+	{
+		if (s_handlers.OnShowOptions)
+			s_handlers.OnShowOptions();
+	};
 
+	macOS::ApplyInputOptions();
+	const macOS::MacOptions& options = macOS::CurrentMacOptions();
 	macOS::Cocoa::WindowOptions window;
 	window.iScalePercent = options.iWindowScale;
 	window.bSmooth       = options.bSmoothScaling;
@@ -131,6 +111,12 @@ HWND CreateMainWindow(
 		return nullptr;
 
 	return macOS::MainWindow();
+}
+
+void RequestRestart()
+{
+	s_bRelaunch = true;
+	macOS::RequestQuit(0);
 }
 
 int RunEventLoop(HWND /*hWnd*/, int /*iAcceleratorResourceId*/)
@@ -155,14 +141,17 @@ int RunEventLoop(HWND /*hWnd*/, int /*iAcceleratorResourceId*/)
 	}
 	macOS::Cocoa::SetKeepAwake(false);
 
-	// The game closed itself to show its options (Option.exe on Windows).
-	if (s_bOptionsAfterQuit)
+	// Restart (the Options window's button): the new instance waits for this one's servers to stop.
+	// Not from a test script: the new instance would be the real game, on the screen.
+	if (s_bRelaunch && macOS::InputScript::IsActive())
+	{
+		fmt::print(stderr, "Restart requested (not done in a test run)\n");
+	}
+	else if (s_bRelaunch)
 	{
 		macOS::Cocoa::HideGameWindow();
-		s_bRelaunch = ShowSettings(true);
-	}
-	if (s_bRelaunch)
 		macOS::Cocoa::RelaunchApp();
+	}
 
 	return s_iExitCode;
 }

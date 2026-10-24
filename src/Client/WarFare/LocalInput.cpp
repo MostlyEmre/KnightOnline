@@ -96,7 +96,7 @@ void CLocalInput::MouseSetPos(int x, int y)
 /////////////////////////////////////////////////////////////////////////////////////////////
 BOOL CLocalInput::KeyboardGetKeyState(int nDIKey)
 {
-	if (nDIKey < 0 || nDIKey >= NUMDIKEYS)
+	if (m_bMuted || nDIKey < 0 || nDIKey >= NUMDIKEYS)
 		return FALSE;
 
 	return m_byCurKeys[nDIKey];

@@ -117,6 +117,7 @@ set(N3BASE_COMMON_PLATFORM_SOURCES
   Platform/KeyCodes.h
   Platform/RenderApi.h
   Platform/ScreenCapture.h
+  Platform/PlatformOptions.h
   Platform/Settings.h
   Platform/Shell.h
   Platform/Socket.h
@@ -133,6 +134,7 @@ if(WIN32)
     Platform/Win32/FontRasterizer_Win32.cpp
     Platform/Win32/Input_Win32.cpp
     Platform/Win32/KeyboardDevice_Win32.cpp
+    Platform/Win32/PlatformOptions_Win32.cpp
     Platform/Win32/ScreenCapture_Win32.cpp
     Platform/Win32/Settings_Win32.cpp
     Platform/Win32/Shell_Win32.cpp
@@ -159,8 +161,6 @@ elseif(APPLE)
     Platform/macOS/Cocoa/CoreTextFont.h
     Platform/macOS/Cocoa/MetalRenderer.h
     Platform/macOS/Cocoa/MetalRenderer.mm
-    Platform/macOS/Cocoa/OptionsWindow.h
-    Platform/macOS/Cocoa/OptionsWindow.mm
     Platform/macOS/CodePage.cpp
     Platform/macOS/CodePage.h
     Platform/macOS/Crypto_macOS.cpp
@@ -177,6 +177,7 @@ elseif(APPLE)
     Platform/macOS/ScreenCapture_macOS.cpp
     Platform/macOS/Options_macOS.cpp
     Platform/macOS/Options_macOS.h
+    Platform/macOS/PlatformOptions_macOS.cpp
     Platform/macOS/Settings_macOS.cpp
     Platform/macOS/Shell_macOS.cpp
     Platform/macOS/Socket_macOS.cpp
@@ -193,12 +194,10 @@ if(APPLE)
     Platform/macOS/Cocoa/CocoaApp.mm
     Platform/macOS/Cocoa/CoreTextFont.cpp
     Platform/macOS/Cocoa/MetalRenderer.mm
-    Platform/macOS/Cocoa/OptionsWindow.mm
     PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
   set_source_files_properties(
     Platform/macOS/Cocoa/CocoaApp.mm
     Platform/macOS/Cocoa/MetalRenderer.mm
-    Platform/macOS/Cocoa/OptionsWindow.mm
     PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 
   set(N3BASE_APPLE_LIBS

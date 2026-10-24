@@ -62,6 +62,7 @@ public:
 	static class CUIManager* s_pUIMgr;               // UI Manager
 	static class CUILoading* s_pUILoading;           // 로딩바..
 	static class CUIMessageBoxManager* s_pMsgBoxMgr; // MessageBox Manager
+	static class CUIOptions* s_pUIOptions;           // the Options window, where there's no Option.exe
 
 	static class CGameProcLogIn* s_pProcLogIn;
 	static class CGameProcNationSelect* s_pProcNationSelect;
@@ -109,6 +110,12 @@ public:
 	static void MessageBoxClose(int iMsgBoxIndex);
 
 	static void ProcActiveSet(CGameProcedure* pProc);
+
+	/// \brief Opens the game's Options window (where there's no Option.exe; see
+	/// Platform::HasOptionsProgram()).
+	static void ShowOptions();
+	static bool IsOptionsOpen();
+	static void RenderOptions();
 	static void ReConnect();
 
 	static void ReportServerConnectionFailed(const std::string& szServerName, int iErrCode, bool bNeedQuitGame);

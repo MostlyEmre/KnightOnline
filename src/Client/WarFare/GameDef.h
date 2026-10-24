@@ -43,6 +43,7 @@ enum e_ExitType : uint8_t
 	EXIT_TYPE_NONE       = 0,
 	EXIT_TYPE_CHR_SELECT = 1,
 	EXIT_TYPE_QUIT       = 2,
+	EXIT_TYPE_RESTART    = 3, // the Options window's Restart, during a battle
 };
 
 inline constexpr int EXIT_TIME_AFTER_BATTLE = 10;

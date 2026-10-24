@@ -21,9 +21,8 @@ const EventHandlers& Handlers();
 /// \brief PostQuitMessage(): ends the event loop with this exit code.
 void RequestQuit(int iExitCode);
 
-/// \brief Shows the Settings window once the game's event loop has ended (the game asked for
-/// Option.exe, which it runs and then quits on Windows).
-void RequestOptionsAfterQuit();
+/// \brief Applies the trackpad and mouse settings (PlatformOptions_macOS.cpp).
+void ApplyInputOptions();
 
 /// \brief Raises socket events for the open sockets that have something to report (Socket_macOS.cpp).
 void DispatchSocketEvents();

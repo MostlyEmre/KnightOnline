@@ -1,9 +1,7 @@
 ﻿#include "../Application.h"
 #include "../Shell.h"
 #include "Cocoa/CocoaApp.h"
-#include "Cocoa/OptionsWindow.h"
 #include "MacState.h"
-#include "Options_macOS.h"
 
 #include <FileIO/PathResolver.h>
 
@@ -150,16 +148,6 @@ bool StartServers(const std::filesystem::path& helpers, const std::filesystem::p
 
 bool InitializeProcess()
 {
-	// Testing aid: render the Settings window's tabs to <prefix>-<n>.png and stop.
-	if (const char* szPrefix = std::getenv("OPENKO_OPTIONS_SNAPSHOT"))
-	{
-		int iFitWidth = 0, iFitHeight = 0;
-		macOS::Cocoa::FullscreenSize(iFitWidth, iFitHeight);
-		bool bOk = macOS::Cocoa::SnapshotOptionsWindow(
-			macOS::LoadOptions(), iFitWidth, iFitHeight, szPrefix);
-		std::exit(bOk ? EXIT_SUCCESS : EXIT_FAILURE);
-	}
-
 	std::filesystem::path resources  = macOS::Cocoa::ResourceDirectory();
 	std::filesystem::path clientData = resources / "Client";
 	std::error_code ec;

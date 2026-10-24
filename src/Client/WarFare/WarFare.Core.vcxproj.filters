@@ -299,6 +299,9 @@
     <ClCompile Include="UINPCEvent.cpp">
       <Filter>Scene\Ingame\UI</Filter>
     </ClCompile>
+    <ClCompile Include="UIOptions.cpp">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClCompile>
     <ClCompile Include="UIPartyBBS.cpp">
       <Filter>Scene\Ingame\UI</Filter>
     </ClCompile>
@@ -467,6 +470,9 @@
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
     <ClInclude Include="UINPCEvent.h">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UIOptions.h">
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
     <ClInclude Include="UIPartyBBS.h">

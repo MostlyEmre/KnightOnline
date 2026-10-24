@@ -197,6 +197,7 @@
     <ClCompile Include="UINotice.cpp" />
     <ClCompile Include="UINPCChangeEvent.cpp" />
     <ClCompile Include="UINPCEvent.cpp" />
+    <ClCompile Include="UIOptions.cpp" />
     <ClCompile Include="UIPartyBBS.cpp" />
     <ClCompile Include="UIPartyBBSSelector.cpp" />
     <ClCompile Include="UIPartyOrForce.cpp" />
@@ -308,6 +309,7 @@
     <ClInclude Include="UINotice.h" />
     <ClInclude Include="UINPCChangeEvent.h" />
     <ClInclude Include="UINPCEvent.h" />
+    <ClInclude Include="UIOptions.h" />
     <ClInclude Include="UIPartyBBS.h" />
     <ClInclude Include="UIPartyBBSSelector.h" />
     <ClInclude Include="UIPartyOrForce.h" />

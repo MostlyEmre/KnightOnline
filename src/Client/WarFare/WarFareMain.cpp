@@ -267,6 +267,9 @@ static bool OnCloseRequested()
 
 static void OnMouseWheel(short delta)
 {
+	if (CGameProcedure::IsOptionsOpen())
+		return;
+
 	CN3UIBase* pUI = nullptr;
 	if (CGameProcedure::s_pMsgBoxMgr != nullptr)
 		pUI = CGameProcedure::s_pMsgBoxMgr->GetFocusMsgBox();
@@ -289,7 +292,7 @@ static void OnMouseWheel(short delta)
 static void OnMouseHWheel(short delta)
 {
 	if (CGameProcedure::s_pProcActive != CGameProcedure::s_pProcMain || CGameProcedure::s_pPlayer == nullptr
-		|| !CGameProcedure::s_pPlayer->IsAlive())
+		|| !CGameProcedure::s_pPlayer->IsAlive() || CGameProcedure::IsOptionsOpen())
 		return;
 
 	float fRot = DegreesToRadians(10.0f) * (delta / 120.0f);
@@ -316,5 +319,6 @@ static Platform::EventHandlers CreateEventHandlers()
 	handlers.OnMouseHWheel      = OnMouseHWheel;
 	handlers.OnTextInputChanged = OnTextInputChanged;
 	handlers.OnSocketEvent      = OnSocketEvent;
+	handlers.OnShowOptions      = [] { CGameProcedure::ShowOptions(); };
 	return handlers;
 }

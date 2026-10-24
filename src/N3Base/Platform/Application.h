@@ -39,6 +39,10 @@ struct EventHandlers
 	/// WHEEL_DELTA units; positive to the right.
 	std::function<void(short sDelta)> OnMouseHWheel;
 
+	/// \brief The player asked for the game's Options window from outside the game (macOS: the app
+	/// menu's Settings..., Cmd-,).
+	std::function<void()> OnShowOptions;
+
 	/// \brief The text in the text input field (TextInput.h) changed.
 	std::function<void()> OnTextInputChanged;
 

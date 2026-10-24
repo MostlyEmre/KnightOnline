@@ -106,6 +106,7 @@
     <ClInclude Include="Platform\KeyCodes.h" />
     <ClInclude Include="Platform\RenderApi.h" />
     <ClInclude Include="Platform\ScreenCapture.h" />
+    <ClInclude Include="Platform\PlatformOptions.h" />
     <ClInclude Include="Platform\Settings.h" />
     <ClInclude Include="Platform\Shell.h" />
     <ClInclude Include="Platform\Socket.h" />
@@ -214,6 +215,9 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Platform\Win32\Settings_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\PlatformOptions_Win32.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Platform\Win32\Shell_Win32.cpp">

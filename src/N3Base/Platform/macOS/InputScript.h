@@ -18,6 +18,7 @@
 //   text <characters>         type into the focused edit box
 //   snapshot <file.png>       save the next frame
 //   quit                      end the program like PostQuitMessage(0)
+//   options                   open the game's Options window (as the app menu's Settings... does)
 //   handoff                   stop the script and give the window and real input to the user
 namespace Platform::macOS::InputScript
 {

@@ -20,6 +20,7 @@
 #include "UIMessageBox.h"
 #include "UIMessageBoxManager.h"
 #include "UIManager.h"
+#include "UIOptions.h"
 #include "UINotice.h"
 #include "UIHelp.h"
 #include "UIHotKeyDlg.h"
@@ -61,6 +62,7 @@ CN3FXMgr* CGameProcedure::s_pFX                                  = nullptr;
 CUIManager* CGameProcedure::s_pUIMgr                             = nullptr; // UI Manager
 CUILoading* CGameProcedure::s_pUILoading                         = nullptr; // 로딩바..
 CUIMessageBoxManager* CGameProcedure::s_pMsgBoxMgr               = nullptr; // MessageBox Manager
+CUIOptions* CGameProcedure::s_pUIOptions                         = nullptr;
 //bool				CGameProcedure::s_bUseSpeedHack = false;
 
 CGameProcedure* CGameProcedure::s_pProcPrev                      = nullptr;
@@ -279,6 +281,9 @@ void CGameProcedure::StaticMemberRelease()
 	delete s_pUILoading;
 	s_pUILoading = nullptr;
 
+	delete s_pUIOptions;
+	s_pUIOptions = nullptr;
+
 	delete s_pMsgBoxMgr;
 	s_pMsgBoxMgr = nullptr;
 
@@ -297,10 +302,15 @@ void CGameProcedure::StaticMemberRelease()
 
 void CGameProcedure::Tick()
 {
+	s_pLocalInput->Mute(false);
 	s_pLocalInput->Tick(); // 키보드와 마우스로부터 입력을 받는다.
 
 	if (s_pGameCursor != nullptr)
 		s_pGameCursor->Tick();
+
+	// The Options window goes first, and keeps the input from the rest while it's open.
+	if (s_pUIOptions != nullptr)
+		s_pUIOptions->TakeInput(s_pLocalInput);
 
 	ProcessUIKeyInput();
 
@@ -378,6 +388,7 @@ void CGameProcedure::Render()
 		s_pUIMgr->Render(); // UI 들 렌더링..
 
 	s_pMsgBoxMgr->Render();
+	RenderOptions();
 	if (s_pGameCursor)
 		s_pGameCursor->Render();
 }
@@ -453,6 +464,32 @@ void CGameProcedure::ProcActiveSet(CGameProcedure* pProc)
 
 	s_pProcPrev   = s_pProcActive;          // 전의 것 포인터 기억..
 	s_pProcActive = pProc;
+}
+
+void CGameProcedure::ShowOptions()
+{
+	// Not before the game is set up (the Settings menu is there from the start).
+	if (s_pUIMgr == nullptr)
+		return;
+
+	if (s_pUIOptions == nullptr)
+		s_pUIOptions = new CUIOptions();
+	s_pUIOptions->Open();
+}
+
+bool CGameProcedure::IsOptionsOpen()
+{
+	return s_pUIOptions != nullptr && s_pUIOptions->IsVisible();
+}
+
+void CGameProcedure::RenderOptions()
+{
+	if (!IsOptionsOpen())
+		return;
+
+	CUIManager::RenderStateSet();
+	s_pUIOptions->Render();
+	CUIManager::RenderStateRestore();
 }
 
 void CGameProcedure::ReConnect()

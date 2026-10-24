@@ -1,7 +1,7 @@
 ﻿#include "../Shell.h"
 #include "Cocoa/CocoaApp.h"
 #include "CodePage.h"
-#include "MacState.h"
+#include "InputScript.h"
 #include "NotImplemented.h"
 
 #include <cctype>
@@ -14,6 +14,8 @@
 #include <string_view>
 
 #include <mach-o/dyld.h>
+
+#include <spdlog/fmt/bundled/format.h>
 
 namespace Platform
 {
@@ -55,26 +57,41 @@ std::string WideToUtf8(const wchar_t* text)
 
 } // namespace
 
+namespace
+{
+
+void ShowAlert(const std::string& szCaption, const std::string& szText)
+{
+	// A test script plays without anyone to click OK: log it instead of waiting.
+	if (macOS::InputScript::IsActive())
+	{
+		fmt::print(stderr, "Message box (not shown in a test run): {}: {}\n", szCaption, szText);
+		return;
+	}
+
+	macOS::Cocoa::ShowAlert(szCaption, szText);
+}
+
+} // namespace
+
 void ShowMessageBox(HWND /*hWndOwner*/, const char* text, const char* caption)
 {
-	macOS::Cocoa::ShowAlert(macOS::AnsiToUtf8(caption != nullptr ? caption : ""),
+	ShowAlert(macOS::AnsiToUtf8(caption != nullptr ? caption : ""),
 		macOS::AnsiToUtf8(text != nullptr ? text : ""));
 }
 
 void ShowMessageBox(HWND /*hWndOwner*/, const wchar_t* text, const wchar_t* caption)
 {
-	macOS::Cocoa::ShowAlert(WideToUtf8(caption), WideToUtf8(text));
+	ShowAlert(WideToUtf8(caption), WideToUtf8(text));
 }
 
 void ShellOpen(const std::string& target)
 {
-	// Windows programs don't exist here. The game launches Option.exe, then quits; the Settings
-	// window takes its place.
+	// Windows programs don't exist here (the game shows its own Options window instead of running
+	// Option.exe; see PlatformOptions.h).
 	std::string lower = target;
 	for (char& ch : lower)
 		ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-	if (lower == "option.exe")
-		macOS::RequestOptionsAfterQuit();
 	if (lower.size() >= 4 && lower.ends_with(".exe"))
 		return;
 

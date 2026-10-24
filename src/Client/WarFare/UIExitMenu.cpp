@@ -10,7 +10,9 @@
 #include "APISocket.h"
 
 #include <N3Base/N3UIButton.h>
+#include <N3Base/N3UIString.h>
 
+#include <N3Base/Platform/PlatformOptions.h>
 #include <N3Base/Platform/Shell.h>
 #include <N3Base/Platform/Time.h>
 #include <N3Base/Platform/Window.h>
@@ -97,6 +99,14 @@ bool CUIExitMenu::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 	{
 		if (CGameProcedure::s_pProcMain == nullptr)
 			return true;
+
+		// Without Option.exe, the game has its own Options window, and there's no need to quit.
+		if (!Platform::HasOptionsProgram())
+		{
+			SetVisible(false);
+			CGameProcedure::ShowOptions();
+			return true;
+		}
 
 		if (CGameProcedure::s_pProcMain->m_fExitTimer == -1.0f)
 		{
@@ -192,6 +202,21 @@ bool CUIExitMenu::Load(File& file)
 	N3_VERIFY_UI_COMPONENT(m_pBtn_Option, GetChildByID<CN3UIButton>("btn_option"));
 	N3_VERIFY_UI_COMPONENT(m_pBtn_Exit, GetChildByID<CN3UIButton>("btn_exit"));
 	N3_VERIFY_UI_COMPONENT(m_pBtn_Cancel, GetChildByID<CN3UIButton>("btn_cancel"));
+
+	// Without Option.exe the button opens the game's Options window and the game carries on, so
+	// its label ("Run option after exiting") changes. The label is the text over the button.
+	if (!Platform::HasOptionsProgram() && m_pBtn_Option != nullptr)
+	{
+		const RECT rcButton = m_pBtn_Option->GetRegion();
+		for (int i = 0; i < GetChildrenCount(); i++)
+		{
+			CN3UIBase* pChild = GetChildByIndex(i);
+			const RECT rc     = pChild->GetRegion();
+			if (pChild->UIType() == UI_TYPE_STRING && rc.left < rcButton.right && rcButton.left < rc.right && rc.top < rcButton.bottom
+				&& rcButton.top < rc.bottom)
+				static_cast<CN3UIString*>(pChild)->SetString("Options");
+		}
+	}
 
 	return true;
 }

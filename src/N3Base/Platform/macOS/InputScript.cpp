@@ -253,14 +253,25 @@ bool Run(const Command& command)
 
 	if (command.verb == "snapshot")
 	{
+		// The next command waits for the frame, or its input would be in it.
 		RequestSnapshot(command.args.empty() ? std::string("snapshot.png") : command.args[0]);
-		return true;
+		s.waitFrames = 1;
+		s.waitUntil  = Clock::now();
+		return false;
 	}
 
 	if (command.verb == "quit")
 	{
 		RequestQuit(0);
 		return false;
+	}
+
+	if (command.verb == "options")
+	{
+		// The game's Options window, as the app menu's Settings... opens it.
+		if (Handlers().OnShowOptions)
+			Handlers().OnShowOptions();
+		return true;
 	}
 
 	if (command.verb == "handoff")

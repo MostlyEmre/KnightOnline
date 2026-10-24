@@ -107,6 +107,8 @@ set(WARFARE_SCENE_INGAME_UI_SOURCES
   UINPCChangeEvent.h
   UINPCEvent.cpp
   UINPCEvent.h
+  UIOptions.cpp
+  UIOptions.h
   UIPartyBBS.cpp
   UIPartyBBS.h
   UIPartyBBSSelector.cpp

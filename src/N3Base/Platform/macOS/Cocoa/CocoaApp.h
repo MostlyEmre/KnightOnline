@@ -65,8 +65,8 @@ void SetInputOptions(const InputOptions& options);
 /// \brief Keeps the display from sleeping (an IOKit power assertion) while bAwake.
 void SetKeepAwake(bool bAwake);
 
-/// \brief Hides the game window and gives back the menu bar and Dock (before showing the
-/// Settings window once the game has ended).
+/// \brief Hides the game window and gives back the menu bar and Dock (once the game has ended,
+/// before it starts again).
 void HideGameWindow();
 
 /// \brief Starts another instance of the game (the app bundle, or this executable outside one).

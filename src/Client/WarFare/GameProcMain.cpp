@@ -75,6 +75,7 @@
 
 #include <N3Base/Platform/FileSystem.h>
 #include <N3Base/Platform/Input.h>
+#include <N3Base/Platform/PlatformOptions.h>
 #include <N3Base/Platform/Window.h>
 
 std::string g_szCmdMsg[CMD_COUNT]; // 게임상 명령어
@@ -501,6 +502,10 @@ void CGameProcMain::Tick()
 				if (m_eExitType == EXIT_TYPE_QUIT)
 				{
 					Platform::PostQuitMessage(0);
+				}
+				else if (m_eExitType == EXIT_TYPE_RESTART)
+				{
+					Platform::RequestRestart();
 				}
 				else if (m_eExitType == EXIT_TYPE_CHR_SELECT && m_pUIExitMenu != nullptr)
 				{
@@ -1038,7 +1043,7 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 	if (m_pSubProcPerTrade->m_ePerTradeState != PER_TRADE_STATE_NONE)
 		return;
 
-	if (!s_bIsWindowInFocus)
+	if (!s_bIsWindowInFocus || IsOptionsOpen())
 		return;
 
 	POINT ptPrev = s_pLocalInput->MouseGetPosOld();

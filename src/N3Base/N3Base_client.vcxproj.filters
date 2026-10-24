@@ -288,6 +288,9 @@
     <ClInclude Include="Platform\ScreenCapture.h">
       <Filter>Platform</Filter>
     </ClInclude>
+    <ClInclude Include="Platform\PlatformOptions.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
     <ClInclude Include="Platform\Settings.h">
       <Filter>Platform</Filter>
     </ClInclude>
@@ -558,6 +561,9 @@
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Platform\Win32\Settings_Win32.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\PlatformOptions_Win32.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="Platform\Win32\Shell_Win32.cpp">
