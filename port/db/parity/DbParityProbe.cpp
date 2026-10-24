@@ -24,6 +24,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -72,18 +73,24 @@ std::string JsonString(const std::string& bytes)
 
 std::string ReadCell(const nanodbc::result& r, short col, const std::string& name)
 {
-	if (r.is_null(col))
-		return "null";
-	if (VolatileColumns.contains(name))
-		return "\"<set>\"";
 	if (BinaryColumns.contains(name))
 	{
-		std::vector<uint8_t> bytes = r.get<std::vector<uint8_t>>(col);
-		std::string hex            = "\"0x";
+		// As the generated binders read them: is_null() is only reliable for unbound long data
+		// after it has been fetched, which get_ref<std::optional<>> accounts for.
+		std::optional<std::vector<uint8_t>> value;
+		r.get_ref(col, value);
+		if (!value.has_value())
+			return "null";
+		const std::vector<uint8_t>& bytes = *value;
+		std::string hex                   = "\"0x";
 		for (uint8_t b : bytes)
 			hex += std::format("{:02x}", b);
 		return hex + "\"";
 	}
+	if (r.is_null(col))
+		return "null";
+	if (VolatileColumns.contains(name))
+		return "\"<set>\"";
 	if (DateColumns.contains(name))
 	{
 		nanodbc::timestamp ts = r.get<nanodbc::timestamp>(col);
