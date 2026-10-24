@@ -107,25 +107,35 @@ bool Create(HWND /*hWndParent*/, const RECT& /*rc*/, const Handlers& handlers)
 	s_bCreated = true;
 
 	macOS::Cocoa::TextInputEvents events;
-	events.OnInsertText    = InsertText;
+	// While a test script plays, typing comes from the script only.
+	events.OnInsertText = [](const std::string& szUtf8)
+	{
+		if (!macOS::InputScript::IsActive())
+			InsertText(szUtf8);
+	};
 	events.OnSetMarkedText = [](const std::string& szUtf8)
 	{
+		if (macOS::InputScript::IsActive())
+			return;
+
 		s_szMarked = macOS::Utf8ToAnsi(szUtf8);
 		NotifyTextChanged();
 	};
 	events.OnUnmarkText = []
 	{
-		if (s_szMarked.empty())
+		if (macOS::InputScript::IsActive() || s_szMarked.empty())
 			return;
 
 		std::string szMarked = macOS::AnsiToUtf8(s_szMarked);
 		InsertText(szMarked);
 	};
-	events.OnCommand = Command;
+	events.OnCommand = [](const std::string& szCommand)
+	{
+		if (!macOS::InputScript::IsActive())
+			Command(szCommand);
+	};
 
-	// While a test script plays, typing comes from the script only.
-	if (!macOS::InputScript::IsActive())
-		macOS::Cocoa::SetTextInputEvents(events);
+	macOS::Cocoa::SetTextInputEvents(events);
 	return true;
 }
 

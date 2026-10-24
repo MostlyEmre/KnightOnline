@@ -594,8 +594,8 @@ NSCursor* BlankCursor()
 namespace Platform::macOS::Cocoa
 {
 
-bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool bFullscreen, bool bTakeFocus,
-	const WindowEvents& events)
+bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool bFullscreen,
+	bool bTakeFocus, const WindowEvents& events)
 {
 	AppState& app = App();
 	if (app.window != nil || iWidth <= 0 || iHeight <= 0)
@@ -788,6 +788,18 @@ void WindowScreenRect(int& left, int& top, int& right, int& bottom)
 bool IsActive()
 {
 	return App().active;
+}
+
+void ActivateGameWindow()
+{
+	@autoreleasepool
+	{
+		if (App().window == nil)
+			return;
+
+		[App().window makeKeyAndOrderFront:nil];
+		[NSApp activateIgnoringOtherApps:YES];
+	}
 }
 
 uint32_t PressedMouseButtons()

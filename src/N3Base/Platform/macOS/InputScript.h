@@ -17,6 +17,7 @@
 //   text <characters>         type into the focused edit box
 //   snapshot <file.png>       save the next frame
 //   quit                      end the program like PostQuitMessage(0)
+//   handoff                   stop the script and give the window and real input to the user
 namespace Platform::macOS::InputScript
 {
 

@@ -65,6 +65,9 @@ void WindowScreenRect(int& left, int& top, int& right, int& bottom);
 /// \brief Whether the game window has keyboard focus.
 bool IsActive();
 
+/// \brief Brings the game window to the front with keyboard focus.
+void ActivateGameWindow();
+
 /// \brief Mouse buttons held anywhere: bit 0 left, bit 1 right, bit 2 middle.
 uint32_t PressedMouseButtons();
 

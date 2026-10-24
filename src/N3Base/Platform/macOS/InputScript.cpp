@@ -1,5 +1,6 @@
 #include "InputScript.h"
 #include "../Compat/DInputKeys.h"
+#include "Cocoa/CocoaApp.h"
 #include "Direct3D9_macOS.h"
 #include "MacState.h"
 
@@ -246,6 +247,17 @@ bool Run(const Command& command)
 	if (command.verb == "quit")
 	{
 		RequestQuit(0);
+		return false;
+	}
+
+	if (command.verb == "handoff")
+	{
+		// Real input from here on, for whoever is at the Mac.
+		s.active       = false;
+		s.buttons      = 0;
+		s.buttonFrames = 0;
+		s.keyFrames.fill(0);
+		Cocoa::ActivateGameWindow();
 		return false;
 	}
 
