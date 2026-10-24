@@ -3,21 +3,40 @@
 #include "APISocket.h"
 #include "GameProcMain.h"
 #include "PacketDef.h"
+#include "MagicSkillMng.h"
 #include "PlayerMySelf.h"
+#include "PlayerOtherMgr.h"
 #include "UIArt.h"
 #include "UIManager.h"
+#include "UISkillTreeDlg.h"
 
 #include <FileIO/PathResolver.h>
 #include <N3Base/N3UIString.h>
 
+#include <algorithm>
+#include <cmath>
+#include <vector>
+
 namespace
 {
 
-constexpr D3DCOLOR COLOR_STARTED = 0xff80ff80;
-constexpr D3DCOLOR COLOR_STOPPED = 0xffffff00;
+constexpr D3DCOLOR COLOR_STARTED  = 0xff80ff80;
+constexpr D3DCOLOR COLOR_STOPPED  = 0xffffff00;
 
-constexpr int INDICATOR_WIDTH    = 110;
-constexpr int INDICATOR_TOP      = 64;
+constexpr int INDICATOR_WIDTH     = 110;
+constexpr int INDICATOR_TOP       = 64;
+
+constexpr float DECISION_INTERVAL = 0.3f;  // seconds between decisions
+constexpr float ATTACKER_MEMORY   = 10.0f; // how long a monster that attacked counts as attacking
+constexpr float SKILL_HOLD        = 3.0f;  // how long a refused skill is held back
+constexpr float ORIGIN_SLACK      = 3.0f;  // how close to its start spot Genie stands when idle
+constexpr float PROGRESS_STEP     = 0.5f;  // getting this much closer to the target counts as progress
+
+float DistanceXZ(const __Vector3& vA, const __Vector3& vB)
+{
+	const float fX = vA.x - vB.x, fZ = vA.z - vB.z;
+	return std::sqrt((fX * fX) + (fZ * fZ));
+}
 
 } // namespace
 
@@ -94,8 +113,13 @@ void CGenie::OnStartResult(bool bOk)
 		return;
 	}
 
-	m_bRunning = true;
-	m_vOrigin  = CGameProcedure::s_pPlayer->Position();
+	m_bRunning      = true;
+	m_vOrigin       = CGameProcedure::s_pPlayer->Position();
+	m_fNextDecision = m_fNow;
+	m_iTarget       = -1;
+	m_Progress      = {};
+	m_Attackers.clear();
+	m_HeldSkills.clear();
 	m_pMain->MsgOutput("Genie started. Moving by hand stops it.", COLOR_STARTED);
 }
 
@@ -132,6 +156,250 @@ void CGenie::Tick(float fNow)
 		Stop(Genie::StopReason::NoReply);
 		return;
 	}
+
+	if (!m_bRunning || fNow < m_fNextDecision)
+		return;
+
+	m_fNextDecision = fNow + DECISION_INTERVAL;
+	Decide();
+}
+
+void CGenie::OnAttackedBy(int iAttackerID)
+{
+	if (m_bRunning)
+		m_Attackers[iAttackerID] = m_fNow;
+}
+
+void CGenie::OnHit(int iTargetID)
+{
+	if (m_bRunning && iTargetID == m_iTarget)
+		m_Progress.OnProgress(m_fNow);
+}
+
+void CGenie::OnManualControl()
+{
+	if (m_bRunning)
+		Stop(Genie::StopReason::MovedByHand);
+}
+
+void CGenie::OnDied()
+{
+	if (m_bRunning)
+		Stop(Genie::StopReason::Died);
+}
+
+void CGenie::OnZoneChanged()
+{
+	if (m_bRunning)
+		Stop(Genie::StopReason::ZoneChanged);
+}
+
+bool CGenie::IsMonster(const CPlayerNPC* pNPC)
+{
+	// Monsters have no nation; town NPCs and guards have one. Objects (gates, levers) have a shape.
+	return pNPC != nullptr && pNPC->IsAlive() && pNPC->m_fTimeAfterDeath <= 0.0f && pNPC->m_InfoBase.eNation == NATION_NOTSELECTED
+		   && pNPC->m_pShapeExtraRef == nullptr && pNPC->m_InfoBase.iAuthority != AUTHORITY_MANAGER;
+}
+
+bool CGenie::IsAttackedRecently() const
+{
+	for (const auto& [iID, fWhen] : m_Attackers)
+	{
+		if (m_fNow - fWhen < ATTACKER_MEMORY && IsMonster(CGameProcedure::s_pOPMgr->NPCGetByID(iID, true)))
+			return true;
+	}
+
+	return false;
+}
+
+void CGenie::Decide()
+{
+	CPlayerMySelf* pPlayer = CGameProcedure::s_pPlayer;
+	if (pPlayer == nullptr || pPlayer->IsDead())
+	{
+		Stop(Genie::StopReason::Died);
+		return;
+	}
+
+	if (Fight())
+		return;
+
+	ReturnToOrigin();
+}
+
+bool CGenie::Fight()
+{
+	CPlayerMySelf* pPlayer = CGameProcedure::s_pPlayer;
+	const __Vector3 vSelf  = pPlayer->Position();
+
+	std::vector<Genie::Monster> monsters;
+	for (const auto& [iID, pNPC] : CGameProcedure::s_pOPMgr->m_NPCs)
+	{
+		if (!IsMonster(pNPC) || m_Progress.IsSkipped(iID, m_fNow))
+			continue;
+
+		Genie::Monster monster;
+		monster.iID          = iID;
+		monster.fX           = pNPC->Position().x;
+		monster.fZ           = pNPC->Position().z;
+		auto it              = m_Attackers.find(iID);
+		monster.bAttackingMe = it != m_Attackers.end() && m_fNow - it->second < ATTACKER_MEMORY;
+		monster.bOnList      = m_Settings.monsters.empty()
+						  || std::find(m_Settings.monsters.begin(), m_Settings.monsters.end(), pNPC->IDString())
+								 != m_Settings.monsters.end();
+		monsters.push_back(monster);
+	}
+
+	const int iTarget   = Genie::ChooseTarget(monsters, m_vOrigin.x, m_vOrigin.z, static_cast<float>(m_Settings.iRange), vSelf.x, vSelf.z);
+	CPlayerNPC* pTarget = iTarget >= 0 ? CGameProcedure::s_pOPMgr->NPCGetByID(iTarget, true) : nullptr;
+	if (pTarget == nullptr)
+	{
+		if (m_iTarget >= 0)
+		{
+			m_iTarget = -1;
+			m_pMain->CommandEnableAttackContinous(false, nullptr);
+		}
+		return false;
+	}
+
+	const float fDistance = DistanceXZ(vSelf, pTarget->Position());
+	if (iTarget != m_iTarget)
+	{
+		m_iTarget         = iTarget;
+		m_fTargetDistance = fDistance;
+		m_Progress.Reset(iTarget, m_fNow);
+		StandUp();
+		m_pMain->TargetSelect(iTarget, true);
+	}
+	else if (fDistance < m_fTargetDistance - PROGRESS_STEP)
+	{
+		m_fTargetDistance = fDistance;
+		m_Progress.OnProgress(m_fNow);
+	}
+
+	// Stuck on it (out of reach, or not getting hurt): leave it alone for a while.
+	if (m_Progress.ShouldSkip(m_fNow))
+	{
+		m_Progress.Skip(iTarget, m_fNow);
+		m_iTarget = -1;
+		HaltActions();
+		return true;
+	}
+
+	if (pPlayer->m_iIDTarget != iTarget)
+		m_pMain->TargetSelect(iTarget, true);
+
+	// The first attack skill that can go now.
+	CMagicSkillMng* pMagic = m_pMain->m_pMagicSkillMng;
+	std::vector<Genie::SkillChoice> skills;
+	float fSkillRange = 0.0f; // the reach of the skills that could go if Genie got closer
+	for (int iSkillID : m_Settings.attackSkills)
+	{
+		__TABLE_UPC_SKILL* pSkill = iSkillID > 0 ? CGameBase::s_pTbl_Skill.Find(iSkillID) : nullptr;
+		if (pSkill == nullptr)
+			continue;
+
+		Genie::SkillChoice choice;
+		choice.iID      = iSkillID;
+		choice.bReady   = pMagic->GetCooldown(pSkill) < 0.0f;
+		choice.bUsable  = m_pMain->m_pUISkillTreeDlg->HasIDSkill(iSkillID) && pMagic->CheckValidSkillMagic(pSkill);
+		choice.bInRange = pSkill->iValidDist > 0 ? fDistance <= pSkill->iValidDist + pTarget->Radius() + 1.0f
+												 : pPlayer->IsAttackableTarget(pTarget, false);
+		auto held       = m_HeldSkills.find(iSkillID);
+		choice.bHeld    = held != m_HeldSkills.end() && m_fNow < held->second;
+		skills.push_back(choice);
+
+		if (choice.bUsable && pSkill->iValidDist > 0)
+			fSkillRange = std::max(fSkillRange, static_cast<float>(pSkill->iValidDist));
+	}
+
+	const int iSkillID = pMagic->IsCasting() ? -1 : Genie::FirstCastable(skills);
+	if (iSkillID > 0)
+	{
+		StopMoving();
+		CastAttack(pTarget, CGameBase::s_pTbl_Skill.Find(iSkillID));
+		return true;
+	}
+
+	if (m_Settings.bBasicAttack)
+	{
+		if (pPlayer->IsAttackableTarget(pTarget, false))
+		{
+			StopMoving();
+			if (!pPlayer->m_bAttackContinous)
+				m_pMain->CommandEnableAttackContinous(true, pTarget);
+		}
+		else
+		{
+			MoveToTarget(pTarget);
+		}
+		return true;
+	}
+
+	// Skills only: get into their reach, then wait for one to be ready.
+	if (fSkillRange > 0.0f && fDistance > fSkillRange)
+		MoveToTarget(pTarget);
+	else
+		StopMoving();
+	return true;
+}
+
+void CGenie::CastAttack(CPlayerNPC* pTarget, __TABLE_UPC_SKILL* pSkill)
+{
+	CMagicSkillMng* pMagic = m_pMain->m_pMagicSkillMng;
+	const bool bArea       = pSkill->iTarget == SKILLMAGIC_TARGET_AREA_ENEMY || pSkill->iTarget == SKILLMAGIC_TARGET_AREA_FRIEND
+					   || pSkill->iTarget == SKILLMAGIC_TARGET_AREA_ALL;
+
+	// An area skill waits for a spot on the ground; Genie picks the target's, as a click would.
+	if (bArea)
+		m_pMain->m_vMouseSkillPos = pTarget->Position();
+
+	if (!pMagic->MsgSend_MagicProcess(pTarget->IDNumber(), pSkill))
+	{
+		m_HeldSkills[static_cast<int>(pSkill->dwID)] = m_fNow + SKILL_HOLD;
+		return;
+	}
+
+	if (bArea && pMagic->m_dwRegionMagicState == 1)
+		pMagic->m_dwRegionMagicState = 2;
+}
+
+void CGenie::MoveToTarget(CPlayerNPC* pTarget)
+{
+	CPlayerMySelf* pPlayer = CGameProcedure::s_pPlayer;
+	StandUp();
+	if (pPlayer->m_bTargetOrPosMove && pPlayer->m_iMoveTarget == pTarget->IDNumber())
+		return;
+
+	m_pMain->CommandMove(MD_FORWARD, true);
+	pPlayer->SetMoveTargetID(pTarget->IDNumber());
+}
+
+void CGenie::StopMoving()
+{
+	if (CGameProcedure::s_pPlayer->m_bTargetOrPosMove || CGameProcedure::s_pPlayer->IsMovingNow())
+		m_pMain->CommandMove(MD_STOP, true);
+}
+
+void CGenie::StandUp()
+{
+	if (CGameProcedure::s_pPlayer->m_bSitDown)
+		m_pMain->CommandSitDown(false, false);
+}
+
+void CGenie::ReturnToOrigin()
+{
+	CPlayerMySelf* pPlayer = CGameProcedure::s_pPlayer;
+	if (DistanceXZ(pPlayer->Position(), m_vOrigin) <= ORIGIN_SLACK)
+	{
+		StopMoving();
+		return;
+	}
+
+	StandUp();
+	if (!pPlayer->m_bTargetOrPosMove || pPlayer->m_iMoveTarget >= 0)
+		m_pMain->CommandMove(MD_FORWARD, true);
+	pPlayer->SetMoveTargetPos(m_vOrigin);
 }
 
 void CGenie::OnLeaveGame()

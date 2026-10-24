@@ -469,10 +469,11 @@ void CGameProcMain::Tick()
 
 	m_pUIStateBarAndMiniMap->UpdatePosition(s_pPlayer->Position(), s_pPlayer->Yaw()); // 위치 업데이트.
 
-	if (m_pMagicSkillMng)
-		m_pMagicSkillMng->Tick();
+	// Genie first: an area skill it casts goes off in the magic manager's Tick, at the spot it chose.
 	if (m_pGenie)
 		m_pGenie->Tick(CN3Base::TimeGet());
+	if (m_pMagicSkillMng)
+		m_pMagicSkillMng->Tick();
 	if (m_pWarMessage)
 		m_pWarMessage->Tick();
 	if (m_pLightMgr)
@@ -1173,12 +1174,18 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 
 	if (!IsUIKeyOperated() && nullptr == CN3UIBase::GetFocusedEdit()) // 채팅모드가 아닐때
 	{
-		if (s_pPlayer->m_InfoBase.iAuthority == AUTHORITY_MANAGER)    //게임 운영자는 이 기능을 사용할수 있다.
+		// Moving (W, S, E) or attacking (R) by hand means the player is back: Genie stops.
+		if (s_pLocalInput->IsKeyPress(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyPress(DIK_UP) || s_pLocalInput->IsKeyPress(KM_MOVE_BACKWARD)
+			|| s_pLocalInput->IsKeyPress(DIK_DOWN) || s_pLocalInput->IsKeyPress(KM_TOGGLE_MOVE_CONTINOUS)
+			|| s_pLocalInput->IsKeyPress(KM_TOGGLE_ATTACK))
+			m_pGenie->OnManualControl();
+
+		if (s_pPlayer->m_InfoBase.iAuthority == AUTHORITY_MANAGER) //게임 운영자는 이 기능을 사용할수 있다.
 		{
 			if (s_pLocalInput->IsKeyDown(DIK_Q))
-				s_pPlayer->m_bTempMoveTurbo = true;                   // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
+				s_pPlayer->m_bTempMoveTurbo = true;                // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
 			else
-				s_pPlayer->m_bTempMoveTurbo = false;                  // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
+				s_pPlayer->m_bTempMoveTurbo = false;               // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
 		}
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_ATTACK))
@@ -3168,8 +3175,14 @@ bool CGameProcMain::MsgRecv_Attack(Packet& pkt)
 	if (iIDAttacker == iIDTarget)
 		return false;                      // 공격자와 피해자가 같은 경우????
 
-	bool bIAmTarget        = (iIDTarget == s_pPlayer->IDNumber()) ? true : false;
-	bool bIAmAttacker      = (iIDAttacker == s_pPlayer->IDNumber()) ? true : false;
+	bool bIAmTarget   = (iIDTarget == s_pPlayer->IDNumber()) ? true : false;
+	bool bIAmAttacker = (iIDAttacker == s_pPlayer->IDNumber()) ? true : false;
+
+	// Genie fights back against what attacks the player, and counts the player's hits.
+	if (bIAmTarget && iIDAttacker > 10000)
+		m_pGenie->OnAttackedBy(iIDAttacker);
+	else if (bIAmAttacker && iResult != 0)
+		m_pGenie->OnHit(iIDTarget);
 
 	CPlayerBase* pAttacker = nullptr;
 	if (bIAmAttacker)
@@ -3283,6 +3296,7 @@ bool CGameProcMain::MsgRecv_Dead(Packet& pkt)
 	if (iIDTarget == s_pPlayer->IDNumber())
 	{
 		pTarget = s_pPlayer;
+		m_pGenie->OnDied();
 
 		// The store is for the living (the server won't open it for the dead either).
 		if (s_pUIPowerUpStore != nullptr)
@@ -4390,6 +4404,7 @@ void CGameProcMain::InitZone(int iZone, const __Vector3& vPosPlayer)
 	static int iZonePrev = -1;
 	if (iZonePrev != iZone)   // 다른 존일 경우에만 로딩..
 	{
+		m_pGenie->OnZoneChanged();
 		m_pLightMgr->Release();
 		s_pEng->SetDefaultLight(m_pLightMgr->Light(0), m_pLightMgr->Light(1), m_pLightMgr->Light(2));
 
@@ -7528,6 +7543,7 @@ bool CGameProcMain::OnMouseLDBtnPress(POINT /*ptCur*/, POINT /*ptPrev*/)
 	if (s_pUIMgr->m_bDoneSomething)
 		return false;
 
+	m_pGenie->OnManualControl();
 	TryStartAttack();
 
 	return true;
@@ -7621,6 +7637,7 @@ bool CGameProcMain::OnMouseLBtnPress(POINT ptCur, POINT /*ptPrev*/)
 		{
 			if (s_pLocalInput->IsKeyDown(DIK_LCONTROL) || s_pLocalInput->IsKeyDown(DIK_RCONTROL))
 			{
+				m_pGenie->OnManualControl();
 				if (s_pPlayer->IsAttackableTarget(pTarget, false))
 				{
 					if (s_pPlayer->m_bTargetOrPosMove)
@@ -7642,6 +7659,7 @@ bool CGameProcMain::OnMouseLBtnPress(POINT ptCur, POINT /*ptPrev*/)
 		}
 		else if (!bFindCorpse)
 		{
+			m_pGenie->OnManualControl();
 			s_pPlayer->RotateTo(fYaw, true);
 			__Vector3 vMovePoint;
 			ACT_WORLD->PickWideWithTerrain(ptCur.x, ptCur.y, vMovePoint); // 지형을 찍어본다..
@@ -7665,6 +7683,7 @@ bool CGameProcMain::OnMouseLBtnPress(POINT ptCur, POINT /*ptPrev*/)
 	{
 		if (pTarget && (s_pLocalInput->IsKeyDown(DIK_LCONTROL) || s_pLocalInput->IsKeyDown(DIK_RCONTROL)))
 		{
+			m_pGenie->OnManualControl();
 			if (s_pPlayer->IsAttackableTarget(pTarget, false))
 			{
 				if (s_pPlayer->m_bTargetOrPosMove)
@@ -7718,6 +7737,7 @@ bool CGameProcMain::OnMouseLbtnDown(POINT ptCur, POINT /*ptPrev*/)
 
 		if (fNowTime - m_fLBClickTime > 0.1f && s_pPlayer->m_bTargetOrPosMove)
 		{
+			m_pGenie->OnManualControl();
 			if (s_pPlayer->m_bAttackContinous)
 				CommandToggleAttackContinous();
 
@@ -7731,6 +7751,7 @@ bool CGameProcMain::OnMouseLbtnDown(POINT ptCur, POINT /*ptPrev*/)
 		}
 		else if (fNowTime - m_fLBClickTime > 0.1f && !s_pPlayer->m_bTargetOrPosMove)
 		{
+			m_pGenie->OnManualControl();
 			if (s_pPlayer->m_bAttackContinous)
 				CommandToggleAttackContinous();
 

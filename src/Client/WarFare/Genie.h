@@ -8,10 +8,13 @@
 
 #include <N3Base/My_3DStruct.h>
 
+#include <map>
 #include <string>
 
 class CGameProcMain;
 class CN3UIBase;
+class CPlayerNPC;
+struct __TABLE_UPC_SKILL;
 
 // Genie (auto-hunt): plays for the player while it's on. It hunts with the client's own commands
 // and packets; the server only says whether it may run (WIZ_GENIE). Its decisions are in
@@ -47,6 +50,18 @@ public:
 	/// \brief The main scene is let go (back to character selection, or quitting)
 	void OnLeaveGame();
 
+	/// \brief A monster attacked the player (an attack, or a spell cast at the player)
+	void OnAttackedBy(int iAttackerID);
+
+	/// \brief The player hit something: progress, if it's Genie's target
+	void OnHit(int iTargetID);
+
+	/// \brief The player moved or attacked by hand: they're back, so Genie stops
+	void OnManualControl();
+
+	void OnDied();
+	void OnZoneChanged();
+
 	Genie::Settings& Settings();
 	void LoadSettings();
 	void SaveSettings();
@@ -59,16 +74,36 @@ private:
 	void HaltActions();
 	void BuildIndicator();
 
-	CGameProcMain* m_pMain = nullptr;
-	bool m_bAvailable      = false;
-	bool m_bRunning        = false;
-	bool m_bWaitingStart   = false;
-	float m_fStartSentAt   = 0.0f;
-	float m_fNow           = 0.0f;
-	__Vector3 m_vOrigin    = {};
+	/// \brief One decision, every DECISION_INTERVAL while running
+	void Decide();
+
+	/// \brief Fights the monster ChooseTarget() picks; false when there's none
+	bool Fight();
+	void CastAttack(CPlayerNPC* pTarget, __TABLE_UPC_SKILL* pSkill);
+	void MoveToTarget(CPlayerNPC* pTarget);
+	void StopMoving();
+	void StandUp();
+	void ReturnToOrigin();
+	bool IsAttackedRecently() const;
+	static bool IsMonster(const CPlayerNPC* pNPC);
+
+	CGameProcMain* m_pMain  = nullptr;
+	bool m_bAvailable       = false;
+	bool m_bRunning         = false;
+	bool m_bWaitingStart    = false;
+	float m_fStartSentAt    = 0.0f;
+	float m_fNow            = 0.0f;
+	float m_fNextDecision   = 0.0f;
+	__Vector3 m_vOrigin     = {};
+
+	int m_iTarget           = -1;
+	float m_fTargetDistance = 0.0f;
+	Genie::TargetProgress m_Progress;
+	std::map<int, float> m_Attackers;  // monster ID -> when it last attacked the player
+	std::map<int, float> m_HeldSkills; // skill ID -> until when it's held back after a refusal
 
 	Genie::Settings m_Settings;
-	std::string m_szSettingsOwner; // the character m_Settings belong to
+	std::string m_szSettingsOwner;     // the character m_Settings belong to
 
 	CN3UIBase* m_pIndicator = nullptr;
 };

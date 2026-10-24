@@ -4,6 +4,7 @@
 
 #include "StdAfx.h"
 #include "MagicSkillMng.h"
+#include "Genie.h"
 #include "GameProcMain.h"
 #include "APISocket.h"
 #include "PacketDef.h"
@@ -1721,6 +1722,10 @@ void CMagicSkillMng::MsgRecv_Casting(Packet& pkt)
 	//if(iSourceID<0) return;
 	if (iSourceID < 0 || iSourceID == s_pPlayer->IDNumber())
 		return;
+
+	// A monster casting at the player: Genie fights back.
+	if (iTargetID == s_pPlayer->IDNumber() && iSourceID > 10000)
+		m_pGameProcMain->m_pGenie->OnAttackedBy(iSourceID);
 	//
 	////common.....//////////////////////////////////////////////////////////////
 
@@ -1876,6 +1881,10 @@ void CMagicSkillMng::MsgRecv_Effecting(Packet& pkt)
 	{
 		Data[i] = pkt.read<int16_t>();
 	}
+
+	// The player's spell landed: progress for Genie, if it's on its target.
+	if (iSourceID == s_pPlayer->IDNumber() && iTargetID != iSourceID)
+		m_pGameProcMain->m_pGenie->OnHit(iTargetID);
 
 	CPlayerBase* pPlayer = m_pGameProcMain->CharacterGetByID(iSourceID, false);
 	if (pPlayer == nullptr)
