@@ -13,6 +13,7 @@
 #include "UIInventory.h"
 #include "UITransactionDlg.h"
 #include "UISkillTreeDlg.h"
+#include "UIWareHouseDlg.h"
 
 #include <FileIO/PathResolver.h>
 #include <N3Base/N3UIString.h>
@@ -315,7 +316,10 @@ bool CGenie::Loot()
 		{
 			// Picking up, one item after another; done once the window leaves the dropped state.
 			if (pDlg->IsQuietLooting())
+			{
+				pDlg->ResumeQuietLoot();
 				return false;
+			}
 
 			m_DoneBundles.insert(m_iLootBundle);
 			m_iLootBundle = -1;
@@ -326,15 +330,30 @@ bool CGenie::Loot()
 		}
 		else
 		{
-			// No answer: the drop is in another region. Walk to it and ask once more.
-			CPlayerBase* pCorpse = FindCorpse(m_iLootCorpse);
-			if (m_bLootRetried || pCorpse == nullptr)
+			// No answer: the drop is in another region. Walk to it and ask once more, if it's near
+			// enough; a fight comes first.
+			CPlayerBase* pCorpse        = FindCorpse(m_iLootCorpse);
+			const Genie::DropWalk eWalk = m_bLootRetried || pCorpse == nullptr
+											  ? Genie::DropWalk::GiveUp
+											  : Genie::WalkToDrop(IsAttackedRecently(), DistanceXZ(m_vOrigin, pCorpse->Position()),
+													static_cast<float>(m_Settings.iRange),
+													m_fLootWalkSince < 0.0f ? 0.0f : m_fNow - m_fLootWalkSince, m_Settings.bStayPut);
+			if (eWalk == Genie::DropWalk::GiveUp)
 			{
 				pDlg->CancelQuietLoot();
 				m_DoneBundles.insert(m_iLootBundle);
 				m_iLootBundle = -1;
 				return false;
 			}
+
+			if (eWalk == Genie::DropWalk::Wait)
+			{
+				m_fLootWalkSince = -1.0f; // the walk's time starts over once nothing attacks
+				return false;
+			}
+
+			if (m_fLootWalkSince < 0.0f)
+				m_fLootWalkSince = m_fNow;
 
 			if (DistanceXZ(CGameProcedure::s_pPlayer->Position(), pCorpse->Position()) > ORIGIN_SLACK)
 			{
@@ -351,6 +370,10 @@ bool CGenie::Loot()
 			return true;
 		}
 	}
+
+	// Not while the player loots or moves items: the window and s_sRecoveryJobInfo are shared.
+	if (PlayerHandlesItems())
+		return false;
 
 	// The nearest drop not looted yet.
 	const __Vector3 vSelf = CGameProcedure::s_pPlayer->Position();
@@ -376,9 +399,10 @@ bool CGenie::Loot()
 	if (pNearest == nullptr)
 		return false;
 
-	m_iLootBundle  = pNearest->m_iDroppedItemID;
-	m_iLootCorpse  = pNearest->IDNumber();
-	m_bLootRetried = false;
+	m_iLootBundle    = pNearest->m_iDroppedItemID;
+	m_iLootCorpse    = pNearest->IDNumber();
+	m_bLootRetried   = false;
+	m_fLootWalkSince = -1.0f;
 	SendBundleOpen(m_iLootBundle);
 	return false;
 }
@@ -537,11 +561,6 @@ int CGenie::ArrowItemID() const
 	return pSkill != nullptr ? static_cast<int>(pSkill->dwExhaustItem) : 0;
 }
 
-bool CGenie::CanRestock(int iItemID, const Genie::Merchant& merchant, const Genie::RestockState& state, bool bOn) const
-{
-	return bOn && iItemID > 0 && merchant.IsSet() && !state.bDisabled && CGameProcedure::s_pPlayer->m_InfoExt.iGold > m_Settings.iCoinFloor;
-}
-
 Genie::StopReason CGenie::TownReasonNow() const
 {
 	Genie::Supplies supplies;
@@ -553,19 +572,39 @@ Genie::StopReason CGenie::TownReasonNow() const
 	supplies.bUsesArrows   = UsesArrows();
 	supplies.iArrows       = CountItem(ArrowItemID());
 
-	// Out of something Genie can still buy isn't a reason to leave.
-	if (CanRestock(m_Settings.iHpPotionID, m_Settings.potionMerchant, m_HpRestock, m_Settings.bBuyPotions))
+	// Out of something Genie can buy back isn't a reason to leave.
+	const int64_t iGold    = CGameProcedure::s_pPlayer->m_InfoExt.iGold;
+	if (Genie::CanRestockFromEmpty(Offer(m_Settings.iHpPotionID, m_Settings.potionMerchant, m_Settings.bBuyPotions), m_HpRestock,
+			m_Settings.iKeepHpPotions, iGold, m_Settings.iCoinFloor))
 		supplies.bUsesHpPotion = false;
-	if (CanRestock(m_Settings.iMpPotionID, m_Settings.potionMerchant, m_MpRestock, m_Settings.bBuyPotions))
+	if (Genie::CanRestockFromEmpty(Offer(m_Settings.iMpPotionID, m_Settings.potionMerchant, m_Settings.bBuyPotions), m_MpRestock,
+			m_Settings.iKeepMpPotions, iGold, m_Settings.iCoinFloor))
 		supplies.bUsesMpPotion = false;
-	if (CanRestock(ArrowItemID(), m_Settings.arrowMerchant, m_ArrowRestock, m_Settings.bBuyArrows))
+	if (Genie::CanRestockFromEmpty(Offer(ArrowItemID(), m_Settings.arrowMerchant, m_Settings.bBuyArrows), m_ArrowRestock,
+			m_Settings.iKeepArrows, iGold, m_Settings.iCoinFloor))
 		supplies.bUsesArrows = false;
 
 	return Genie::TownReason(supplies, m_Settings.town);
 }
 
+bool CGenie::PlayerHandlesItems() const
+{
+	Genie::ItemWindows windows;
+	windows.bLoot      = m_pMain->m_pUIDroppedItemDlg->IsVisible();
+	windows.bShop      = m_pMain->m_pUITransactionDlg != nullptr && m_pMain->m_pUITransactionDlg->IsVisible();
+	windows.bWarehouse = m_pMain->m_pUIWareHouseDlg != nullptr && m_pMain->m_pUIWareHouseDlg->IsVisible();
+	windows.bTrade     = m_pMain->m_pSubProcPerTrade->m_ePerTradeState != PER_TRADE_STATE_NONE;
+	windows.bRepair    = m_pMain->m_pUIInventory->GetInvState() == INV_STATE_REPAIR;
+	windows.bWaiting   = CN3UIBase::s_bWaitFromServer;
+	return Genie::PlayerHandlesItems(windows);
+}
+
 void CGenie::Upkeep()
 {
+	// Not while the player handles items: the results would go to their window.
+	if (PlayerHandlesItems())
+		return;
+
 	Repair();
 	Restock();
 }
@@ -680,40 +719,40 @@ void CGenie::Restock()
 		m_PendingBuy = {};
 	}
 
-	if (m_Settings.bBuyPotions
-		&& (Buy(m_Settings.iHpPotionID, m_Settings.potionMerchant, m_Settings.iKeepHpPotions, m_HpRestock)
-			|| Buy(m_Settings.iMpPotionID, m_Settings.potionMerchant, m_Settings.iKeepMpPotions, m_MpRestock)))
+	if (Buy(m_Settings.iHpPotionID, m_Settings.potionMerchant, m_Settings.bBuyPotions, m_Settings.iKeepHpPotions, m_HpRestock)
+		|| Buy(m_Settings.iMpPotionID, m_Settings.potionMerchant, m_Settings.bBuyPotions, m_Settings.iKeepMpPotions, m_MpRestock))
 		return;
 
-	if (m_Settings.bBuyArrows && UsesArrows())
-		Buy(ArrowItemID(), m_Settings.arrowMerchant, m_Settings.iKeepArrows, m_ArrowRestock);
+	if (UsesArrows())
+		Buy(ArrowItemID(), m_Settings.arrowMerchant, m_Settings.bBuyArrows, m_Settings.iKeepArrows, m_ArrowRestock);
 }
 
-bool CGenie::Buy(int iItemID, const Genie::Merchant& merchant, int iKeep, Genie::RestockState& state)
+Genie::RestockOffer CGenie::Offer(int iItemID, const Genie::Merchant& merchant, bool bOn, int* piPos) const
 {
-	if (iItemID <= 0 || !merchant.IsSet())
-		return false;
+	Genie::RestockOffer offer;
+	offer.bOn                  = bOn;
+	offer.bMerchant            = merchant.IsSet();
 
-	const int iHave = CountItem(iItemID);
-	if (!Genie::WantsRestock(state, iHave, iKeep))
-		return false;
-
-	__TABLE_ITEM_BASIC* pItem  = CGameBase::s_pTbl_Items_Basic.Find(iItemID / 1000 * 1000);
+	__TABLE_ITEM_BASIC* pItem  = iItemID > 0 ? CGameBase::s_pTbl_Items_Basic.Find(iItemID / 1000 * 1000) : nullptr;
 	__TABLE_ITEM_EXT* pItemExt = pItem != nullptr && pItem->byExtIndex < MAX_ITEM_EXTENSION
 									 ? CGameBase::s_pTbl_Items_Exts[pItem->byExtIndex].Find(iItemID % 1000)
 									 : nullptr;
 	if (pItemExt == nullptr)
-		return false;
+		return offer;
+
+	// Ebenezer only checks the merchant's selling group, so Genie checks the item is in it.
+	offer.bSold        = Genie::IsSoldBy(pItem->bySellGroup, iItemID, merchant.iTradeID);
+	offer.iUnitPrice   = pItem->iPrice * pItemExt->siPriceMultiply;
 
 	// Onto its stack, or into an empty slot.
 	CUIInventory* pInv = m_pMain->m_pUIInventory;
-	int iPos = -1, iRoom = 0;
+	int iPos           = -1;
 	for (int i = 0; i < MAX_ITEM_INVENTORY; i++)
 	{
 		if (pInv->m_pMyInvWnd[i] != nullptr && pInv->m_pMyInvWnd[i]->GetItemID() == iItemID)
 		{
-			iPos  = i;
-			iRoom = MAX_ITEM_COUNT - pInv->m_pMyInvWnd[i]->iCount;
+			iPos        = i;
+			offer.iRoom = MAX_ITEM_COUNT - pInv->m_pMyInvWnd[i]->iCount;
 			break;
 		}
 	}
@@ -721,17 +760,51 @@ bool CGenie::Buy(int iItemID, const Genie::Merchant& merchant, int iKeep, Genie:
 	{
 		if (pInv->m_pMyInvWnd[i] == nullptr)
 		{
-			iPos  = i;
-			iRoom = MAX_ITEM_COUNT;
+			iPos        = i;
+			offer.iRoom = MAX_ITEM_COUNT;
 		}
 	}
-	if (iPos < 0)
+
+	if (piPos != nullptr)
+		*piPos = iPos;
+	return offer;
+}
+
+bool CGenie::Buy(int iItemID, const Genie::Merchant& merchant, bool bOn, int iKeep, Genie::RestockState& state)
+{
+	if (!bOn || iItemID <= 0 || !merchant.IsSet())
 		return false;
 
-	const int iPrice = pItem->iPrice * pItemExt->siPriceMultiply;
-	const int iCount = Genie::RestockCount(iHave, iKeep, iPrice, CGameProcedure::s_pPlayer->m_InfoExt.iGold, m_Settings.iCoinFloor, iRoom);
-	if (iCount <= 0)
+	const int iHave = CountItem(iItemID);
+	if (!Genie::WantsRestock(state, iHave, iKeep))
 		return false;
+
+	int iPos                        = -1;
+	const Genie::RestockOffer offer = Offer(iItemID, merchant, bOn, &iPos);
+	__TABLE_ITEM_BASIC* pItem       = CGameBase::s_pTbl_Items_Basic.Find(iItemID / 1000 * 1000);
+	const std::string szName        = pItem != nullptr ? pItem->szName : std::string("it");
+	if (!offer.bSold)
+	{
+		state.bDisabled = true;
+		m_pMain->MsgOutput(fmt::format("Genie can't buy {}: the saved merchant doesn't sell it.", szName), 0xffff3b3b);
+		return false;
+	}
+
+	const int iCount = Genie::RestockNow(offer, state, iHave, iKeep, CGameProcedure::s_pPlayer->m_InfoExt.iGold, m_Settings.iCoinFloor);
+	if (iCount <= 0)
+	{
+		// Said once; running out then leads to town, as with buying off.
+		if (!state.bShort)
+		{
+			state.bShort = true;
+			m_pMain->MsgOutput(offer.iRoom <= 0 ? fmt::format("Genie can't buy {}: your bag has no room.", szName)
+												: fmt::format("Genie can't buy {} without going below your coin floor.", szName),
+				0xffff3b3b);
+		}
+		return false;
+	}
+
+	state.bShort = false;
 
 	// Exactly CUITransactionDlg::SendToServerBuyMsg's message.
 	uint8_t byBuff[16];
@@ -752,7 +825,9 @@ bool CGenie::Buy(int iItemID, const Genie::Merchant& merchant, int iKeep, Genie:
 
 bool CGenie::OnTradeResult(uint8_t byResult, uint8_t /*byType*/, int iMoney)
 {
-	if (m_PendingBuy.iItemID == 0 || (m_pMain->m_pUITransactionDlg != nullptr && m_pMain->m_pUITransactionDlg->IsVisible()))
+	// Genie doesn't buy while a shop is open, and results come in order: a result while its buy is
+	// waiting is its own, even if a shop has opened since.
+	if (m_PendingBuy.iItemID == 0)
 		return false;
 
 	const PendingBuy buy      = m_PendingBuy;
@@ -807,10 +882,12 @@ bool CGenie::Fight(bool bAttackersOnly)
 		monster.bOnList      = m_Settings.monsters.empty()
 						  || std::find(m_Settings.monsters.begin(), m_Settings.monsters.end(), pNPC->IDString())
 								 != m_Settings.monsters.end();
+		monster.bInReach = !m_Settings.bStayPut || InReach(pNPC);
 		monsters.push_back(monster);
 	}
 
-	const int iTarget   = Genie::ChooseTarget(monsters, m_vOrigin.x, m_vOrigin.z, static_cast<float>(m_Settings.iRange), vSelf.x, vSelf.z);
+	const int iTarget = Genie::ChooseTarget(
+		monsters, m_vOrigin.x, m_vOrigin.z, static_cast<float>(m_Settings.iRange), vSelf.x, vSelf.z, m_Settings.bStayPut);
 	CPlayerNPC* pTarget = iTarget >= 0 ? CGameProcedure::s_pOPMgr->NPCGetByID(iTarget, true) : nullptr;
 	if (pTarget == nullptr)
 	{
@@ -852,7 +929,6 @@ bool CGenie::Fight(bool bAttackersOnly)
 	// The first attack skill that can go now.
 	CMagicSkillMng* pMagic = m_pMain->m_pMagicSkillMng;
 	std::vector<Genie::SkillChoice> skills;
-	float fSkillRange = 0.0f; // the reach of the skills that could go if Genie got closer
 	for (int iSkillID : m_Settings.attackSkills)
 	{
 		__TABLE_UPC_SKILL* pSkill = iSkillID > 0 ? CGameBase::s_pTbl_Skill.Find(iSkillID) : nullptr;
@@ -863,14 +939,10 @@ bool CGenie::Fight(bool bAttackersOnly)
 		choice.iID      = iSkillID;
 		choice.bReady   = pMagic->GetCooldown(pSkill) < 0.0f;
 		choice.bUsable  = m_pMain->m_pUISkillTreeDlg->HasIDSkill(iSkillID) && pMagic->CheckValidSkillMagic(pSkill);
-		choice.bInRange = pSkill->iValidDist > 0 ? fDistance <= pSkill->iValidDist + pTarget->Radius() + 1.0f
-												 : pPlayer->IsAttackableTarget(pTarget, false);
+		choice.bInRange = SkillReaches(pSkill, pTarget, fDistance);
 		auto held       = m_HeldSkills.find(iSkillID);
 		choice.bHeld    = held != m_HeldSkills.end() && m_fNow < held->second;
 		skills.push_back(choice);
-
-		if (choice.bUsable && pSkill->iValidDist > 0)
-			fSkillRange = std::max(fSkillRange, static_cast<float>(pSkill->iValidDist));
 	}
 
 	const int iSkillID = pMagic->IsCasting() ? -1 : Genie::FirstCastable(skills);
@@ -889,6 +961,10 @@ bool CGenie::Fight(bool bAttackersOnly)
 			if (!pPlayer->m_bAttackContinous)
 				m_pMain->CommandEnableAttackContinous(true, pTarget);
 		}
+		else if (m_Settings.bStayPut)
+		{
+			StopMoving(); // in a skill's reach only: wait for one
+		}
 		else
 		{
 			MoveToTarget(pTarget);
@@ -897,11 +973,33 @@ bool CGenie::Fight(bool bAttackersOnly)
 	}
 
 	// Skills only: get into their reach, then wait for one to be ready.
-	if (fSkillRange > 0.0f && fDistance > fSkillRange)
+	if (!m_Settings.bStayPut && !pMagic->IsCasting() && Genie::ShouldApproach(skills))
 		MoveToTarget(pTarget);
 	else
 		StopMoving();
 	return true;
+}
+
+bool CGenie::SkillReaches(const __TABLE_UPC_SKILL* pSkill, CPlayerNPC* pTarget, float fDistance)
+{
+	// A skill without a reach of its own (melee, the bow's) reaches as far as an attack.
+	return pSkill->iValidDist > 0 ? fDistance <= pSkill->iValidDist + pTarget->Radius() + 1.0f
+								  : CGameProcedure::s_pPlayer->IsAttackableTarget(pTarget, false);
+}
+
+bool CGenie::InReach(CPlayerNPC* pNPC) const
+{
+	CPlayerMySelf* pPlayer = CGameProcedure::s_pPlayer;
+	if (m_Settings.bBasicAttack && pPlayer->IsAttackableTarget(pNPC, false))
+		return true;
+
+	const float fDistance = DistanceXZ(pPlayer->Position(), pNPC->Position());
+	return std::any_of(m_Settings.attackSkills.begin(), m_Settings.attackSkills.end(),
+		[&](int iSkillID)
+		{
+			__TABLE_UPC_SKILL* pSkill = iSkillID > 0 ? CGameBase::s_pTbl_Skill.Find(iSkillID) : nullptr;
+			return pSkill != nullptr && m_pMain->m_pUISkillTreeDlg->HasIDSkill(iSkillID) && SkillReaches(pSkill, pNPC, fDistance);
+		});
 }
 
 void CGenie::CastAttack(CPlayerNPC* pTarget, __TABLE_UPC_SKILL* pSkill)
@@ -950,7 +1048,7 @@ void CGenie::StandUp()
 void CGenie::ReturnToOrigin()
 {
 	CPlayerMySelf* pPlayer = CGameProcedure::s_pPlayer;
-	if (DistanceXZ(pPlayer->Position(), m_vOrigin) <= ORIGIN_SLACK)
+	if (m_Settings.bStayPut || DistanceXZ(pPlayer->Position(), m_vOrigin) <= ORIGIN_SLACK)
 	{
 		StopMoving();
 		return;
@@ -986,7 +1084,7 @@ void CGenie::LoadSettings()
 
 	CIni ini(PathResolver::Resolve(Genie::SettingsPath(CN3Base::PathGet(), szName)));
 	m_Settings = {};
-	Genie::Load(ini, m_Settings);
+	Genie::Load(ini, m_Settings, UsesArrows()); // a bow user stays put unless they choose otherwise
 	m_szSettingsOwner = szName;
 }
 

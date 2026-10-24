@@ -90,6 +90,30 @@ TEST(ChooseTarget, NearestInRangeOnList)
 	EXPECT_EQ(ChooseTarget({}, 0, 0, 25, 0, 0), -1);
 }
 
+// Staying put (an archer on the spot the player picked): only what can be hit from where the
+// player stands, attacker or not, and the hunting range doesn't apply.
+TEST(ChooseTarget, StayPutOnlyInReach)
+{
+	const std::array<Monster, 3> monsters = { {
+		{ .iID            = 1,
+			.fX           = 5,
+			.fZ           = 0,
+			.bAttackingMe = true,
+			.bInReach     = false },                            // a ranged attacker out of reach
+		{ .iID = 2, .fX = 10, .fZ = 0, .bInReach = false }, // near, out of reach (behind a wall)
+		{ .iID = 3, .fX = 30, .fZ = 0, .bInReach = true }, // beyond the hunting range, in bow reach
+	} };
+	EXPECT_EQ(ChooseTarget(monsters, 0, 0, 25, 0, 0, true), 3);
+
+	// Moving, reach doesn't matter: the attacker first.
+	EXPECT_EQ(ChooseTarget(monsters, 0, 0, 25, 0, 0, false), 1);
+
+	const std::array<Monster, 1> outOfReach = {
+		{ { .iID = 1, .fX = 2, .fZ = 0, .bAttackingMe = true, .bInReach = false } }
+	};
+	EXPECT_EQ(ChooseTarget(outOfReach, 0, 0, 25, 0, 0, true), -1);
+}
+
 TEST(FirstCastable, FirstReadyUsableInRangeNotHeld)
 {
 	const std::array<SkillChoice, 4> skills = { {
@@ -226,4 +250,112 @@ TEST(StopMessage, SaysWhy)
 	EXPECT_EQ(std::string(StopMessage(StopReason::NoReply)),
 		"Genie couldn't start: the server didn't answer.");
 	EXPECT_EQ(std::string(StopMessage(StopReason::None)), "");
+}
+
+// Out of a potion it can't buy back (coins under the floor, no room, or the merchant doesn't sell
+// it), Genie goes to town as if buying were off.
+TEST(GenieRules, CantRestockWhatCantBeBought)
+{
+	const RestockOffer offer {
+		.bOn = true, .bMerchant = true, .bSold = true, .iUnitPrice = 160, .iRoom = 9999
+	};
+	EXPECT_TRUE(CanRestockFromEmpty(offer, {}, 50, 10'000, 5'000));
+
+	EXPECT_FALSE(
+		CanRestockFromEmpty(offer, {}, 50, 5'100, 5'000)); // above the floor, but not by one potion
+	EXPECT_FALSE(CanRestockFromEmpty(
+		{ .bOn = true, .bMerchant = true, .bSold = true, .iUnitPrice = 160, .iRoom = 0 }, {}, 50,
+		10'000, 0));
+	EXPECT_FALSE(CanRestockFromEmpty(
+		{ .bOn = true, .bMerchant = true, .bSold = false, .iUnitPrice = 160, .iRoom = 9999 }, {},
+		50, 10'000, 0));
+	EXPECT_FALSE(CanRestockFromEmpty(
+		{ .bOn = true, .bMerchant = false, .bSold = true, .iUnitPrice = 160, .iRoom = 9999 }, {},
+		50, 10'000, 0));
+	EXPECT_FALSE(CanRestockFromEmpty(
+		{ .bOn = false, .bMerchant = true, .bSold = true, .iUnitPrice = 160, .iRoom = 9999 }, {},
+		50, 10'000, 0));
+	EXPECT_FALSE(CanRestockFromEmpty(offer, { .bDisabled = true }, 50, 10'000, 0));
+	EXPECT_FALSE(CanRestockFromEmpty(offer, {}, 0, 10'000, 0)); // keeping none
+}
+
+TEST(GenieRules, RestockNowBuysBackToKeep)
+{
+	const RestockOffer offer {
+		.bOn = true, .bMerchant = true, .bSold = true, .iUnitPrice = 160, .iRoom = 9999
+	};
+	EXPECT_EQ(RestockNow(offer, {}, 9, 20, 10'000, 0), 11);
+	EXPECT_EQ(RestockNow(offer, {}, 9, 20, 1'000, 0), 6);
+	EXPECT_EQ(RestockNow(offer, {}, 20, 20, 10'000, 0), 0);
+	EXPECT_EQ(
+		RestockNow(
+			{ .bOn = true, .bMerchant = true, .bSold = false, .iUnitPrice = 160, .iRoom = 9999 },
+			{}, 9, 20, 10'000, 0),
+		0);
+}
+
+// A merchant sells what's in its selling group, with the shop's extension (CUITransactionDlg).
+TEST(GenieRules, BuysOnlyWhatTheMerchantSells)
+{
+	EXPECT_TRUE(IsSoldBy(253, 389010000, 253000));
+	EXPECT_FALSE(IsSoldBy(254, 389010000, 253000)); // another selling group
+	EXPECT_FALSE(IsSoldBy(253, 389010001, 253000)); // the same item, another extension
+	EXPECT_TRUE(IsSoldBy(140, 391010003, 140003));
+}
+
+// A drop that didn't open from here (another region) is walked to within the hunting range and
+// for a limited time; while something attacks, the fight comes first and the walk waits.
+TEST(GenieRules, WalksToDropOnlyWhenSafeAndNear)
+{
+	EXPECT_EQ(WalkToDrop(false, 20.0f, 30.0f, 0.0f), DropWalk::Walk);
+	EXPECT_EQ(WalkToDrop(false, 20.0f, 30.0f, LOOT_WALK_TIME - 0.1f), DropWalk::Walk);
+	EXPECT_EQ(WalkToDrop(true, 20.0f, 30.0f, 0.0f), DropWalk::Wait);
+	EXPECT_EQ(WalkToDrop(false, 31.0f, 30.0f, 0.0f), DropWalk::GiveUp);
+	EXPECT_EQ(WalkToDrop(true, 31.0f, 30.0f, 0.0f), DropWalk::GiveUp);
+	EXPECT_EQ(WalkToDrop(false, 20.0f, 30.0f, LOOT_WALK_TIME), DropWalk::GiveUp);
+
+	// Staying put, Genie never walks: a drop in another region is left.
+	EXPECT_EQ(WalkToDrop(false, 20.0f, 30.0f, 0.0f, true), DropWalk::GiveUp);
+}
+
+// Skills only (no basic attack), nothing castable this moment: walk up to the target to get a
+// ready skill within reach; while all are cooling down, until any reaches. A melee skill reaches
+// once the target is within attack reach.
+TEST(GenieRules, ApproachesForSkills)
+{
+	const SkillChoice meleeReadyFar {
+		.iID = 1, .bReady = true, .bUsable = true, .bInRange = false
+	};
+	const SkillChoice rangedCoolingNear {
+		.iID = 2, .bReady = false, .bUsable = true, .bInRange = true
+	};
+	const SkillChoice rangedCoolingFar {
+		.iID = 3, .bReady = false, .bUsable = true, .bInRange = false
+	};
+	const SkillChoice unusableFar { .iID = 4, .bReady = true, .bUsable = false, .bInRange = false };
+	const SkillChoice heldFar {
+		.iID = 5, .bReady = true, .bUsable = true, .bInRange = false, .bHeld = true
+	};
+
+	EXPECT_TRUE(ShouldApproach(std::array { meleeReadyFar }));
+	EXPECT_TRUE(ShouldApproach(std::array { rangedCoolingNear, meleeReadyFar }));
+	EXPECT_TRUE(ShouldApproach(std::array { rangedCoolingFar }));
+	EXPECT_FALSE(ShouldApproach(std::array { rangedCoolingNear }));
+	EXPECT_FALSE(ShouldApproach(std::array { rangedCoolingNear, heldFar }));
+	EXPECT_FALSE(ShouldApproach(std::array { unusableFar }));
+	EXPECT_FALSE(ShouldApproach(std::span<const SkillChoice> {}));
+}
+
+// While the player has a window open that handles items (loot, shop, warehouse, trade, repair) or
+// an item move is waiting for the server, Genie leaves items alone: its results would land in the
+// player's window, or overwrite the move the player is making.
+TEST(GenieRules, LeavesItemsAloneWhileThePlayerHandlesThem)
+{
+	EXPECT_FALSE(PlayerHandlesItems({}));
+	EXPECT_TRUE(PlayerHandlesItems({ .bLoot = true }));
+	EXPECT_TRUE(PlayerHandlesItems({ .bShop = true }));
+	EXPECT_TRUE(PlayerHandlesItems({ .bWarehouse = true }));
+	EXPECT_TRUE(PlayerHandlesItems({ .bTrade = true }));
+	EXPECT_TRUE(PlayerHandlesItems({ .bRepair = true }));
+	EXPECT_TRUE(PlayerHandlesItems({ .bWaiting = true }));
 }

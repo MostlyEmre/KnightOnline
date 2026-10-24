@@ -32,7 +32,10 @@ protected:
 
 	// Genie's looting: the window stays hidden and picks up only what fnWants accepts.
 	bool m_bQuietLoot;
+	bool m_bQuietWaiting; // a pick-up of Genie's holds s_bWaitFromServer until its result
 	std::function<bool(const __IconItemSkill&)> m_fnQuietWants;
+
+	void ReleaseQuietWait();
 
 	int GetInventoryEmptyInviOrder(__IconItemSkill* spItem = nullptr);
 	int GetItemiOrder(__IconItemSkill* spItem);
@@ -57,8 +60,13 @@ public:
 
 	/// \brief Genie's looting: the next opened bundle (iBundleID) fills the window without showing it;
 	/// StartQuietLoot() then picks up what fnWants accepts, and the window leaves the dropped state.
+	/// Like an item move, each pick-up waits for s_bWaitFromServer to clear and holds it until its
+	/// result, as both are matched to their item through s_sRecoveryJobInfo.
 	void BeginQuietLoot(int iBundleID, std::function<bool(const __IconItemSkill&)> fnWants);
 	void StartQuietLoot();
+
+	/// \brief Asks for the next item, if the quiet looting was waiting for an item move to finish
+	void ResumeQuietLoot();
 	void CancelQuietLoot();
 	bool IsQuietLooting() const;
 	void AddToItemTable(int iItemId, int iItemCount, int iOrder);

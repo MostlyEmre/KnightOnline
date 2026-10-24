@@ -57,7 +57,8 @@ struct Settings
 	int iMpPercent   = 35;
 	int iMpPotionID  = 0;
 
-	int iRange       = 25;
+	bool bStayPut    = false;          // never walk: fight only what's in reach (an archer on its spot)
+	int iRange       = 25;             // how far from where Genie started it goes after monsters
 	std::vector<std::string> monsters; // up to MONSTER_SLOTS; empty: any monster
 
 	bool bRepair       = true;
@@ -104,8 +105,9 @@ inline void SaveSkills(CIni& ini, const std::string& prefix, const std::array<in
 } // namespace detail
 
 /// \brief Reads the settings; missing keys get their defaults and values out of range are pulled
-/// back in (range 3-80, percentages 1-99, at most 8 monsters).
-inline void Load(CIni& ini, Settings& out)
+/// back in (range 3-80, percentages 1-99, at most 8 monsters). Staying put defaults to
+/// bStayPutDefault (on for bow users).
+inline void Load(CIni& ini, Settings& out, bool bStayPutDefault = false)
 {
 	using detail::GetClamped;
 	using detail::SECTION;
@@ -125,6 +127,7 @@ inline void Load(CIni& ini, Settings& out)
 	out.iMpPercent   = GetClamped(ini, "MpPercent", defaults.iMpPercent, 1, 99);
 	out.iMpPotionID  = GetClamped(ini, "MpPotionID", 0, 0, MAX);
 
+	out.bStayPut     = ini.GetBool(SECTION, "StayPut", bStayPutDefault);
 	out.iRange       = GetClamped(ini, "Range", defaults.iRange, RANGE_MIN, RANGE_MAX);
 	out.monsters.clear();
 	for (size_t i = 0; i < MONSTER_SLOTS; i++)
@@ -188,6 +191,7 @@ inline void Save(CIni& ini, const Settings& in)
 	ini.SetInt(SECTION, "MpPercent", in.iMpPercent);
 	ini.SetInt(SECTION, "MpPotionID", in.iMpPotionID);
 
+	ini.SetInt(SECTION, "StayPut", in.bStayPut);
 	ini.SetInt(SECTION, "Range", in.iRange);
 	for (size_t i = 0; i < MONSTER_SLOTS; i++)
 		ini.SetString(SECTION, "Monster" + std::to_string(i), i < in.monsters.size() ? in.monsters[i] : "");

@@ -170,11 +170,14 @@ struct Monster
 	float fZ          = 0.0f;
 	bool bAttackingMe = false;
 	bool bOnList      = true;
+	bool bInReach     = true; // can be hit from where the player stands
 };
 
 /// \brief The monster to fight: the nearest one attacking the player, wherever it is; otherwise
-/// the nearest one on the list within range of where Genie started. -1 for none.
-inline int ChooseTarget(std::span<const Monster> monsters, float fOriginX, float fOriginZ, float fRange, float fSelfX, float fSelfZ)
+/// the nearest one on the list within range of where Genie started. -1 for none. Staying put, only
+/// monsters in reach count, and the range doesn't apply.
+inline int ChooseTarget(
+	std::span<const Monster> monsters, float fOriginX, float fOriginZ, float fRange, float fSelfX, float fSelfZ, bool bStayPut = false)
 {
 	auto distSq   = [](float fAX, float fAZ, float fBX, float fBZ) { return ((fAX - fBX) * (fAX - fBX)) + ((fAZ - fBZ) * (fAZ - fBZ)); };
 
@@ -182,6 +185,9 @@ inline int ChooseTarget(std::span<const Monster> monsters, float fOriginX, float
 	float fAttackerDist = std::numeric_limits<float>::max(), fTargetDist = std::numeric_limits<float>::max();
 	for (const Monster& monster : monsters)
 	{
+		if (bStayPut && !monster.bInReach)
+			continue;
+
 		const float fDist = distSq(monster.fX, monster.fZ, fSelfX, fSelfZ);
 		if (monster.bAttackingMe)
 		{
@@ -193,7 +199,7 @@ inline int ChooseTarget(std::span<const Monster> monsters, float fOriginX, float
 			continue;
 		}
 
-		if (!monster.bOnList || distSq(monster.fX, monster.fZ, fOriginX, fOriginZ) > fRange * fRange)
+		if (!monster.bOnList || (!bStayPut && distSq(monster.fX, monster.fZ, fOriginX, fOriginZ) > fRange * fRange))
 			continue;
 
 		if (fDist < fTargetDist)
@@ -225,6 +231,27 @@ inline int FirstCastable(std::span<const SkillChoice> skills)
 	}
 
 	return -1;
+}
+
+/// \brief Skills only (no basic attack), with nothing castable this moment: whether to walk up to
+/// the target, to get a ready skill within reach or, while all are cooling down, any. A melee
+/// skill (no reach of its own) is in range once the target is within attack reach.
+inline bool ShouldApproach(std::span<const SkillChoice> skills)
+{
+	bool bAnyUsable = false, bAnyInRange = false;
+	for (const SkillChoice& skill : skills)
+	{
+		if (!skill.bUsable)
+			continue;
+
+		if (skill.bReady && !skill.bHeld && !skill.bInRange)
+			return true;
+
+		bAnyUsable   = true;
+		bAnyInRange |= skill.bInRange;
+	}
+
+	return bAnyUsable && !bAnyInRange;
 }
 
 inline bool BelowPercent(int iValue, int iMax, int iPercent)
@@ -293,11 +320,81 @@ inline int RestockCount(int iHave, int iKeep, int iUnitPrice, int64_t iGold, int
 struct RestockState
 {
 	bool bDisabled = false; // a buy was refused: no more this session
+	bool bShort    = false; // couldn't buy one last time (and said so)
 };
 
 inline bool WantsRestock(const RestockState& state, int iHave, int iKeep)
 {
 	return !state.bDisabled && iHave < iKeep;
+}
+
+/// \brief Whether a merchant sells an item: it's in the merchant's selling group, with the shop's
+/// extension (as CUITransactionDlg::EnterTransactionState lists them)
+inline bool IsSoldBy(int iItemSellGroup, int iItemID, int iTradeID)
+{
+	return iItemSellGroup == iTradeID / 1000 && iItemID % 1000 == iTradeID % 1000;
+}
+
+/// \brief Buying a supply back from where Genie stands
+struct RestockOffer
+{
+	bool bOn       = false; // buying it is ticked
+	bool bMerchant = false; // a merchant is saved for it
+	bool bSold     = false; // and the merchant sells it
+	int iUnitPrice = 0;
+	int iRoom      = 0;     // room on its stack, or in an empty slot
+};
+
+/// \brief How many to buy now: back up to iKeep, from a merchant that sells it, within the room
+/// and the coins above the floor
+inline int RestockNow(const RestockOffer& offer, const RestockState& state, int iHave, int iKeep, int64_t iGold, int64_t iCoinFloor)
+{
+	if (!offer.bOn || !offer.bMerchant || !offer.bSold || !WantsRestock(state, iHave, iKeep))
+		return 0;
+
+	return RestockCount(iHave, iKeep, offer.iUnitPrice, iGold, iCoinFloor, offer.iRoom);
+}
+
+/// \brief Whether running out of a supply is no reason to go to town: Genie can buy it back
+/// from none
+inline bool CanRestockFromEmpty(const RestockOffer& offer, const RestockState& state, int iKeep, int64_t iGold, int64_t iCoinFloor)
+{
+	return RestockNow(offer, state, 0, iKeep, iGold, iCoinFloor) > 0;
+}
+
+/// \brief How long Genie walks to a drop in another region before giving up on it
+constexpr float LOOT_WALK_TIME = 15.0f;
+
+enum class DropWalk : uint8_t
+{
+	Walk,
+	Wait,
+	GiveUp
+};
+
+/// \brief What to do about a drop that didn't open from here (it's in another region): give up on
+/// it when staying put, outside the hunting range of where Genie started, or after LOOT_WALK_TIME
+/// of walking; wait while something attacks (the fight comes first); otherwise walk to it.
+inline DropWalk WalkToDrop(bool bAttacked, float fDropFromOrigin, float fRange, float fWalkingFor, bool bStayPut = false)
+{
+	if (bStayPut || fDropFromOrigin > fRange || fWalkingFor >= LOOT_WALK_TIME)
+		return DropWalk::GiveUp;
+
+	return bAttacked ? DropWalk::Wait : DropWalk::Walk;
+}
+
+/// \brief The player's own item handling going on: windows that handle items, and an item move
+/// waiting for the server (CN3UIBase::s_bWaitFromServer)
+struct ItemWindows
+{
+	bool bLoot = false, bShop = false, bWarehouse = false, bTrade = false, bRepair = false, bWaiting = false;
+};
+
+/// \brief While the player handles items, Genie leaves them alone (no looting, repairs or
+/// buying): its results would land in the player's window, or overwrite the move being made.
+inline bool PlayerHandlesItems(const ItemWindows& windows)
+{
+	return windows.bLoot || windows.bShop || windows.bWarehouse || windows.bTrade || windows.bRepair || windows.bWaiting;
 }
 
 /// \brief Watches the current target for progress (getting closer, or hurting it). A target with

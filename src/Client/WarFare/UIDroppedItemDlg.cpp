@@ -38,6 +38,7 @@ CUIDroppedItemDlg::CUIDroppedItemDlg()
 	m_bLootingAll   = false;
 	m_bLootPending  = false;
 	m_bQuietLoot    = false;
+	m_bQuietWaiting = false;
 }
 
 CUIDroppedItemDlg::~CUIDroppedItemDlg()
@@ -183,6 +184,7 @@ void CUIDroppedItemDlg::EnterDroppedState(int xpos, int ypos)
 	SetPos(xpos, ypos - 150);
 	m_bLootingAll  = false;
 	m_bLootPending = false;
+	ReleaseQuietWait();
 
 	for (int i = 0; i < MAX_ITEM_BUNDLE_DROP_PIECE; i++)
 	{
@@ -214,6 +216,7 @@ void CUIDroppedItemDlg::LeaveDroppedState()
 	m_bLootingAll  = false;
 	m_bQuietLoot   = false;
 	m_fnQuietWants = nullptr;
+	ReleaseQuietWait();
 
 	for (int i = 0; i < MAX_ITEM_BUNDLE_DROP_PIECE; i++)
 		m_bSendedIconArray[i] = false;
@@ -235,10 +238,26 @@ void CUIDroppedItemDlg::StartQuietLoot()
 	LootNext();
 }
 
+void CUIDroppedItemDlg::ResumeQuietLoot()
+{
+	if (m_bQuietLoot && m_bLootingAll && !m_bLootPending)
+		LootNext();
+}
+
 void CUIDroppedItemDlg::CancelQuietLoot()
 {
 	m_bQuietLoot   = false;
 	m_fnQuietWants = nullptr;
+	ReleaseQuietWait();
+}
+
+void CUIDroppedItemDlg::ReleaseQuietWait()
+{
+	if (!m_bQuietWaiting)
+		return;
+
+	m_bQuietWaiting   = false;
+	s_bWaitFromServer = false;
 }
 
 bool CUIDroppedItemDlg::IsQuietLooting() const
@@ -533,6 +552,13 @@ bool CUIDroppedItemDlg::RequestItem(int iOrder)
 	s_sRecoveryJobInfo.UIWndSourceEnd.UIWnd           = UIWND_INVENTORY;
 	s_sRecoveryJobInfo.UIWndSourceEnd.UIWndDistrict   = UIWND_DISTRICT_INVENTORY_INV;
 	s_sRecoveryJobInfo.UIWndSourceEnd.iOrder          = -1;
+
+	if (m_bQuietLoot)
+	{
+		m_bQuietWaiting   = true;
+		s_bWaitFromServer = true;
+	}
+
 	return true;
 }
 
@@ -540,6 +566,10 @@ bool CUIDroppedItemDlg::RequestItem(int iOrder)
 // time, as a result is matched to its item through s_sRecoveryJobInfo.
 void CUIDroppedItemDlg::LootNext()
 {
+	// Genie's looting waits while an item move of the player's is waiting for the server.
+	if (m_bQuietLoot && s_bWaitFromServer)
+		return;
+
 	for (int i = 0; i < MAX_ITEM_BUNDLE_DROP_PIECE; i++)
 	{
 		if (RequestItem(i))
@@ -559,6 +589,7 @@ void CUIDroppedItemDlg::ContinueLootAll(uint8_t bResult)
 		return;
 
 	m_bLootPending = false;
+	ReleaseQuietWait();
 	if (!m_bLootingAll)
 		return;
 

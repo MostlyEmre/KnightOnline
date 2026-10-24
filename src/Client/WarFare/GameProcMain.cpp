@@ -212,10 +212,11 @@ CGameProcMain::~CGameProcMain()
 
 void CGameProcMain::Release()
 {
-	if (m_pGenie != nullptr)
-		m_pGenie->OnLeaveGame();
+	// The window first: closing saves its settings, which needs the character Genie still knows.
 	if (s_pUIGenie != nullptr)
 		s_pUIGenie->Close();
+	if (m_pGenie != nullptr)
+		m_pGenie->OnLeaveGame();
 
 	this->ReleaseSound();
 	this->ReleaseUIs();

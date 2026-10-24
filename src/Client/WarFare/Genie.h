@@ -106,11 +106,16 @@ private:
 	void Upkeep();
 	void Repair();
 	void Restock();
-	bool Buy(int iItemID, const Genie::Merchant& merchant, int iKeep, Genie::RestockState& state);
+	bool Buy(int iItemID, const Genie::Merchant& merchant, bool bOn, int iKeep, Genie::RestockState& state);
+
+	/// \brief Buying an item back from the saved merchant; piPos gets the bag slot it would go to
+	Genie::RestockOffer Offer(int iItemID, const Genie::Merchant& merchant, bool bOn, int* piPos = nullptr) const;
+
+	/// \brief The player has a window open that handles items, or an item move waiting for the server
+	bool PlayerHandlesItems() const;
 
 	/// \brief Why Genie has to go to town now, if it does
 	Genie::StopReason TownReasonNow() const;
-	bool CanRestock(int iItemID, const Genie::Merchant& merchant, const Genie::RestockState& state, bool bOn) const;
 	int ArrowItemID() const;
 	bool UsesArrows() const;
 	int FreeSlots() const;
@@ -126,6 +131,8 @@ private:
 
 	/// \brief Fights the monster ChooseTarget() picks; false when there's none
 	bool Fight(bool bAttackersOnly = false);
+	bool InReach(CPlayerNPC* pNPC) const;
+	static bool SkillReaches(const __TABLE_UPC_SKILL* pSkill, CPlayerNPC* pTarget, float fDistance);
 	void CastAttack(CPlayerNPC* pTarget, __TABLE_UPC_SKILL* pSkill);
 	void MoveToTarget(CPlayerNPC* pTarget);
 	void StopMoving();
@@ -150,11 +157,12 @@ private:
 	std::map<int, float> m_HeldSkills; // skill ID -> until when it's held back after a refusal
 
 	// Looting: the bundle asked for, from which corpse, and the bundles done with.
-	int m_iLootBundle   = -1;
-	int m_iLootCorpse   = -1;
-	float m_fLootSentAt = 0.0f;
-	bool m_bLootOpened  = false;
-	bool m_bLootRetried = false;
+	int m_iLootBundle      = -1;
+	int m_iLootCorpse      = -1;
+	float m_fLootSentAt    = 0.0f;
+	float m_fLootWalkSince = -1.0f; // when the walk to a drop in another region started; -1 for none
+	bool m_bLootOpened     = false;
+	bool m_bLootRetried    = false;
 	std::set<int> m_DoneBundles;
 
 	/// \brief Why Genie has to go to town, once it can (a full bag, out of potions or arrows)

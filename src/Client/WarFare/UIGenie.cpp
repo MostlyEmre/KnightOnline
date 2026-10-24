@@ -270,9 +270,12 @@ void CUIGenie::Build()
 
 	// Attack
 	int iTop = CONTENT_TOP;
+	AddRow(PAGE_ATTACK, iTop,
+		{ "Movement", [] { return std::vector<Choice> { { "Go after monsters", 0 }, { "Stay put", 1 } }; },
+			[] { return Settings().bStayPut ? 1 : 0; }, [](int iValue) { Settings().bStayPut = iValue != 0; } });
 	AddRow(PAGE_ATTACK, iTop, toggle("Basic attack", &Genie::Settings::bBasicAttack));
 	AddRow(PAGE_ATTACK, iTop,
-		number("Hunting range", numbers({ 3, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80 }, " m"), &Genie::Settings::iRange));
+		number("Hunting range (when moving)", numbers({ 3, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80 }, " m"), &Genie::Settings::iRange));
 	AddSkillSlots(PAGE_ATTACK, iTop, "Attack skills (the first one ready is used)", SkillKind::Attack);
 	AddText(PAGE_ATTACK, iTop, "Monsters to hunt (none: any monster)");
 	iTop += ROW_HEIGHT;

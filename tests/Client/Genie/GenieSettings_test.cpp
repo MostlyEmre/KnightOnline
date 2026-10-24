@@ -26,6 +26,7 @@ TEST(GenieSettings, DefaultsWhenMissing)
 	EXPECT_TRUE(settings.bMpPotion);
 	EXPECT_EQ(settings.iMpPercent, 35);
 	EXPECT_EQ(settings.iMpPotionID, 0);
+	EXPECT_FALSE(settings.bStayPut);
 	EXPECT_EQ(settings.iRange, 25);
 	EXPECT_TRUE(settings.monsters.empty());
 	EXPECT_TRUE(settings.bRepair);
@@ -58,6 +59,7 @@ TEST(GenieSettings, RoundTrip)
 	saved.bMpPotion      = false;
 	saved.iMpPercent     = 20;
 	saved.iMpPotionID    = 389012000;
+	saved.bStayPut       = true;
 	saved.iRange         = 40;
 	saved.monsters       = { "Worm", "Blood worm", "Bandicoot" };
 	saved.bRepair        = false;
@@ -97,6 +99,24 @@ TEST(GenieSettings, RoundTrip)
 	std::filesystem::remove(path);
 
 	EXPECT_EQ(loaded, saved);
+}
+
+// Staying put defaults to on for a bow user (the caller says), until the player changes it.
+TEST(GenieSettings, StayPutDefaultsByWeapon)
+{
+	// Separate inis: CIni writes a missing key's default into itself.
+	Settings settings;
+	CIni bowUser;
+	Load(bowUser, settings, true);
+	EXPECT_TRUE(settings.bStayPut);
+	CIni other;
+	Load(other, settings, false);
+	EXPECT_FALSE(settings.bStayPut);
+
+	CIni chosen;
+	chosen.SetInt("Genie", "StayPut", 0);
+	Load(chosen, settings, true);
+	EXPECT_FALSE(settings.bStayPut);
 }
 
 // Values edited by hand out of range are pulled back in.
