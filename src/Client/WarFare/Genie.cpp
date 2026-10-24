@@ -11,6 +11,7 @@
 #include "UIDroppedItemDlg.h"
 #include "UIManager.h"
 #include "UIInventory.h"
+#include "UITransactionDlg.h"
 #include "UISkillTreeDlg.h"
 
 #include <FileIO/PathResolver.h>
@@ -29,12 +30,14 @@ constexpr D3DCOLOR COLOR_STOPPED  = 0xffffff00;
 constexpr int INDICATOR_WIDTH     = 110;
 constexpr int INDICATOR_TOP       = 64;
 
-constexpr float DECISION_INTERVAL = 0.3f;  // seconds between decisions
-constexpr float ATTACKER_MEMORY   = 10.0f; // how long a monster that attacked counts as attacking
-constexpr float SKILL_HOLD        = 3.0f;  // how long a refused skill is held back
-constexpr float ORIGIN_SLACK      = 3.0f;  // how close to its start spot Genie stands when idle
-constexpr float PROGRESS_STEP     = 0.5f;  // getting this much closer to the target counts as progress
-constexpr float LOOT_REPLY_WAIT   = 1.0f;  // a bundle that doesn't open in this long is in another region
+constexpr float DECISION_INTERVAL = 0.3f;   // seconds between decisions
+constexpr float ATTACKER_MEMORY   = 10.0f;  // how long a monster that attacked counts as attacking
+constexpr float SKILL_HOLD        = 3.0f;   // how long a refused skill is held back
+constexpr float ORIGIN_SLACK      = 3.0f;   // how close to its start spot Genie stands when idle
+constexpr float PROGRESS_STEP     = 0.5f;   // getting this much closer to the target counts as progress
+constexpr float LOOT_REPLY_WAIT   = 1.0f;   // a bundle that doesn't open in this long is in another region
+constexpr float UPKEEP_REPLY_WAIT = 5.0f;   // a repair or buy not answered in this long is given up on
+constexpr int BOW_ATTACK_SKILL    = 102003; // the bow's basic attack, which uses up arrows
 
 float DistanceXZ(const __Vector3& vA, const __Vector3& vB)
 {
@@ -126,7 +129,11 @@ void CGenie::OnStartResult(bool bOk)
 	m_HeldSkills.clear();
 	m_iLootBundle = -1;
 	m_DoneBundles.clear();
-	m_eTownReason = Genie::StopReason::None;
+	m_eTownReason    = Genie::StopReason::None;
+	m_iRepairSlot    = -1;
+	m_bRepairRefused = false;
+	m_PendingBuy     = {};
+	m_HpRestock = m_MpRestock = m_ArrowRestock = {};
 	m_pMain->MsgOutput("Genie started. Moving by hand stops it.", COLOR_STARTED);
 }
 
@@ -232,10 +239,12 @@ void CGenie::Decide()
 		return;
 	}
 
-	// A town reason (Task 8 takes the player there; until then, Genie stops).
-	if (m_eTownReason != Genie::StopReason::None)
+	Upkeep();
+
+	const Genie::StopReason eTown = m_eTownReason != Genie::StopReason::None ? m_eTownReason : TownReasonNow();
+	if (eTown != Genie::StopReason::None)
 	{
-		Stop(m_eTownReason);
+		GoToTown(eTown);
 		return;
 	}
 
@@ -469,7 +478,311 @@ bool CGenie::Survive()
 	return false;
 }
 
-bool CGenie::Fight()
+void CGenie::GoToTown(Genie::StopReason eReason)
+{
+	CPlayerMySelf* pPlayer = CGameProcedure::s_pPlayer;
+	if (Genie::CanTown(pPlayer->m_InfoBase.iHP, pPlayer->m_InfoBase.iHPMax, pPlayer->m_bStun))
+	{
+		Stop(eReason);
+
+		// As the /town command sends it.
+		uint8_t byBuff[4];
+		int iOffset = 0;
+		CAPISocket::MP_AddWord(byBuff, iOffset, WIZ_HOME);
+		CGameProcedure::s_pSocket->Send(byBuff, iOffset);
+		return;
+	}
+
+	// /town needs half HP: no new fights until then, only healing and fending off what attacks.
+	m_eTownReason = eReason;
+	if (Survive() || Fight(true))
+		return;
+
+	StopMoving();
+	if (!pPlayer->m_bSitDown)
+		m_pMain->CommandSitDown(false, true);
+}
+
+int CGenie::FreeSlots() const
+{
+	int iFree = 0;
+	for (__IconItemSkill* pItem : m_pMain->m_pUIInventory->m_pMyInvWnd)
+	{
+		if (pItem == nullptr)
+			++iFree;
+	}
+
+	return iFree;
+}
+
+bool CGenie::UsesArrows() const
+{
+	// A bow, as CPlayerMySelf::Tick tells its archery attack.
+	CUIInventory* pInv      = m_pMain->m_pUIInventory;
+	__IconItemSkill* pLeft  = pInv->m_pMySlot[ITEM_SLOT_HAND_LEFT];
+	__IconItemSkill* pRight = pInv->m_pMySlot[ITEM_SLOT_HAND_RIGHT];
+	return (pLeft != nullptr && pLeft->pItemBasic != nullptr
+			   && (pLeft->pItemBasic->byClass == ITEM_CLASS_BOW || pLeft->pItemBasic->byClass == ITEM_CLASS_BOW_LONG))
+		   || (pRight != nullptr && pRight->pItemBasic != nullptr && pRight->pItemBasic->byClass == ITEM_CLASS_BOW_CROSS);
+}
+
+int CGenie::ArrowItemID() const
+{
+	if (m_Settings.iArrowID > 0)
+		return m_Settings.iArrowID;
+
+	// The arrows the bow's attack uses up.
+	__TABLE_UPC_SKILL* pSkill = CGameBase::s_pTbl_Skill.Find(BOW_ATTACK_SKILL);
+	return pSkill != nullptr ? static_cast<int>(pSkill->dwExhaustItem) : 0;
+}
+
+bool CGenie::CanRestock(int iItemID, const Genie::Merchant& merchant, const Genie::RestockState& state, bool bOn) const
+{
+	return bOn && iItemID > 0 && merchant.IsSet() && !state.bDisabled && CGameProcedure::s_pPlayer->m_InfoExt.iGold > m_Settings.iCoinFloor;
+}
+
+Genie::StopReason CGenie::TownReasonNow() const
+{
+	Genie::Supplies supplies;
+	supplies.iFreeSlots    = FreeSlots();
+	supplies.bUsesHpPotion = m_Settings.bHpPotion && m_Settings.iHpPotionID > 0;
+	supplies.iHpPotions    = CountItem(m_Settings.iHpPotionID);
+	supplies.bUsesMpPotion = m_Settings.bMpPotion && m_Settings.iMpPotionID > 0;
+	supplies.iMpPotions    = CountItem(m_Settings.iMpPotionID);
+	supplies.bUsesArrows   = UsesArrows();
+	supplies.iArrows       = CountItem(ArrowItemID());
+
+	// Out of something Genie can still buy isn't a reason to leave.
+	if (CanRestock(m_Settings.iHpPotionID, m_Settings.potionMerchant, m_HpRestock, m_Settings.bBuyPotions))
+		supplies.bUsesHpPotion = false;
+	if (CanRestock(m_Settings.iMpPotionID, m_Settings.potionMerchant, m_MpRestock, m_Settings.bBuyPotions))
+		supplies.bUsesMpPotion = false;
+	if (CanRestock(ArrowItemID(), m_Settings.arrowMerchant, m_ArrowRestock, m_Settings.bBuyArrows))
+		supplies.bUsesArrows = false;
+
+	return Genie::TownReason(supplies, m_Settings.town);
+}
+
+void CGenie::Upkeep()
+{
+	Repair();
+	Restock();
+}
+
+void CGenie::Repair()
+{
+	if (!m_Settings.bRepair || m_bRepairRefused)
+		return;
+
+	if (m_iRepairSlot >= 0)
+	{
+		if (m_fNow - m_fRepairSentAt < UPKEEP_REPLY_WAIT)
+			return;
+		m_iRepairSlot = -1;
+	}
+
+	// One equipped item at a time, below the durability percentage. The server repairs without a
+	// blacksmith nearby, for the usual coins.
+	for (int i = 0; i < ITEM_SLOT_COUNT; i++)
+	{
+		__IconItemSkill* pItem = m_pMain->m_pUIInventory->m_pMySlot[i];
+		if (pItem == nullptr || pItem->pItemBasic == nullptr || pItem->pItemExt == nullptr)
+			continue;
+
+		const int iMax = pItem->pItemBasic->siMaxDurability + pItem->pItemExt->siMaxDurability;
+		if (iMax <= 1 || !Genie::BelowPercent(pItem->iDurability, iMax, m_Settings.iRepairPercent))
+			continue;
+
+		uint8_t byBuff[8];
+		int iOffset = 0;
+		CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_ITEM_REPAIR);
+		CAPISocket::MP_AddByte(byBuff, iOffset, 0x01); // equipped
+		CAPISocket::MP_AddByte(byBuff, iOffset, static_cast<uint8_t>(i));
+		CAPISocket::MP_AddDword(byBuff, iOffset, static_cast<uint32_t>(pItem->GetItemID()));
+		CGameProcedure::s_pSocket->Send(byBuff, iOffset);
+
+		m_iRepairSlot   = i;
+		m_fRepairSentAt = m_fNow;
+		return;
+	}
+}
+
+bool CGenie::OnRepairResult(uint8_t byResult, int iGold)
+{
+	if (m_iRepairSlot < 0)
+		return false;
+
+	const int iSlot        = m_iRepairSlot;
+	m_iRepairSlot          = -1;
+
+	// The inventory's own handling only knows repairs made in its repair mode: Genie's goes here.
+	__IconItemSkill* pItem = m_pMain->m_pUIInventory->m_pMySlot[iSlot];
+	if (byResult != 0x01 || pItem == nullptr)
+	{
+		m_bRepairRefused = true;
+		m_pMain->MsgOutput("Genie couldn't repair your gear (not enough coins?).", 0xffff3b3b);
+		return true;
+	}
+
+	pItem->iDurability = pItem->pItemBasic->siMaxDurability + pItem->pItemExt->siMaxDurability;
+	CGameProcedure::s_pPlayer->DurabilitySet(static_cast<e_ItemSlot>(iSlot), pItem->iDurability);
+	CGameProcedure::s_pPlayer->m_InfoExt.iGold = iGold;
+	m_pMain->m_pUIInventory->GoldUpdate();
+	return true;
+}
+
+void CGenie::OnShopOpened(int iNpcID, int iTradeID)
+{
+	// What the shop sells, found as CUITransactionDlg::EnterTransactionState finds it.
+	const int iOrg  = iTradeID / 1000;
+	const int iExt  = iTradeID % 1000;
+	bool bPotions   = false;
+	bool bArrows    = false;
+	const int iSize = CGameBase::s_pTbl_Items_Basic.GetSize();
+	for (int i = 0; i < iSize && !(bPotions && bArrows); i++)
+	{
+		__TABLE_ITEM_BASIC* pItem = CGameBase::s_pTbl_Items_Basic.GetIndexedData(i);
+		if (pItem == nullptr || pItem->bySellGroup != iOrg || pItem->byExtIndex >= MAX_ITEM_EXTENSION)
+			continue;
+
+		__TABLE_ITEM_EXT* pItemExt = CGameBase::s_pTbl_Items_Exts[pItem->byExtIndex].Find(iExt);
+		if (pItemExt == nullptr || pItemExt->dwID != static_cast<uint32_t>(iExt))
+			continue;
+
+		bPotions |= pItem->byClass == ITEM_CLASS_POTION;
+		bArrows  |= pItem->byClass == ITEM_CLASS_ARROW;
+	}
+
+	if (!bPotions && !bArrows)
+		return;
+
+	LoadSettings();
+	if (bPotions)
+		m_Settings.potionMerchant = { .iNpcID = iNpcID, .iTradeID = iTradeID };
+	if (bArrows)
+		m_Settings.arrowMerchant = { .iNpcID = iNpcID, .iTradeID = iTradeID };
+	m_HpRestock = m_MpRestock = m_ArrowRestock = {};
+	SaveSettings();
+
+	m_pMain->MsgOutput(bPotions && bArrows ? "Genie will buy potions and arrows from this merchant."
+					   : bPotions          ? "Genie will buy potions from this merchant."
+										   : "Genie will buy arrows from this merchant.",
+		COLOR_STARTED);
+}
+
+void CGenie::Restock()
+{
+	if (m_PendingBuy.iItemID != 0)
+	{
+		if (m_fNow - m_fBuySentAt < UPKEEP_REPLY_WAIT)
+			return;
+		m_PendingBuy = {};
+	}
+
+	if (m_Settings.bBuyPotions
+		&& (Buy(m_Settings.iHpPotionID, m_Settings.potionMerchant, m_Settings.iKeepHpPotions, m_HpRestock)
+			|| Buy(m_Settings.iMpPotionID, m_Settings.potionMerchant, m_Settings.iKeepMpPotions, m_MpRestock)))
+		return;
+
+	if (m_Settings.bBuyArrows && UsesArrows())
+		Buy(ArrowItemID(), m_Settings.arrowMerchant, m_Settings.iKeepArrows, m_ArrowRestock);
+}
+
+bool CGenie::Buy(int iItemID, const Genie::Merchant& merchant, int iKeep, Genie::RestockState& state)
+{
+	if (iItemID <= 0 || !merchant.IsSet())
+		return false;
+
+	const int iHave = CountItem(iItemID);
+	if (!Genie::WantsRestock(state, iHave, iKeep))
+		return false;
+
+	__TABLE_ITEM_BASIC* pItem  = CGameBase::s_pTbl_Items_Basic.Find(iItemID / 1000 * 1000);
+	__TABLE_ITEM_EXT* pItemExt = pItem != nullptr && pItem->byExtIndex < MAX_ITEM_EXTENSION
+									 ? CGameBase::s_pTbl_Items_Exts[pItem->byExtIndex].Find(iItemID % 1000)
+									 : nullptr;
+	if (pItemExt == nullptr)
+		return false;
+
+	// Onto its stack, or into an empty slot.
+	CUIInventory* pInv = m_pMain->m_pUIInventory;
+	int iPos = -1, iRoom = 0;
+	for (int i = 0; i < MAX_ITEM_INVENTORY; i++)
+	{
+		if (pInv->m_pMyInvWnd[i] != nullptr && pInv->m_pMyInvWnd[i]->GetItemID() == iItemID)
+		{
+			iPos  = i;
+			iRoom = MAX_ITEM_COUNT - pInv->m_pMyInvWnd[i]->iCount;
+			break;
+		}
+	}
+	for (int i = 0; i < MAX_ITEM_INVENTORY && iPos < 0; i++)
+	{
+		if (pInv->m_pMyInvWnd[i] == nullptr)
+		{
+			iPos  = i;
+			iRoom = MAX_ITEM_COUNT;
+		}
+	}
+	if (iPos < 0)
+		return false;
+
+	const int iPrice = pItem->iPrice * pItemExt->siPriceMultiply;
+	const int iCount = Genie::RestockCount(iHave, iKeep, iPrice, CGameProcedure::s_pPlayer->m_InfoExt.iGold, m_Settings.iCoinFloor, iRoom);
+	if (iCount <= 0)
+		return false;
+
+	// Exactly CUITransactionDlg::SendToServerBuyMsg's message.
+	uint8_t byBuff[16];
+	int iOffset = 0;
+	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_ITEM_TRADE);
+	CAPISocket::MP_AddByte(byBuff, iOffset, 0x01); // buy
+	CAPISocket::MP_AddDword(byBuff, iOffset, static_cast<uint32_t>(merchant.iTradeID));
+	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(merchant.iNpcID));
+	CAPISocket::MP_AddDword(byBuff, iOffset, static_cast<uint32_t>(iItemID));
+	CAPISocket::MP_AddByte(byBuff, iOffset, static_cast<uint8_t>(iPos));
+	CAPISocket::MP_AddShort(byBuff, iOffset, static_cast<int16_t>(iCount));
+	CGameProcedure::s_pSocket->Send(byBuff, iOffset);
+
+	m_PendingBuy = { .iItemID = iItemID, .iPos = iPos, .iCount = iCount, .pState = &state };
+	m_fBuySentAt = m_fNow;
+	return true;
+}
+
+bool CGenie::OnTradeResult(uint8_t byResult, uint8_t /*byType*/, int iMoney)
+{
+	if (m_PendingBuy.iItemID == 0 || (m_pMain->m_pUITransactionDlg != nullptr && m_pMain->m_pUITransactionDlg->IsVisible()))
+		return false;
+
+	const PendingBuy buy      = m_PendingBuy;
+	m_PendingBuy              = {};
+
+	__TABLE_ITEM_BASIC* pItem = CGameBase::s_pTbl_Items_Basic.Find(buy.iItemID / 1000 * 1000);
+	const std::string szName  = pItem != nullptr ? pItem->szName : std::string("it");
+	if (byResult != 0x01)
+	{
+		// Most likely the saved merchant is gone (the world changed): no more of this one.
+		if (buy.pState != nullptr)
+			buy.pState->bDisabled = true;
+		m_pMain->MsgOutput(fmt::format("Genie couldn't buy {}: open a shop that sells it to save a new merchant.", szName), 0xffff3b3b);
+		return true;
+	}
+
+	// The shop window's own handling only knows its own buys: Genie's goes into the bag here.
+	CGameProcedure::s_pPlayer->m_InfoExt.iGold = iMoney;
+	CUIInventory* pInv                         = m_pMain->m_pUIInventory;
+	__IconItemSkill* pStack                    = pInv->m_pMyInvWnd[buy.iPos];
+	if (pStack != nullptr && pStack->GetItemID() == buy.iItemID)
+		pStack->iCount += buy.iCount;
+	else if (pStack == nullptr)
+		m_pMain->m_pUIDroppedItemDlg->AddToItemTableToInventory(buy.iItemID, buy.iCount, buy.iPos);
+	pInv->GoldUpdate();
+
+	m_pMain->MsgOutput(fmt::format("Genie bought {} {}.", buy.iCount, szName), COLOR_STARTED);
+	return true;
+}
+
+bool CGenie::Fight(bool bAttackersOnly)
 {
 	CPlayerMySelf* pPlayer = CGameProcedure::s_pPlayer;
 	const __Vector3 vSelf  = pPlayer->Position();
@@ -478,6 +791,10 @@ bool CGenie::Fight()
 	for (const auto& [iID, pNPC] : CGameProcedure::s_pOPMgr->m_NPCs)
 	{
 		if (!IsMonster(pNPC) || m_Progress.IsSkipped(iID, m_fNow))
+			continue;
+
+		auto attacker = m_Attackers.find(iID);
+		if (bAttackersOnly && (attacker == m_Attackers.end() || m_fNow - attacker->second >= ATTACKER_MEMORY))
 			continue;
 
 		Genie::Monster monster;

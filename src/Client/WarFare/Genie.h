@@ -70,6 +70,15 @@ public:
 	/// \brief A pick-up result (WIZ_ITEM_GET): a full bag means going to town
 	void OnLootResult(uint8_t byResult);
 
+	/// \brief A merchant's shop opened (WIZ_TRADE_NPC): remembered if it sells potions or arrows
+	void OnShopOpened(int iNpcID, int iTradeID);
+
+	/// \brief A buy result (WIZ_ITEM_TRADE); true when it was Genie's buy
+	bool OnTradeResult(uint8_t byResult, uint8_t byType, int iMoney);
+
+	/// \brief A repair result (WIZ_ITEM_REPAIR); true when it was Genie's repair
+	bool OnRepairResult(uint8_t byResult, int iGold);
+
 	Genie::Settings& Settings();
 	void LoadSettings();
 	void SaveSettings();
@@ -93,6 +102,22 @@ private:
 	int CountItem(int iItemID) const;
 	bool AnyAttackCastable() const;
 
+	/// \brief Repairs worn gear and restocks potions and arrows, from where the player stands
+	void Upkeep();
+	void Repair();
+	void Restock();
+	bool Buy(int iItemID, const Genie::Merchant& merchant, int iKeep, Genie::RestockState& state);
+
+	/// \brief Why Genie has to go to town now, if it does
+	Genie::StopReason TownReasonNow() const;
+	bool CanRestock(int iItemID, const Genie::Merchant& merchant, const Genie::RestockState& state, bool bOn) const;
+	int ArrowItemID() const;
+	bool UsesArrows() const;
+	int FreeSlots() const;
+
+	/// \brief Going to town: /town once HP allows it, recovering until then
+	void GoToTown(Genie::StopReason eReason);
+
 	/// \brief Loots what monsters dropped, from where the player stands; true when walking to a drop
 	bool Loot();
 	void SendBundleOpen(int iBundleID);
@@ -100,7 +125,7 @@ private:
 	bool WantsItem(const struct __IconItemSkill& item) const;
 
 	/// \brief Fights the monster ChooseTarget() picks; false when there's none
-	bool Fight();
+	bool Fight(bool bAttackersOnly = false);
 	void CastAttack(CPlayerNPC* pTarget, __TABLE_UPC_SKILL* pSkill);
 	void MoveToTarget(CPlayerNPC* pTarget);
 	void StopMoving();
@@ -134,6 +159,20 @@ private:
 
 	/// \brief Why Genie has to go to town, once it can (a full bag, out of potions or arrows)
 	Genie::StopReason m_eTownReason = Genie::StopReason::None;
+
+	// Upkeep: the repair and the buy waiting for their results, and what can't be bought.
+	int m_iRepairSlot               = -1;
+	float m_fRepairSentAt           = 0.0f;
+	bool m_bRepairRefused           = false;
+	struct PendingBuy
+	{
+		int iItemID                 = 0;
+		int iPos                    = -1;
+		int iCount                  = 0;
+		Genie::RestockState* pState = nullptr;
+	} m_PendingBuy;
+	float m_fBuySentAt = 0.0f;
+	Genie::RestockState m_HpRestock, m_MpRestock, m_ArrowRestock;
 
 	Genie::Settings m_Settings;
 	std::string m_szSettingsOwner; // the character m_Settings belong to

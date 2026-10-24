@@ -3555,6 +3555,8 @@ void CGameProcMain::MsgRecv_ItemRepair(Packet& pkt) // Item Repair Result..
 {
 	int iResult = pkt.read<uint8_t>();              // Trade id
 	int iGold   = pkt.read<uint32_t>();             // Trade id
+	if (m_pGenie->OnRepairResult(static_cast<uint8_t>(iResult), iGold))
+		return;
 	m_pUIInventory->ReceiveResultFromServer(iResult, iGold);
 }
 
@@ -4363,6 +4365,7 @@ bool CGameProcMain::MsgRecv_ItemTradeStart(Packet& pkt) // 아이템 상거래..
 	CPlayerNPC* pNPC = s_pOPMgr->NPCGetByID(s_pPlayer->m_iIDTarget, true);
 	if (!pNPC)
 		return true;
+	m_pGenie->OnShopOpened(pNPC->IDNumber(), iTradeID);
 	m_pUINpcEvent->Open(NPC_EVENT_ITEM_TRADE, iTradeID, pNPC->GetNPCOriginID());
 
 	return true;
@@ -4378,12 +4381,14 @@ bool CGameProcMain::MsgRecv_ItemTradeResult(Packet& pkt) // 아이템 상거래 
 	{
 		case 0x00:
 			bfType = pkt.read<uint8_t>(); // Trade id
-			m_pUITransactionDlg->ReceiveResultTradeFromServer(bResult, bfType, iMoney);
+			if (!m_pGenie->OnTradeResult(bResult, bfType, iMoney))
+				m_pUITransactionDlg->ReceiveResultTradeFromServer(bResult, bfType, iMoney);
 			break;
 
 		case 0x01:
 			iMoney = pkt.read<uint32_t>(); // Trade id
-			m_pUITransactionDlg->ReceiveResultTradeFromServer(bResult, bfType, iMoney);
+			if (!m_pGenie->OnTradeResult(bResult, bfType, iMoney))
+				m_pUITransactionDlg->ReceiveResultTradeFromServer(bResult, bfType, iMoney);
 			break;
 
 		case 0x03:
