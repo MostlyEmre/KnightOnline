@@ -157,6 +157,9 @@ private:
 	std::filesystem::path _eventDir;
 	std::string _overrideEventDir;
 
+	/// \brief Pause between the batches of NPC info sent to Ebenezer at startup (--npc-info-interval)
+	int _npcInfoIntervalMs = 50;
+
 	std::shared_ptr<spdlog::logger> _itemLogger;
 	std::shared_ptr<spdlog::logger> _userLogger;
 

@@ -1085,7 +1085,7 @@ void AIServerApp::AllNpcInfo()
 				spdlog::trace("AIServerApp::AllNpcInfo: send_count={}, count={}, zone={}", send_tot,
 					count, nZone);
 				memset(sendBuffer, 0, sizeof(sendBuffer));
-				std::this_thread::sleep_for(50ms);
+				std::this_thread::sleep_for(std::chrono::milliseconds(_npcInfoIntervalMs));
 			}
 		}
 
@@ -1099,7 +1099,7 @@ void AIServerApp::AllNpcInfo()
 			send_tot++;
 			spdlog::trace("AIServerApp::AllNpcInfo: send_count={}, count={}, zone={}", send_tot,
 				count, nZone);
-			std::this_thread::sleep_for(50ms);
+			std::this_thread::sleep_for(std::chrono::milliseconds(_npcInfoIntervalMs));
 		}
 
 		sendIndex = 0;
@@ -1538,6 +1538,11 @@ void AIServerApp::SetupCommandLineArgParser(argparse::ArgumentParser& parser)
 	parser.add_argument("--event-dir")
 		.help("location of directory containing the AI server specific event scripts (.EVTs)")
 		.store_into(_overrideEventDir);
+
+	parser.add_argument("--npc-info-interval")
+		.help("milliseconds to pause between the batches of NPC info sent to Ebenezer at startup "
+			  "(default 50); Ebenezer accepts players once it has them all")
+		.store_into(_npcInfoIntervalMs);
 }
 
 bool AIServerApp::ProcessCommandLineArgs(const argparse::ArgumentParser& parser)
