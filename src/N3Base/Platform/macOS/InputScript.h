@@ -6,14 +6,15 @@
 #include <cstdint>
 
 // Scripted input for testing: with OPENKO_INPUT_SCRIPT=<file>, the platform layer plays the file's
-// mouse, keyboard and text commands back as if a user made them, one step per frame, and can save
-// frames as PNGs. Commands, one per line ('#' starts a comment):
+// mouse, keyboard and text commands back as if a user made them, and can save frames as PNGs.
+// Times are in 60ths of a second (real time, whatever the frame rate). Commands, one per line
+// ('#' starts a comment):
 //
-//   wait <frames>             do nothing for that many frames
+//   wait <ticks>              do nothing for that long
 //   move <x> <y>              put the cursor at client coordinates
 //   click <x> <y> [right]     move there and click (button down for 2 frames, then up)
-//   key <name>                press a key for 2 frames (DirectInput names: RETURN, ESCAPE, W, F1...)
-//   hold <name> <frames>      hold a key down
+//   key <name>                press a key for 2 ticks (DirectInput names: RETURN, ESCAPE, W, F1...)
+//   hold <name> <ticks>       hold a key down
 //   text <characters>         type into the focused edit box
 //   snapshot <file.png>       save the next frame
 //   quit                      end the program like PostQuitMessage(0)

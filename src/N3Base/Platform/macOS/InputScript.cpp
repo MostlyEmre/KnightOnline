@@ -5,6 +5,7 @@
 #include "MacState.h"
 
 #include <array>
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -34,17 +35,25 @@ struct Command
 	int line = 0;
 };
 
+using Clock = std::chrono::steady_clock;
+
+// Script times are in 60ths of a second of real time, so a script behaves the same at any frame
+// rate (the game runs well above 60 frames per second while its window is covered).
+constexpr std::chrono::microseconds Tick60 { 16'667 };
+
 struct State
 {
 	bool loaded = false;
 	bool active = false;
 	std::vector<Command> commands;
-	size_t next = 0;
-	int wait    = 0;
+	size_t next    = 0;
+	int waitFrames = 0;          // frames to wait at least
+	Clock::time_point waitUntil; // and until when
 	int cursorX = 0, cursorY = 0;
 	uint32_t buttons = 0;
 	int buttonFrames = 0;
-	std::array<int, 256> keyFrames {}; // frames each key stays down
+	std::array<int, 256> keyFrames {};              // frames each key stays down at least
+	std::array<Clock::time_point, 256> keyUntil {}; // and until when
 };
 
 State& S()
@@ -193,7 +202,8 @@ bool Run(const Command& command)
 
 	if (command.verb == "wait")
 	{
-		s.wait = IntArg(command, 0, 1);
+		s.waitFrames = 1;
+		s.waitUntil  = Clock::now() + IntArg(command, 0, 1) * Tick60;
 		return false;
 	}
 
@@ -211,7 +221,8 @@ bool Run(const Command& command)
 		bool right     = command.args.size() > 2 && command.args[2] == "right";
 		s.buttons      = right ? 0x2 : 0x1;
 		s.buttonFrames = 2;
-		s.wait         = 3; // let the game see the press and the release
+		s.waitFrames   = 3; // let the game see the press and the release
+		s.waitUntil    = Clock::now() + 3 * Tick60;
 		return false;
 	}
 
@@ -224,11 +235,13 @@ bool Run(const Command& command)
 			return true;
 		}
 
-		int frames                            = command.verb == "hold" ? IntArg(command, 1, 2) : 2;
-		s.keyFrames[static_cast<size_t>(dik)] = frames;
+		int ticks                             = command.verb == "hold" ? IntArg(command, 1, 2) : 2;
+		s.keyFrames[static_cast<size_t>(dik)] = 2;
+		s.keyUntil[static_cast<size_t>(dik)]  = Clock::now() + ticks * Tick60;
 		if (dik == DIK_RETURN && command.verb == "key")
 			SendScriptedTextCommand("insertNewline:");
-		s.wait = frames + 1;
+		s.waitFrames = 3;
+		s.waitUntil  = Clock::now() + (ticks + 1) * Tick60;
 		return false;
 	}
 
@@ -257,6 +270,7 @@ bool Run(const Command& command)
 		s.buttons      = 0;
 		s.buttonFrames = 0;
 		s.keyFrames.fill(0);
+		s.keyUntil.fill({});
 		Cocoa::ActivateGameWindow();
 		return false;
 	}
@@ -290,11 +304,10 @@ void Tick()
 		if (frames > 0)
 			frames--;
 
-	if (s.wait > 0)
-	{
-		s.wait--;
+	if (s.waitFrames > 0)
+		s.waitFrames--;
+	if (s.waitFrames > 0 || Clock::now() < s.waitUntil)
 		return;
-	}
 
 	while (s.next < s.commands.size())
 	{
@@ -316,7 +329,11 @@ uint32_t MouseButtons()
 
 bool IsKeyDown(int iScanCode)
 {
-	return iScanCode >= 0 && iScanCode < 256 && S().keyFrames[static_cast<size_t>(iScanCode)] > 0;
+	if (iScanCode < 0 || iScanCode >= 256)
+		return false;
+
+	auto key = static_cast<size_t>(iScanCode);
+	return S().keyFrames[key] > 0 || Clock::now() < S().keyUntil[key];
 }
 
 } // namespace InputScript
