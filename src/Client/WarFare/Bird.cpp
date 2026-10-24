@@ -6,6 +6,7 @@
 #include "Bird.h"
 #include <N3Base/N3Shape.h>
 #include <N3Base/N3SndObj.h>
+#include <N3Base/Platform/FileSystem.h>
 
 CBird::CBird()
 {
@@ -128,7 +129,7 @@ int CBird::LoadBird(const std::string& szFN)
 {
 	Release();
 
-	FILE* stream = fopen(szFN.c_str(), "r"); //text파일로 만든다
+	FILE* stream = Platform::OpenFile(szFN, "r"); //text파일로 만든다
 	if (stream == nullptr)
 	{
 #if _DEBUG

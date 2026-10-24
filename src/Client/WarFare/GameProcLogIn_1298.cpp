@@ -13,6 +13,7 @@
 
 #include <N3Base/N3SndObj.h>
 
+#include <FileIO/PathResolver.h>
 #include <shared/Ini.h>
 #include <N3Base/N3SndMgr.h>
 
@@ -84,7 +85,7 @@ void CGameProcLogIn_1298::Init()
 	lstrcpy(szIniPath, CN3Base::PathGet().c_str());
 	lstrcat(szIniPath, "Server.Ini");
 
-	CIni ini(szIniPath);
+	CIni ini(PathResolver::Resolve(szIniPath));
 	m_szRegistrationSite = ini.GetString("Join", "Registration site", "").substr(0, _MAX_PATH - 1);
 
 	int iServerCount     = ini.GetInt("Server", "Count", 0);

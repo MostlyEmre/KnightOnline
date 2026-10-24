@@ -3,6 +3,7 @@
 
 #include <FileIO/FileReader.h>
 #include <FileIO/FileWriter.h>
+#include <FileIO/PathResolver.h>
 
 #ifdef _N3GAME
 #include "LogWriter.h"
@@ -38,7 +39,7 @@ bool CN3TableBaseImpl::LoadFromFile(const std::string& szFN)
 	if (encryptedFileSize == 0)
 	{
 		encryptedFile.Close();
-		std::filesystem::remove(szFNTmp, ec); // 임시 파일 지우기..
+		std::filesystem::remove(PathResolver::Resolve(szFNTmp), ec); // 임시 파일 지우기..
 		return false;
 	}
 
@@ -98,7 +99,7 @@ bool CN3TableBaseImpl::LoadFromFile(const std::string& szFN)
 	FileReader decryptedFile;
 	if (!decryptedFile.OpenExisting(szFNTmp))
 	{
-		std::filesystem::remove(szFNTmp, ec);
+		std::filesystem::remove(PathResolver::Resolve(szFNTmp), ec);
 		return false;
 	}
 
@@ -113,7 +114,7 @@ bool CN3TableBaseImpl::LoadFromFile(const std::string& szFN)
 	}
 
 	// 임시 파일 지우기..
-	std::filesystem::remove(szFNTmp, ec);
+	std::filesystem::remove(PathResolver::Resolve(szFNTmp), ec);
 
 	return bResult;
 }

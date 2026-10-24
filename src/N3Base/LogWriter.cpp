@@ -8,6 +8,7 @@
 #include "Platform/Time.h"
 
 #include <FileIO/FileWriter.h>
+#include <FileIO/PathResolver.h>
 
 std::string CLogWriter::s_szFileName;
 
@@ -41,7 +42,7 @@ void CLogWriter::Open(const std::string& szFN)
 		file.Close();
 
 		std::error_code ec;
-		std::filesystem::remove(s_szFileName, ec);
+		std::filesystem::remove(PathResolver::Resolve(s_szFileName), ec);
 
 		if (!file.Create(s_szFileName))
 			return;

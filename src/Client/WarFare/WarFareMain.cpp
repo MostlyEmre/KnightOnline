@@ -9,6 +9,7 @@
 #include "GameProcMain.h"
 #include "N3WorldManager.h"
 
+#include <FileIO/PathResolver.h>
 #include <shared/Ini.h>
 
 #include <ctime>
@@ -48,7 +49,7 @@ static int WarFareMain(HINSTANCE hInstance, int nShowCmd)
 	lstrcpy(szIniPath, CN3Base::PathGet().c_str());
 	lstrcat(szIniPath, "Option.ini");
 
-	CIni ini(szIniPath);
+	CIni ini(PathResolver::Resolve(szIniPath));
 
 	// NOTE: what is the texture quality?
 	CN3Base::s_Options.iTexLOD_Chr = ini.GetInt("Texture", "LOD_Chr", 0);

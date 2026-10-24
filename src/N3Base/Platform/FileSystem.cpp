@@ -1,5 +1,7 @@
 #include "FileSystem.h"
 
+#include <FileIO/PathResolver.h>
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -26,13 +28,11 @@ bool EqualsIgnoreCase(const std::string& a, const std::string& b)
 
 std::vector<std::string> FindFiles(const std::string& szDirectory, const std::string& szExtension)
 {
-	std::string szDir = szDirectory;
-	std::replace(szDir.begin(), szDir.end(), '\\', '/');
-
 	std::vector<std::string> names;
 
 	std::error_code ec;
-	for (const auto& entry : std::filesystem::directory_iterator(szDir, ec))
+	for (const auto& entry :
+		std::filesystem::directory_iterator(PathResolver::Resolve(szDirectory), ec))
 	{
 		if (!entry.is_regular_file(ec))
 			continue;
@@ -44,6 +44,15 @@ std::vector<std::string> FindFiles(const std::string& szDirectory, const std::st
 	}
 
 	return names;
+}
+
+FILE* OpenFile(const std::string& szPath, const char* szMode)
+{
+#if defined(_WIN32)
+	return std::fopen(szPath.c_str(), szMode);
+#else
+	return std::fopen(PathResolver::Resolve(szPath).c_str(), szMode);
+#endif
 }
 
 } // namespace Platform
