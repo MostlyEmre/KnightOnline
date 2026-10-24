@@ -43,8 +43,8 @@ const std::set<std::string> DateColumns = { "BuyTime", "CreateTime", "EditorTime
 	"UpdateDate", "UpdateTime", "tWriteTime", "timeLender", "timeRegister", "timeRental" };
 const std::set<std::string> FloatColumns = { "Ac", "Axe", "Bow", "Club", "Evasionrate", "Hitrate",
 	"Hp", "Mp", "Pole", "ShortSword", "Sp", "Spear", "Staff", "Sword" };
-// text-type (long data) columns.
-const std::set<std::string> LongTextColumns = { "path" };
+// Long-data columns (image / text), which nanodbc never binds and fetches with SQLGetData.
+const std::set<std::string> LongDataColumns = { "Mark", "path" };
 // Written with GETDATE() by procedures and defaults: compared only for NULL-ness.
 const std::set<std::string> VolatileColumns = { "UpdateTime", "CreateTime" };
 
@@ -243,21 +243,25 @@ public:
 		{
 			auto conn = db::ConnectionManager::CreatePoolConnection(DbType::GAME);
 
-			// ODBC wants long-data columns read after the bound ones, so list them last (as
-			// SqlBuilder does with BlobColumns()).
-			std::vector<std::string> names, longData;
+			// ODBC only allows SQLGetData on columns after the last bound one, so unbound long
+			// data (image/text) goes last, after the binary varchar columns (as SqlBuilder moves
+			// BlobColumns() last).
+			std::vector<std::string> names, binary, longData;
 			{
 				nanodbc::statement head = conn->CreateStatement("SELECT * FROM [" + table + "] WHERE 1 = 0");
 				nanodbc::result columnsOnly = head.execute();
 				for (short i = 0; i < columnsOnly.columns(); i++)
 				{
 					std::string name = columnsOnly.column_name(i);
-					if (BinaryColumns.contains(name) || LongTextColumns.contains(name))
+					if (LongDataColumns.contains(name))
 						longData.push_back(name);
+					else if (BinaryColumns.contains(name))
+						binary.push_back(name);
 					else
 						names.push_back(name);
 				}
 			}
+			names.insert(names.end(), binary.begin(), binary.end());
 			names.insert(names.end(), longData.begin(), longData.end());
 			std::string select = "SELECT ", columns = "[";
 			for (size_t i = 0; i < names.size(); i++)
