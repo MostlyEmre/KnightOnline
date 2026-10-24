@@ -11,7 +11,9 @@
 
 #include <N3Base/N3UIButton.h>
 
-#include <shellapi.h>
+#include <N3Base/Platform/Shell.h>
+#include <N3Base/Platform/Time.h>
+#include <N3Base/Platform/Window.h>
 
 CUIExitMenu::CUIExitMenu()
 {
@@ -103,8 +105,8 @@ bool CUIExitMenu::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 				CUIHotKeyDlg::MsgSend_SkillData_Save();
 			*/
 
-			::ShellExecute(nullptr, "open", "Option.exe", nullptr, nullptr, SW_SHOWNORMAL);
-			PostQuitMessage(0);
+			Platform::ShellOpen("Option.exe");
+			Platform::PostQuitMessage(0);
 		}
 		else if (CGameProcedure::s_pProcMain->m_pUIChatDlg != nullptr)
 		{
@@ -126,7 +128,7 @@ bool CUIExitMenu::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 				CUIHotKeyDlg::MsgSend_SkillData_Save();
 			*/
 
-			PostQuitMessage(0);
+			Platform::PostQuitMessage(0);
 		}
 		else if (CGameProcedure::s_pProcMain->m_pUIChatDlg != nullptr)
 		{
@@ -173,7 +175,7 @@ void CUIExitMenu::ReturnToCharacterSelection()
 
 	CGameProcedure::s_bNeedReportConnectionClosed = false;
 	CGameProcedure::s_pSocket->Disconnect();
-	Sleep(4000);
+	Platform::Sleep(4000);
 
 	CGameProcedure::s_pSocket->Connect(s_hWndBase, szIP, dwPort);
 	CGameProcedure::s_bNeedReportConnectionClosed = true;

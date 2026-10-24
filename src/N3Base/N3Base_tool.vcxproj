@@ -103,6 +103,22 @@
     <ClInclude Include="StdAfxBase.h" />
     <ClInclude Include="WaveFormat.h" />
     <ClInclude Include="WinCrypt.h" />
+    <ClInclude Include="Platform\Application.h" />
+    <ClInclude Include="Platform\Crypto.h" />
+    <ClInclude Include="Platform\FileSystem.h" />
+    <ClInclude Include="Platform\FontRasterizer.h" />
+    <ClInclude Include="Platform\Input.h" />
+    <ClInclude Include="Platform\KeyCodes.h" />
+    <ClInclude Include="Platform\RenderApi.h" />
+    <ClInclude Include="Platform\ScreenCapture.h" />
+    <ClInclude Include="Platform\Settings.h" />
+    <ClInclude Include="Platform\Shell.h" />
+    <ClInclude Include="Platform\Socket.h" />
+    <ClInclude Include="Platform\TextInput.h" />
+    <ClInclude Include="Platform\Time.h" />
+    <ClInclude Include="Platform\Types.h" />
+    <ClInclude Include="Platform\Window.h" />
+    <ClInclude Include="Platform\Win32\Win32Internal.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AudioHandle.cpp" />
@@ -185,6 +201,45 @@
     <ClCompile Include="AudioAsset.cpp" />
     <ClCompile Include="WaveFormat.cpp" />
     <ClCompile Include="WinCrypt.cpp" />
+    <ClCompile Include="Platform\FileSystem.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\Application_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\Crypto_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\FontRasterizer_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\Input_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\KeyboardDevice_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\ScreenCapture_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\Settings_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\Shell_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\Socket_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\TextInput_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\Time_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Platform\Win32\Window_Win32.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="ColorValue.inl" />

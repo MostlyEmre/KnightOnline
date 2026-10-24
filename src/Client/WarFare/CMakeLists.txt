@@ -391,13 +391,13 @@ target_compile_definitions(WarFare PRIVATE
 target_compile_options(WarFare.Core PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W3>
   $<$<CXX_COMPILER_ID:GNU>:-Wall>
-  $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
+  $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wall -Wextra>
 )
 
 target_compile_options(WarFare PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W3>
   $<$<CXX_COMPILER_ID:GNU>:-Wall>
-  $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
+  $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wall -Wextra>
 )
 
 if(MSVC)

@@ -17,7 +17,9 @@
 #include "SubProcPerTrade.h"
 #include "APISocket.h"
 
-#include <shellapi.h>
+#include <N3Base/Platform/Shell.h>
+#include <N3Base/Platform/Time.h>
+#include <N3Base/Platform/Window.h>
 
 #include <N3Base/N3UIButton.h>
 #include <N3Base/N3UIString.h>
@@ -98,7 +100,7 @@ bool CUIMessageBox::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 					if (CGameProcedure::s_pProcActive == pProcMain) // 지금 메인 프로시저이면..
 						pProcMain->ReleaseSound();
 
-					::PostQuitMessage(0);
+					Platform::PostQuitMessage(0);
 				}
 				break;                                              // 끝낸다..
 				case BEHAVIOR_RESTART_GAME:
@@ -110,7 +112,7 @@ bool CUIMessageBox::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 
 						CGameProcedure::s_bNeedReportConnectionClosed = false; // 서버접속이 끊어진걸 보고해야 하는지..
 						CGameProcedure::s_pSocket->Disconnect();
-						Sleep(2000);                                           // 2초 딜레이.. 서버가 처리할 시간을 준다.
+						Platform::Sleep(2000);                                 // 2초 딜레이.. 서버가 처리할 시간을 준다.
 						CGameProcedure::s_pSocket->Connect(s_hWndBase, szIP, dwPort);
 						CGameProcedure::s_bNeedReportConnectionClosed = true;  // 서버접속이 끊어진걸 보고해야 하는지..
 
@@ -164,11 +166,11 @@ bool CUIMessageBox::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 				case BEHAVIOR_PARTY_BBS_REGISTER_CANCEL:
 					if (pProcMain->m_pUIPartyBBS)
 						pProcMain->m_pUIPartyBBS->MsgSend_RegisterCancel();
-					break;                                                                          // 파티 게시판에 등록 해제
+					break;                             // 파티 게시판에 등록 해제
 				case BEHAVIOR_EXECUTE_OPTION:
 				{
-					::ShellExecute(nullptr, "open", "Option.exe", nullptr, nullptr, SW_SHOWNORMAL); // 홈페이지로 이동..
-					PostQuitMessage(0);                                                             // 종료...
+					Platform::ShellOpen("Option.exe"); // 홈페이지로 이동..
+					Platform::PostQuitMessage(0);      // 종료...
 				}
 				break;
 				default:

@@ -2,6 +2,9 @@
 #include "N3Eng.h"
 #include "N3Light.h"
 #include "LogWriter.h"
+#include "Platform/Shell.h"
+#include "Platform/Time.h"
+#include "Platform/Window.h"
 
 #include <bit>
 
@@ -33,9 +36,9 @@ CN3Eng::CN3Eng()
 	// 프로그램이 실행된 경로..
 	if (s_szPath.empty())
 	{
-		char szPath[_MAX_PATH] {}, szDrive[_MAX_DRIVE] {}, szDir[_MAX_DIR] {};
-		::GetModuleFileName(nullptr, szPath, _MAX_PATH);
-		_splitpath(szPath, szDrive, szDir, nullptr, nullptr);
+		char szDrive[_MAX_DRIVE] {}, szDir[_MAX_DIR] {};
+		std::string szPath = Platform::GetExecutablePath();
+		_splitpath(szPath.c_str(), szDrive, szDir, nullptr, nullptr);
 
 		std::string newPath  = szDrive;
 		newPath             += szDir;
@@ -393,9 +396,9 @@ bool CN3Eng::Init(
 			0, DevType, s_hWndBase, D3DCREATE_SOFTWARE_VERTEXPROCESSING, &s_DevParam, &s_lpD3DDev);
 		if (rval != D3D_OK)
 		{
-			MessageBox(s_hWndBase,
+			Platform::ShowMessageBox(s_hWndBase,
 				"Can't create D3D Device - please, check DirectX or display card driver",
-				"initialization", MB_OK);
+				"initialization");
 #ifdef _N3GAME
 			CLogWriter::Write(
 				"Can't create D3D Device - please, check DirectX or display card driver");
@@ -419,8 +422,8 @@ bool CN3Eng::Init(
 	if (s_DevCaps.MaxTextureWidth < 256
 		|| s_DevCaps.MaxTextureHeight < 256) // 텍스처 지원 크기가 256 이하면.. 아예 포기..
 	{
-		MessageBox(s_hWndBase, "Can't support this graphic card : Texture size is too small",
-			"Initialization error", MB_OK);
+		Platform::ShowMessageBox(s_hWndBase,
+			"Can't support this graphic card : Texture size is too small", "Initialization error");
 #ifdef _N3GAME
 		CLogWriter::Write("Can't support this graphic card : Texture size is too small");
 #endif
@@ -520,7 +523,7 @@ void CN3Eng::Present(HWND hWnd, RECT* pRC)
 	RECT rc;
 	if (s_DevParam.Windowed) // 윈도우 모드면...
 	{
-		GetClientRect(s_hWndBase, &rc);
+		Platform::GetClientRect(s_hWndBase, &rc);
 		pRC = &rc;
 	}
 
@@ -616,14 +619,8 @@ void CN3Eng::WaitForDeviceRestoration()
 #endif
 		}
 
-		MSG msg {};
-		while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
-		{
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-
-		Sleep(2000);
+		Platform::PumpEvents();
+		Platform::Sleep(2000);
 	}
 }
 
@@ -632,7 +629,7 @@ void CN3Eng::Clear(D3DCOLOR crFill, RECT* pRC)
 	RECT rc;
 	if (pRC == nullptr && s_DevParam.Windowed) // 윈도우 모드면...
 	{
-		GetClientRect(s_hWndBase, &rc);
+		Platform::GetClientRect(s_hWndBase, &rc);
 		pRC = &rc;
 	}
 
@@ -682,7 +679,7 @@ void CN3Eng::ClearZBuffer(const RECT* pRC)
 	RECT rc;
 	if (pRC == nullptr && s_DevParam.Windowed) // 윈도우 모드면...
 	{
-		GetClientRect(s_hWndBase, &rc);
+		Platform::GetClientRect(s_hWndBase, &rc);
 		pRC = &rc;
 	}
 

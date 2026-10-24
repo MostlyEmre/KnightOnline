@@ -11,7 +11,8 @@
 #include <N3Base/N3UIString.h>
 
 #include <algorithm>
-#include <shellapi.h>
+#include <N3Base/Platform/Shell.h>
+#include <N3Base/Platform/Window.h>
 
 CUILogIn_1298::CUILogIn_1298()
 {
@@ -88,7 +89,7 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		}
 		else if (pSender == m_pBtn_Cancel)
 		{
-			PostQuitMessage(0);            // 종료...
+			Platform::PostQuitMessage(0);  // 종료...
 			return true;
 		}
 		else if (pSender == m_pBtn_Option) // 옵션..
@@ -101,7 +102,7 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		{
 			if (!CGameProcedure::s_pProcLogIn->m_szRegistrationSite.empty())
 			{
-				ShellExecute(nullptr, "open", CGameProcedure::s_pProcLogIn->m_szRegistrationSite.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+				Platform::ShellOpen(CGameProcedure::s_pProcLogIn->m_szRegistrationSite);
 			}
 
 			return true;

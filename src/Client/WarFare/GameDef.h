@@ -4,7 +4,7 @@
 #pragma once
 
 #include <string>
-#include <dinput.h>
+#include <N3Base/Platform/KeyCodes.h>
 #include <cstdint>
 
 #include <shared/version.h>

@@ -368,7 +368,7 @@ void CN3Cloak::SetLOD(int nLevel)
 	//TRACE ("CN3Cloak Set LOD lvl {}", nLevel);
 }
 
-void CN3Cloak::ApplyOffset(__Vector3& vDif)
+void CN3Cloak::ApplyOffset(__Vector3& /*vDif*/)
 {
 	/*
 	if (m_fOffsetRecoveryTime == 0.0f)

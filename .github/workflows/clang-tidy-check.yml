@@ -80,9 +80,9 @@ jobs:
       with:
         version: "19"
         database: "build-windows-${{ matrix.BUILD_CONFIGURATION }}-${{ matrix.BUILD_PLATFORM }}"
-        # port/ and the SQLite backend aren't part of this (ODBC, Windows) build's compile database;
-        # .github/workflows/port-lint.yml lints them against the same .clang-tidy.
-        ignore: "build-windows-${{ matrix.BUILD_CONFIGURATION }}-${{ matrix.BUILD_PLATFORM }}|port|src/db-library/sqlite"
+        # port/, the SQLite backend and the macOS-only platform code aren't part of this (ODBC, Windows)
+        # build's compile database; .github/workflows/port-lint.yml lints them against the same .clang-tidy.
+        ignore: "build-windows-${{ matrix.BUILD_CONFIGURATION }}-${{ matrix.BUILD_PLATFORM }}|port|src/db-library/sqlite|src/N3Base/Platform/macOS|src/N3Base/Platform/Compat"
         style: "" # disable clang-format checks. (1)
         tidy-checks: "" # Use .clang-tidy config file. (2)
         lines-changed-only: true

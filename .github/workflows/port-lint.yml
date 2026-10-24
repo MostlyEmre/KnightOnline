@@ -2,7 +2,7 @@
 # (it only builds the Windows/ODBC configuration): same .clang-tidy, same clang-tidy major
 # version, with a compile database from a SQLite-backend configuration.
 
-name: "Port: clang-tidy (SQLite backend)"
+name: "Port: clang-tidy (SQLite backend, macOS platform code)"
 
 on:
   workflow_dispatch:
@@ -13,6 +13,7 @@ on:
       - '.github/workflows/port-lint.yml'
       - '.clang-tidy'
       - 'src/db-library/**'
+      - 'src/N3Base/Platform/**'
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -44,5 +45,33 @@ jobs:
           status=0
           for f in src/db-library/sqlite/*.cpp src/db-library/sqlite/tools/*.cpp; do
             clang-tidy -p build --quiet "$f" || status=1
+          done
+          exit $status
+
+  tidy-macos:
+    runs-on: macos-latest
+    name: "clang-tidy 19 (src/N3Base/Platform macOS + Compat)"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Configure (macOS client, compile database without PCH)
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENKO_BUILD_MACOS_CLIENT=ON -DOPENKO_BUILD_SERVERS=OFF -DOPENKO_BUILD_TESTS=OFF \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE -DCMAKE_DISABLE_PRECOMPILE_HEADERS=TRUE \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: clang-tidy
+        run: |
+          python3 -m venv tidy && tidy/bin/pip install --quiet clang-tidy==19.1.0
+          sdk="$(xcrun --show-sdk-path)"
+          status=0
+          for f in src/N3Base/Platform/FileSystem.cpp src/N3Base/Platform/Compat/*.cpp src/N3Base/Platform/macOS/*.cpp; do
+            tidy/bin/clang-tidy -p build --quiet --extra-arg=-isysroot --extra-arg="$sdk" "$f" || status=1
           done
           exit $status

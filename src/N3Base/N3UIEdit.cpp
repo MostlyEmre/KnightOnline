@@ -11,15 +11,9 @@
 
 #include "N3SndMgr.h"
 #include "N3SndObj.h"
-#include <imm.h>
+#include "Platform/TextInput.h"
 
 constexpr float CARET_FLICKERING_TIME = 0.4f;
-
-//HWND CN3UIEdit::s_hWndParent = nullptr;
-HWND CN3UIEdit::s_hWndEdit            = nullptr;
-HWND CN3UIEdit::s_hWndParent          = nullptr;
-WNDPROC CN3UIEdit::s_lpfnEditProc     = nullptr;
-char CN3UIEdit::s_szBuffTmp[512]      = "";
 
 //////////////////////////////////////////////////////////////////////
 // CN3UIEdit::CN3Caret
@@ -97,94 +91,23 @@ void CN3UIEdit::CN3Caret::InitFlckering()
 
 BOOL CN3UIEdit::CreateEditWindow(HWND hParent, RECT rect)
 {
-	if (nullptr == hParent)
-		return FALSE;
-	if (s_hWndEdit)
-		return FALSE;
+	Platform::TextInput::Handlers handlers;
 
-	s_hWndParent = hParent;
-	s_hWndEdit = CreateWindow("EDIT", "EditWindow", WS_CHILD | WS_TABSTOP | ES_LEFT | ES_WANTRETURN,
-		rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, hParent, nullptr,
-		nullptr, nullptr);
-
-	// NOLINTNEXTLINE(performance-no-int-to-ptr)
-	s_lpfnEditProc = (WNDPROC) SetWindowLongPtr(
-		s_hWndEdit, GWLP_WNDPROC, (LONG_PTR) CN3UIEdit::EditWndProc);
-
-	// Set the edit control's text size to the maximum.
-	::SendMessage(s_hWndEdit, EM_LIMITTEXT, 0, 0);
-
-	// Set the edit control's font
-	HFONT hFont = (HFONT) GetStockObject(ANSI_FIXED_FONT);
-	::SendMessage(s_hWndEdit, WM_SETFONT, (WPARAM) hFont, MAKELPARAM(TRUE, 0));
-	::SendMessage(s_hWndEdit, WM_SETFONT, (WPARAM) hFont, MAKELPARAM(TRUE, 0));
-
-	// 배경 지우기...??
-	HDC hDC = GetDC(s_hWndEdit);
-	SetBkMode(hDC, TRANSPARENT);
-	SetROP2(hDC, R2_XORPEN);
-	ReleaseDC(s_hWndEdit, hDC);
-
-	return TRUE;
-}
-
-LRESULT APIENTRY CN3UIEdit::EditWndProc(HWND hWnd, uint16_t Message, WPARAM wParam, LPARAM lParam)
-{
-	//
 	// When the focus is in an edit control inside a dialog box, the
 	//  default ENTER key action will not occur.
-	//
-	switch (Message)
+	handlers.OnReturn = []
 	{
-		case WM_KEYDOWN:
-			if (wParam == VK_RETURN)
-			{
-				if (s_pFocusedEdit != nullptr && s_pFocusedEdit->GetParent() != nullptr)
-					s_pFocusedEdit->GetParent()->ReceiveMessage(s_pFocusedEdit, UIMSG_EDIT_RETURN);
+		if (s_pFocusedEdit != nullptr && s_pFocusedEdit->GetParent() != nullptr)
+			s_pFocusedEdit->GetParent()->ReceiveMessage(s_pFocusedEdit, UIMSG_EDIT_RETURN);
+	};
 
-				return 0;
-			}
+	handlers.OnCaretMayHaveMoved = []
+	{
+		if (s_pFocusedEdit != nullptr)
+			CN3UIEdit::UpdateCaretPosFromEditCtrl();
+	};
 
-			CallWindowProc(s_lpfnEditProc, hWnd, Message, wParam, lParam);
-			if (s_pFocusedEdit != nullptr)
-				CN3UIEdit::UpdateCaretPosFromEditCtrl();
-
-			return 0;
-
-		case WM_CHAR:
-			if (s_pFocusedEdit != nullptr)
-				CN3UIEdit::UpdateCaretPosFromEditCtrl();
-
-			if (wParam == VK_RETURN || wParam == VK_TAB)
-				return 0;
-			break;
-
-		case WM_INPUTLANGCHANGE:
-		{
-			POINT ptPos = { 0, 0 };
-			SetImeStatus(ptPos, true);
-		}
-		break;
-
-		case WM_IME_ENDCOMPOSITION:
-		{
-			POINT ptPos = { -1000, -1000 };
-			SetImeStatus(ptPos, false);
-		}
-		break;
-
-		case WM_IME_STARTCOMPOSITION:
-		{
-			POINT ptPos = { 0, 0 };
-			SetImeStatus(ptPos, true);
-		}
-		break;
-
-		default:
-			break;
-	}
-
-	return CallWindowProc(s_lpfnEditProc, hWnd, Message, wParam, lParam);
+	return Platform::TextInput::Create(hParent, rect, handlers) ? TRUE : FALSE;
 }
 
 CN3UIEdit::CN3Caret CN3UIEdit::s_Caret;
@@ -245,11 +168,7 @@ void CN3UIEdit::KillFocus()
 		s_pFocusedEdit     = nullptr;
 		s_Caret.m_bVisible = FALSE;
 
-		if (s_hWndEdit)
-		{
-			::SetWindowText(s_hWndEdit, "");
-			::SetFocus(s_hWndParent);
-		}
+		Platform::TextInput::Unfocus();
 	}
 }
 
@@ -271,28 +190,15 @@ bool CN3UIEdit::SetFocus()
 	s_Caret.InitFlckering();
 	CN3UIEdit::UpdateCaretPosFromEditCtrl(); // 캐럿 포지션 설정
 
-	if (s_hWndEdit)
+	if (Platform::TextInput::IsCreated())
 	{
-		::SetFocus(s_hWndEdit);
-
-		RECT rcEdit = GetRegion();
-		int iX      = rcEdit.left;
-		int iY      = rcEdit.top;
-		int iH      = rcEdit.bottom - rcEdit.top;
-		int iW      = rcEdit.right - rcEdit.left;
-		::MoveWindow(s_hWndEdit, iX, iY, iW, iH, false);
-
+		std::string szText;
 		if (UISTYLE_EDIT_PASSWORD & m_dwStyle)
-		{
-			::SetWindowText(s_hWndEdit, m_szPassword.c_str());
-		}
-		else
-		{
-			if (m_pBuffOutRef)
-				::SetWindowText(s_hWndEdit, m_pBuffOutRef->GetString().c_str());
-			else
-				::SetWindowText(s_hWndEdit, "");
-		}
+			szText = m_szPassword;
+		else if (m_pBuffOutRef)
+			szText = m_pBuffOutRef->GetString();
+
+		Platform::TextInput::Focus(GetRegion(), szText);
 	}
 
 	return true;
@@ -562,16 +468,15 @@ std::string CN3UIEdit::GetSndFName_Typing() const
 
 void CN3UIEdit::UpdateTextFromEditCtrl()
 {
-	if (nullptr == s_pFocusedEdit || nullptr == s_hWndEdit)
+	if (nullptr == s_pFocusedEdit || !Platform::TextInput::IsCreated())
 		return;
 
-	::GetWindowText(s_hWndEdit, s_szBuffTmp, 512);
-	s_pFocusedEdit->SetString(s_szBuffTmp);
+	s_pFocusedEdit->SetString(Platform::TextInput::GetText());
 }
 
 void CN3UIEdit::UpdateCaretPosFromEditCtrl()
 {
-	if (nullptr == s_pFocusedEdit || nullptr == s_hWndEdit)
+	if (nullptr == s_pFocusedEdit || !Platform::TextInput::IsCreated())
 		return;
 
 	/*	int iCaret = 0;
@@ -587,30 +492,8 @@ void CN3UIEdit::UpdateCaretPosFromEditCtrl()
 		ReleaseDC(s_hWndEdit, hDC);
 	}
 */
-	LRESULT lResult = ::SendMessage(s_hWndEdit, EM_GETSEL, 0, 0);
-	int iCaret      = LOWORD(lResult);
+	int iCaret = Platform::TextInput::GetCaretPos();
 	s_pFocusedEdit->SetCaretPos(iCaret);
-}
-
-void CN3UIEdit::SetImeStatus(POINT ptPos, bool bOpen)
-{
-#ifndef _N3TOOL
-	HKL hHKL = GetKeyboardLayout(0);
-	if (ImmIsIME(hHKL))
-	{
-		HIMC hImc = ImmGetContext(s_hWndEdit);
-		if (bOpen)
-		{
-			SendMessage(s_hWndEdit, WM_IME_NOTIFY, IMN_OPENSTATUSWINDOW, 0);
-			ImmSetStatusWindowPos(hImc, &ptPos);
-		}
-		else
-		{
-			SendMessage(s_hWndEdit, WM_IME_NOTIFY, IMN_CLOSESTATUSWINDOW, 0);
-		}
-		ImmReleaseContext(s_hWndEdit, hImc);
-	}
-#endif
 }
 
 /*

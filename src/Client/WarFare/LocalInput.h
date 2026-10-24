@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <dinput.h>
-
 #include <N3Base/My_3DStruct.h>
+#include <N3Base/Platform/Input.h>
+#include <N3Base/Platform/KeyCodes.h>
 
 inline constexpr int DK_NONE         = 0;
 inline constexpr int DK_RELEASE      = 1;
@@ -38,8 +38,7 @@ private:
 	void UnacquireKeyboard();
 
 protected:
-	LPDIRECTINPUT8 m_lpDI;
-	LPDIRECTINPUTDEVICE8 m_lpDIDKeyboard;
+	Platform::KeyboardDevice m_Keyboard;
 
 	HWND m_hWnd;
 

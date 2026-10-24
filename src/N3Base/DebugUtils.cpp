@@ -1,4 +1,5 @@
 ﻿#include "StdAfxBase.h"
+#include "Platform/Shell.h"
 #include <spdlog/spdlog.h>
 
 void DebugStringToOutput(const std::string_view logMessage)
@@ -10,7 +11,7 @@ void DebugStringToOutput(const std::string_view logMessage)
 	outputMessage.reserve(logMessage.size() + NewLine.size());
 	outputMessage  = logMessage;
 	outputMessage += NewLine;
-	OutputDebugStringA(outputMessage.c_str());
+	Platform::DebugOutput(outputMessage.c_str());
 #endif
 
 	spdlog::trace(logMessage);

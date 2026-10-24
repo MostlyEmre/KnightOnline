@@ -43,13 +43,8 @@ protected:
 
 										   // Attributes
 public:
-	static HWND s_hWndEdit, s_hWndParent;
-	static WNDPROC s_lpfnEditProc;
-	static char s_szBuffTmp[512];
-
-	static void SetImeStatus(POINT ptPos, bool bOpen);
+	// The typing itself happens in the platform's text input field (Platform/TextInput.h).
 	static BOOL CreateEditWindow(HWND hParent, RECT rect);
-	static LRESULT APIENTRY EditWndProc(HWND hWnd, uint16_t Message, WPARAM wParam, LPARAM lParam);
 	static void UpdateTextFromEditCtrl();
 	static void UpdateCaretPosFromEditCtrl();
 

@@ -3,7 +3,11 @@
 
 #pragma once
 
+#if defined(_WIN32)
 #include <winsock2.h>
+#else
+#include <arpa/inet.h> // htons/ntohs, which winsock2.h provides on Windows
+#endif
 #include <N3Base/My_3DStruct.h>
 
 #if !__has_include(<warfare_config.h>)

@@ -4,6 +4,9 @@
 #pragma once
 
 #include "N3Base.h"
+#include "Platform/FontRasterizer.h"
+
+#include <memory>
 
 enum e_D3DFontFlags : uint8_t
 {
@@ -39,7 +42,7 @@ public:
 
 	int GetFontHeightInLogicalUnit() const
 	{
-		return -MulDiv(m_dwFontHeight, GetDeviceCaps(s_hDC, LOGPIXELSY), 72);
+		return -MulDiv(m_dwFontHeight, Platform::FontRasterizer::GetLogPixelsY(), 72);
 	}
 
 	uint32_t GetFontFlags() const
@@ -58,10 +61,6 @@ public:
 	}
 
 protected:
-	static HDC s_hDC;               // DC handle
-	static int s_iInstanceCount;    // Class Instance Count
-	static HFONT s_hFontOld;        // default font
-
 	std::string m_szFontName;       // Font properties
 	uint32_t m_dwFontHeight;        // Font Size
 	uint32_t m_dwFontFlags;
@@ -76,8 +75,8 @@ protected:
 									// 이런 경우 Scale을 이용하여 크게 늘려 찍는다.
 
 									//	HDC			m_hDC;							// DC handle
-	HFONT m_hFont;           // Font handle
-	UINT m_iPrimitiveCount;  // 글씨 찍을 판의 갯수
+	std::unique_ptr<Platform::FontRasterizer> m_pFont; // Font handle
+	UINT m_iPrimitiveCount;                            // 글씨 찍을 판의 갯수
 	__Vector2 m_PrevLeftTop; // DrawText의 경우 찍는 곳의 위치가 변경되었을때를 위한 변수
 	uint32_t m_dwFontColor;  // 글씨 색
 	SIZE m_Size;             // 쓴 글씨들이 차지하는 크기(pixel단위, 가로 세로)

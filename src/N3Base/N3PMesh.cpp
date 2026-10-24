@@ -2,6 +2,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 #include "StdAfxBase.h"
+#include "Platform/Shell.h"
 #include "N3PMesh.h"
 #include "N3PMeshInstance.h"
 
@@ -171,7 +172,7 @@ bool CN3PMesh::Load(File& file)
 
 #ifdef _DEBUG
 		if (bFixed)
-			::MessageBox(s_hWndBase, "잘못된 Progressive Mesh 수정", m_szName.c_str(), MB_OK);
+			Platform::ShowMessageBox(s_hWndBase, "잘못된 Progressive Mesh 수정", m_szName.c_str());
 #endif
 	}
 

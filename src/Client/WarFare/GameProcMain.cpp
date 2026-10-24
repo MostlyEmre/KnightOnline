@@ -73,7 +73,9 @@
 
 #include <N3Base/N3UIButton.h>
 
-#include <io.h>
+#include <N3Base/Platform/FileSystem.h>
+#include <N3Base/Platform/Input.h>
+#include <N3Base/Platform/Window.h>
 
 std::string g_szCmdMsg[CMD_COUNT]; // 게임상 명령어
 
@@ -321,131 +323,50 @@ void CGameProcMain::Init()
 		s_pUILoading->Render("Loading Character Data...", 0);
 
 	// 경로 기억..
-	char szPathOld[_MAX_PATH], szPathFind[_MAX_PATH];
-	::GetCurrentDirectory(_MAX_PATH, szPathOld);
-
-	_finddata_t fi;
-	intptr_t hFind = 0;
+	std::error_code ec;
+	const std::string szPathOld = std::filesystem::current_path(ec).string();
 
 	// 리소스 다 읽기..
 	// 에니메이션 다 읽기..
-	lstrcpy(szPathFind, szPathOld);
-	lstrcat(szPathFind, "\\Chr");
-	::SetCurrentDirectory(szPathFind);
-	hFind = _findfirst("*.N3Anim", &fi);
-	if (hFind)
-	{
-		std::string szFN = "Chr\\";
-		szFN.append(fi.name);
-		s_MngAniCtrl.Get(szFN);
-		while (_findnext(hFind, &fi) != -1)
-		{
-			szFN = "Chr\\";
-			szFN.append(fi.name);
-			s_MngAniCtrl.Get(szFN);
-		}
-	}
-	_findclose(hFind);
+	for (const std::string& szName : Platform::FindFiles(szPathOld + "\\Chr", ".N3Anim"))
+		s_MngAniCtrl.Get("Chr\\" + szName);
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 10 %", 10);
 
 	// 리소스 다 읽기..
 	// 텍스처 다 읽기..
-	lstrcpy(szPathFind, szPathOld);
-	lstrcat(szPathFind, "\\Item");
-	::SetCurrentDirectory(szPathFind);
-	hFind = _findfirst("*.dxt", &fi);
-	if (hFind)
-	{
-		std::string szFN = "Item\\";
-		szFN.append(fi.name);
-		s_MngTex.Get(szFN);
-		while (_findnext(hFind, &fi) != -1)
-		{
-			szFN = "Item\\";
-			szFN.append(fi.name);
-			s_MngTex.Get(szFN);
-		}
-	}
-	_findclose(hFind);
+	for (const std::string& szName : Platform::FindFiles(szPathOld + "\\Item", ".dxt"))
+		s_MngTex.Get("Item\\" + szName);
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 25 %", 25);
 
 	// 리소스 다 읽기..
 	// 조인트 다 읽기..
-	lstrcpy(szPathFind, szPathOld);
-	lstrcat(szPathFind, "\\Chr");
-	::SetCurrentDirectory(szPathFind);
-	hFind = _findfirst("*.N3Joint", &fi);
-	if (hFind)
-	{
-		std::string szFN = "Chr\\";
-		szFN.append(fi.name);
-		s_MngJoint.Get(szFN);
-		while (_findnext(hFind, &fi) != -1)
-		{
-			szFN = "Chr\\";
-			szFN.append(fi.name);
-			s_MngJoint.Get(szFN);
-		}
-	}
-	_findclose(hFind);
+	for (const std::string& szName : Platform::FindFiles(szPathOld + "\\Chr", ".N3Joint"))
+		s_MngJoint.Get("Chr\\" + szName);
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 50 %", 50);
 
 	// 리소스 다 읽기..
 	// 스킨 읽기..
-	lstrcpy(szPathFind, szPathOld);
-	lstrcat(szPathFind, "\\Item");
-	::SetCurrentDirectory(szPathFind);
-	hFind = _findfirst("*.N3CSkins", &fi);
-	if (hFind)
-	{
-		std::string szFN = "Item\\";
-		szFN.append(fi.name);
-		s_MngSkins.Get(szFN);
-		while (_findnext(hFind, &fi) != -1)
-		{
-			szFN = "Item\\";
-			szFN.append(fi.name);
-			s_MngSkins.Get(szFN);
-		}
-	}
-	_findclose(hFind);
+	for (const std::string& szName : Platform::FindFiles(szPathOld + "\\Item", ".N3CSkins"))
+		s_MngSkins.Get("Item\\" + szName);
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 75 %", 75);
 
 	// 리소스 다 읽기..
 	// PMesh 읽기..
-	lstrcpy(szPathFind, szPathOld);
-	lstrcat(szPathFind, "\\Item");
-	::SetCurrentDirectory(szPathFind);
-	hFind = _findfirst("*.N3PMesh", &fi);
-	if (hFind)
-	{
-		std::string szFN = "Item\\";
-		szFN.append(fi.name);
-		s_MngPMesh.Get(szFN);
-		while (_findnext(hFind, &fi) != -1)
-		{
-			szFN = "Item\\";
-			szFN.append(fi.name);
-			s_MngPMesh.Get(szFN);
-		}
-	}
-	_findclose(hFind);
+	for (const std::string& szName : Platform::FindFiles(szPathOld + "\\Item", ".N3PMesh"))
+		s_MngPMesh.Get("Item\\" + szName);
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 100 %", 100);
 
 	MsgSend_GameStart();
-
-	// 경로 돌리기..
-	::SetCurrentDirectory(szPathOld);
 }
 
 void CGameProcMain::InitPlayerPosition(const __Vector3& vPos)              // 플레이어 위치 초기화.. 일으켜 세우고, 기본동작을 취하게 한다.
@@ -579,7 +500,7 @@ void CGameProcMain::Tick()
 			{
 				if (m_eExitType == EXIT_TYPE_QUIT)
 				{
-					PostQuitMessage(0);
+					Platform::PostQuitMessage(0);
 				}
 				else if (m_eExitType == EXIT_TYPE_CHR_SELECT && m_pUIExitMenu != nullptr)
 				{
@@ -7926,8 +7847,8 @@ bool CGameProcMain::OnMouseRbtnDown(POINT ptCur, POINT ptPrev)
 		SetGameCursor(nullptr);
 
 		POINT ptScreen = ptPrev;
-		::ClientToScreen(s_hWndBase, &ptScreen);
-		::SetCursorPos(ptScreen.x, ptScreen.y);
+		Platform::ClientToScreen(s_hWndBase, &ptScreen);
+		Platform::SetCursorPos(ptScreen.x, ptScreen.y);
 		s_pLocalInput->MouseSetPos(ptPrev.x, ptPrev.y);
 	}
 

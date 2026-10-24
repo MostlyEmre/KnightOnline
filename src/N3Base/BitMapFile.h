@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <windows.h>
+#include "Platform/Types.h"
 #include <string>
 
 class File;

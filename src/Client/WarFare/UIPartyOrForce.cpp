@@ -12,6 +12,7 @@
 #include <N3Base/N3UIImage.h>
 #include <N3Base/N3UIProgress.h>
 #include <N3Base/N3UIStatic.h>
+#include <N3Base/Platform/Time.h>
 
 CUIPartyOrForce::CUIPartyOrForce()
 {
@@ -458,7 +459,7 @@ void CUIPartyOrForce::Tick()
 	CN3UIBase::Tick();
 
 	bool bBlink      = false;
-	uint64_t dwTime  = GetTickCount64();
+	uint64_t dwTime  = Platform::GetTickCount64();
 
 	dwTime           = dwTime / 1000;
 	dwTime          %= 2;

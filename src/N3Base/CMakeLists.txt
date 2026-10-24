@@ -105,6 +105,69 @@ set(N3BASE_TOOL_WEATHER_SOURCES
   N3GlobalEffectMng.h
 )
 
+# The platform layer: OS services and the rendering API behind portable interfaces.
+# Windows uses the original Win32 / Direct3D 9 calls; macOS (the port) its own implementations.
+set(N3BASE_COMMON_PLATFORM_SOURCES
+  Platform/Application.h
+  Platform/Crypto.h
+  Platform/FileSystem.cpp
+  Platform/FileSystem.h
+  Platform/FontRasterizer.h
+  Platform/Input.h
+  Platform/KeyCodes.h
+  Platform/RenderApi.h
+  Platform/ScreenCapture.h
+  Platform/Settings.h
+  Platform/Shell.h
+  Platform/Socket.h
+  Platform/TextInput.h
+  Platform/Time.h
+  Platform/Types.h
+  Platform/Window.h
+)
+
+if(WIN32)
+  list(APPEND N3BASE_COMMON_PLATFORM_SOURCES
+    Platform/Win32/Application_Win32.cpp
+    Platform/Win32/Crypto_Win32.cpp
+    Platform/Win32/FontRasterizer_Win32.cpp
+    Platform/Win32/Input_Win32.cpp
+    Platform/Win32/KeyboardDevice_Win32.cpp
+    Platform/Win32/ScreenCapture_Win32.cpp
+    Platform/Win32/Settings_Win32.cpp
+    Platform/Win32/Shell_Win32.cpp
+    Platform/Win32/Socket_Win32.cpp
+    Platform/Win32/TextInput_Win32.cpp
+    Platform/Win32/Time_Win32.cpp
+    Platform/Win32/Win32Internal.h
+    Platform/Win32/Window_Win32.cpp
+  )
+
+  # winsock2.h has to precede <windows.h>, which the precompiled header includes.
+  set_source_files_properties(Platform/Win32/Socket_Win32.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+else()
+  list(APPEND N3BASE_COMMON_PLATFORM_SOURCES
+    Platform/Compat/D3D9.h
+    Platform/Compat/DInputKeys.h
+    Platform/Compat/Win32Types.cpp
+    Platform/Compat/Win32Types.h
+    Platform/macOS/Application_macOS.cpp
+    Platform/macOS/Crypto_macOS.cpp
+    Platform/macOS/Direct3D9_macOS.cpp
+    Platform/macOS/FontRasterizer_macOS.cpp
+    Platform/macOS/Input_macOS.cpp
+    Platform/macOS/KeyboardDevice_macOS.cpp
+    Platform/macOS/NotImplemented.h
+    Platform/macOS/ScreenCapture_macOS.cpp
+    Platform/macOS/Settings_macOS.cpp
+    Platform/macOS/Shell_macOS.cpp
+    Platform/macOS/Socket_macOS.cpp
+    Platform/macOS/TextInput_macOS.cpp
+    Platform/macOS/Time_macOS.cpp
+    Platform/macOS/Window_macOS.cpp
+  )
+endif()
+
 set(N3BASE_COMMON_SOURCES
   BitMapFile.cpp
   BitMapFile.h
@@ -183,6 +246,7 @@ set(N3BASE_COMMON_SOURCES
   ${N3BASE_COMMON_SKY_SOURCES}
   ${N3BASE_COMMON_UI_SOURCES}
   ${N3BASE_COMMON_WEATHER_SOURCES}
+  ${N3BASE_COMMON_PLATFORM_SOURCES}
 )
 
 set(N3BASE_COMMON_DEPENDENCIES_PUBLIC
@@ -208,21 +272,26 @@ source_group("Effects" FILES ${N3BASE_COMMON_EFFECT_SOURCES} ${N3BASE_TOOL_EFFEC
 source_group("Sky" FILES ${N3BASE_COMMON_SKY_SOURCES})
 source_group("UI" FILES ${N3BASE_COMMON_UI_SOURCES})
 source_group("Weather" FILES ${N3BASE_COMMON_WEATHER_SOURCES} ${N3BASE_TOOL_WEATHER_SOURCES})
+source_group("Platform" FILES ${N3BASE_COMMON_PLATFORM_SOURCES})
 
 # Link in the libs that we use
-set(N3BASE_COMMON_LIBS_PRIVATE
-  d3d9.lib
-  d3dx9.lib
-  dinput8.lib
-  dsound.lib
-  dxguid.lib
-)
+if(WIN32)
+  set(N3BASE_COMMON_LIBS_PRIVATE
+    d3d9.lib
+    d3dx9.lib
+    dinput8.lib
+    dsound.lib
+    dxguid.lib
+  )
+else()
+  set(N3BASE_COMMON_LIBS_PRIVATE)
+endif()
 
 # Setup warning levels
 set(N3BASE_COMMON_COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:MSVC>:/W3>
   $<$<CXX_COMPILER_ID:GNU>:-Wall>
-  $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
+  $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wall -Wextra>
 )
 
 if(OPENKO_BUILD_CLIENT)
