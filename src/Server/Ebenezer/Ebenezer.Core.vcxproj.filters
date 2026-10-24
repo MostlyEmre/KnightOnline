@@ -59,6 +59,9 @@
     <ClCompile Include="OperationMessage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="LayoutChecks.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="KnightsSiegeWar.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

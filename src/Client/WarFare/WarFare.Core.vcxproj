@@ -134,6 +134,7 @@
     <ClCompile Include="GameProcNationSelect.cpp" />
     <ClCompile Include="IconItemSkill.cpp" />
     <ClCompile Include="ItemRepairMgr.cpp" />
+    <ClCompile Include="LayoutChecks.cpp" />
     <ClCompile Include="LightMgr.cpp" />
     <ClCompile Include="LocalInput.cpp" />
     <ClCompile Include="MagicSkillMng.cpp" />

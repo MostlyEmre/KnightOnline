@@ -166,6 +166,7 @@
     <ClCompile Include="Knights.cpp" />
     <ClCompile Include="KnightsManager.cpp" />
     <ClCompile Include="KnightsSiegeWar.cpp" />
+    <ClCompile Include="LayoutChecks.cpp" />
     <ClCompile Include="LOGIC_ELSE.cpp" />
     <ClCompile Include="MagicProcess.cpp" />
     <ClCompile Include="Map.cpp" />

@@ -32,6 +32,7 @@ add_library(Ebenezer.Core
   KnightsManager.h
   KnightsSiegeWar.cpp
   KnightsSiegeWar.h
+  LayoutChecks.cpp
   LOGIC_ELSE.cpp
   LOGIC_ELSE.h
   MagicProcess.cpp

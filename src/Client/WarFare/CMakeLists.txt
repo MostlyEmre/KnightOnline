@@ -279,6 +279,7 @@ add_library(WarFare.Core
   GameDef.h
   GameEng.cpp
   GameEng.h
+  LayoutChecks.cpp
   StdAfx.h
   WarFareMain.cpp
   ${WARFARE_SCENE_SOURCES}

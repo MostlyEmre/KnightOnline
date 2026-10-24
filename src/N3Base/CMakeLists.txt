@@ -243,6 +243,7 @@ set(N3BASE_COMMON_SOURCES
   N3IMesh.h
   N3Joint.cpp
   N3Joint.h
+  N3LayoutChecks.cpp
   N3Light.cpp
   N3Light.h
   N3Mesh.cpp

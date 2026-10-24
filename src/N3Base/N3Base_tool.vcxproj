@@ -160,6 +160,7 @@
     <ClCompile Include="N3GlobalEffectMng.cpp" />
     <ClCompile Include="N3IMesh.cpp" />
     <ClCompile Include="N3Joint.cpp" />
+    <ClCompile Include="N3LayoutChecks.cpp" />
     <ClCompile Include="N3Light.cpp" />
     <ClCompile Include="N3Mesh.cpp" />
     <ClCompile Include="N3Moon.cpp" />

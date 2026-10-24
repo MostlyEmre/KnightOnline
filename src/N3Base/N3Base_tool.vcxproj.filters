@@ -509,6 +509,9 @@
     <ClCompile Include="N3Joint.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="N3LayoutChecks.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="N3Light.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
