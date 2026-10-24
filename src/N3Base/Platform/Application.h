@@ -35,6 +35,10 @@ struct EventHandlers
 	/// \brief The mouse wheel turned, in WHEEL_DELTA (120) units per notch.
 	std::function<void(short sDelta)> OnMouseWheel;
 
+	/// \brief Sideways scrolling (a tilted wheel, two fingers swiped across a trackpad), in
+	/// WHEEL_DELTA units; positive to the right.
+	std::function<void(short sDelta)> OnMouseHWheel;
+
 	/// \brief The text in the text input field (TextInput.h) changed.
 	std::function<void()> OnTextInputChanged;
 

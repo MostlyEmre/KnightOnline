@@ -284,6 +284,21 @@ static void OnMouseWheel(short delta)
 		CGameProcedure::s_pEng->CameraZoom(delta * 0.05f);
 }
 
+// Sideways scrolling (two fingers across a trackpad, a tilted wheel) turns the view like dragging
+// with the right button held does: 10 degrees per notch.
+static void OnMouseHWheel(short delta)
+{
+	if (CGameProcedure::s_pProcActive != CGameProcedure::s_pProcMain || CGameProcedure::s_pPlayer == nullptr
+		|| !CGameProcedure::s_pPlayer->IsAlive())
+		return;
+
+	float fRot = DegreesToRadians(10.0f) * (delta / 120.0f);
+	if (VP_THIRD_PERSON == CGameProcedure::s_pEng->ViewPoint())
+		CGameProcedure::s_pEng->CameraYawAdd(fRot);
+	else if (!CGameProcedure::s_pPlayer->m_bStun)
+		CGameProcedure::s_pPlayer->RotAdd(fRot);
+}
+
 static Platform::EventHandlers CreateEventHandlers()
 {
 	Platform::EventHandlers handlers;
@@ -298,6 +313,7 @@ static Platform::EventHandlers CreateEventHandlers()
 	handlers.OnActivate         = OnActivate;
 	handlers.OnCloseRequested   = OnCloseRequested;
 	handlers.OnMouseWheel       = OnMouseWheel;
+	handlers.OnMouseHWheel      = OnMouseHWheel;
 	handlers.OnTextInputChanged = OnTextInputChanged;
 	handlers.OnSocketEvent      = OnSocketEvent;
 	return handlers;

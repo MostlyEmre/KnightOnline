@@ -90,6 +90,11 @@ LRESULT CALLBACK WndProcMain(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
 				s_handlers.OnMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam));
 			break;
 
+		case WM_MOUSEHWHEEL:
+			if (s_handlers.OnMouseHWheel)
+				s_handlers.OnMouseHWheel(GET_WHEEL_DELTA_WPARAM(wParam));
+			break;
+
 		default:
 			break;
 	}
