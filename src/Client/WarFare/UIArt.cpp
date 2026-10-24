@@ -181,7 +181,7 @@ void CUIArtWindow::TakeInput(CLocalInput* pInput)
 	{
 		MouseProc(static_cast<uint32_t>(pInput->MouseGetFlag()), pInput->MouseGetPos(), pInput->MouseGetPosOld());
 		Tick();
-		if (IsVisible() && pInput->IsKeyPress(DIK_ESCAPE))
+		if (IsVisible() && (pInput->IsKeyPress(DIK_ESCAPE) || (m_iToggleKey != 0 && pInput->IsKeyPress(m_iToggleKey))))
 			Close();
 	}
 	else if (m_bHoldInput)
@@ -197,6 +197,11 @@ void CUIArtWindow::TakeInput(CLocalInput* pInput)
 	}
 
 	pInput->Mute(true);
+}
+
+void CUIArtWindow::SetToggleKey(int iDIK)
+{
+	m_iToggleKey = iDIK;
 }
 
 bool CUIArtWindow::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)

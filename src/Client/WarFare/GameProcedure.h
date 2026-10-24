@@ -64,6 +64,7 @@ public:
 	static class CUIMessageBoxManager* s_pMsgBoxMgr; // MessageBox Manager
 	static class CUIOptions* s_pUIOptions;           // the Options window, where there's no Option.exe
 	static class CUIPowerUpStore* s_pUIPowerUpStore; // the Power-up Store (the P button)
+	static class CUIGenie* s_pUIGenie;               // Genie's window (G)
 
 	static class CGameProcLogIn* s_pProcLogIn;
 	static class CGameProcNationSelect* s_pProcNationSelect;
@@ -117,8 +118,8 @@ public:
 	static void ShowOptions();
 	static bool IsOptionsOpen();
 
-	/// \brief Whether a window that keeps the input to itself is open: the Options window or the
-	/// Power-up Store.
+	/// \brief Whether a window that keeps the input to itself is open: the Options window, the
+	/// Power-up Store or Genie's window.
 	static bool IsModalWindowOpen();
 	static void RenderModalWindows();
 	static void ReConnect();

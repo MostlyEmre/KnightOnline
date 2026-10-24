@@ -52,6 +52,8 @@ set(WARFARE_SCENE_CHARACTER_CREATION_SOURCES
 set(WARFARE_SCENE_INGAME_SOURCES
   GameProcMain.cpp
   GameProcMain.h
+  Genie.cpp
+  Genie.h
   GenieRules.h
   GenieSettings.h
 )
@@ -83,6 +85,8 @@ set(WARFARE_SCENE_INGAME_UI_SOURCES
   UIEndingDisplay.h
   UIExitMenu.cpp
   UIExitMenu.h
+  UIGenie.cpp
+  UIGenie.h
   UIHelp.cpp
   UIHelp.h
   UIHotKeyDlg.cpp

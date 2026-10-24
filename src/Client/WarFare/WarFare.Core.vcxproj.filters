@@ -152,6 +152,9 @@
     <ClCompile Include="GameProcMain.cpp">
       <Filter>Scene\Ingame</Filter>
     </ClCompile>
+    <ClCompile Include="Genie.cpp">
+      <Filter>Scene\Ingame</Filter>
+    </ClCompile>
     <ClCompile Include="N3Pond.cpp">
       <Filter>World\Water</Filter>
     </ClCompile>
@@ -303,6 +306,9 @@
       <Filter>Scene\Ingame\UI</Filter>
     </ClCompile>
     <ClCompile Include="UIOptions.cpp">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UIGenie.cpp">
       <Filter>Scene\Ingame\UI</Filter>
     </ClCompile>
     <ClCompile Include="UIPowerUpStore.cpp">
@@ -479,6 +485,9 @@
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
     <ClInclude Include="UIOptions.h">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UIGenie.h">
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
     <ClInclude Include="UIPowerUpStore.h">
@@ -701,6 +710,9 @@
       <Filter>Scene\Nation selection</Filter>
     </ClInclude>
     <ClInclude Include="GameProcMain.h">
+      <Filter>Scene\Ingame</Filter>
+    </ClInclude>
+    <ClInclude Include="Genie.h">
       <Filter>Scene\Ingame</Filter>
     </ClInclude>
     <ClInclude Include="GenieRules.h">

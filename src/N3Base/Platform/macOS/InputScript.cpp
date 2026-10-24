@@ -274,6 +274,14 @@ bool Run(const Command& command)
 		return true;
 	}
 
+	if (command.verb == "genie")
+	{
+		// Genie's window, as G opens it in the game.
+		if (Handlers().OnShowGenie)
+			Handlers().OnShowGenie();
+		return true;
+	}
+
 	if (command.verb == "handoff")
 	{
 		// Real input from here on, for whoever is at the Mac.

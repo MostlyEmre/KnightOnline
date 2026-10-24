@@ -43,6 +43,10 @@ struct EventHandlers
 	/// menu's Settings..., Cmd-,).
 	std::function<void()> OnShowOptions;
 
+	/// \brief Scripted runs (InputScript's "genie" command): open or close Genie's window, as G
+	/// does in the game. A script's keys don't reach the game without the window focused.
+	std::function<void()> OnShowGenie;
+
 	/// \brief The text in the text input field (TextInput.h) changed.
 	std::function<void()> OnTextInputChanged;
 

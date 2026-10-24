@@ -326,5 +326,10 @@ static Platform::EventHandlers CreateEventHandlers()
 	handlers.OnTextInputChanged = OnTextInputChanged;
 	handlers.OnSocketEvent      = OnSocketEvent;
 	handlers.OnShowOptions      = [] { CGameProcedure::ShowOptions(); };
+	handlers.OnShowGenie        = []
+	{
+		if (CGameProcedure::s_pProcMain != nullptr && CGameProcedure::s_pProcActive == CGameProcedure::s_pProcMain)
+			CGameProcedure::s_pProcMain->CommandToggleUIGenie();
+	};
 	return handlers;
 }

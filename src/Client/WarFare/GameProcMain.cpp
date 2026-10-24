@@ -56,6 +56,8 @@
 #include "UILevelGuide.h"
 #include "UIMsgBoxOkCancel.h"
 #include "UIPowerUpStore.h"
+#include "Genie.h"
+#include "UIGenie.h"
 
 #include "SubProcPerTrade.h"
 #include "CountableItemEditDlg.h"
@@ -149,6 +151,7 @@ CGameProcMain::CGameProcMain()     // r기본 생성자.. 각 변수의 역활�
 
 	m_pSubProcPerTrade      = new CSubProcPerTrade();
 	m_pMagicSkillMng        = new CMagicSkillMng(this);
+	m_pGenie                = new CGenie(this);
 	m_pTargetSymbol         = new CN3Shape(); // 플레이어가 타겟으로 잡은 캐릭터의 위치위에 그리면 된다..
 	m_pWarMessage           = new CWarMessage;
 
@@ -200,6 +203,7 @@ CGameProcMain::~CGameProcMain()
 
 	delete m_pSubProcPerTrade;
 	delete m_pMagicSkillMng;
+	delete m_pGenie;
 	delete m_pWarMessage;
 	delete m_pTargetSymbol; // 플레이어가 타겟으로 잡은 캐릭터의 위치위에 그리면 된다..
 
@@ -208,6 +212,11 @@ CGameProcMain::~CGameProcMain()
 
 void CGameProcMain::Release()
 {
+	if (m_pGenie != nullptr)
+		m_pGenie->OnLeaveGame();
+	if (s_pUIGenie != nullptr)
+		s_pUIGenie->Close();
+
 	this->ReleaseSound();
 	this->ReleaseUIs();
 
@@ -462,6 +471,8 @@ void CGameProcMain::Tick()
 
 	if (m_pMagicSkillMng)
 		m_pMagicSkillMng->Tick();
+	if (m_pGenie)
+		m_pGenie->Tick(CN3Base::TimeGet());
 	if (m_pWarMessage)
 		m_pWarMessage->Tick();
 	if (m_pLightMgr)
@@ -630,6 +641,7 @@ void CGameProcMain::Render()
 	ACT_WORLD->RenderSkyWeather(); // 하늘 렌더링..
 
 	CGameProcedure::Render();      // UI 나 그밖의 기본적인 것들 렌더링..
+	m_pGenie->RenderIndicator();
 	if (m_pWarMessage)
 		m_pWarMessage->RenderMessage();
 	if (s_pGameCursor)
@@ -1022,6 +1034,10 @@ bool CGameProcMain::ProcessPacket(Packet& pkt)
 			MsgRecv_ShoppingMall(pkt);
 			return true;
 
+		case WIZ_GENIE:
+			MsgRecv_Genie(pkt);
+			return true;
+
 		default:
 			break;
 	}
@@ -1277,6 +1293,9 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_INVENTORY))
 			CommandToggleUIInventory();
+
+		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_GENIE))
+			CommandToggleUIGenie();
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_STATE))
 			CommandToggleUIState();
@@ -8089,4 +8108,34 @@ void CGameProcMain::MsgRecv_ShoppingMall(Packet& pkt)
 		default:
 			break;
 	}
+}
+
+void CGameProcMain::MsgRecv_Genie(Packet& pkt)
+{
+	switch (pkt.read<uint8_t>())
+	{
+		case GENIE_AVAILABLE:
+			m_pGenie->OnAvailable(pkt.read<uint8_t>() != 0);
+			break;
+
+		case GENIE_START:
+			m_pGenie->OnStartResult(pkt.read<uint8_t>() != 0);
+			break;
+
+		default:
+			break;
+	}
+}
+
+bool CGameProcMain::CommandToggleUIGenie()
+{
+	if (s_pUIGenie == nullptr)
+		s_pUIGenie = new CUIGenie();
+
+	if (s_pUIGenie->IsVisible())
+		s_pUIGenie->Close();
+	else
+		s_pUIGenie->Open();
+
+	return s_pUIGenie->IsVisible();
 }

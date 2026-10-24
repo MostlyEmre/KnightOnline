@@ -132,6 +132,7 @@
     <ClCompile Include="GameProcLogIn_1098.cpp" />
     <ClCompile Include="GameProcMain.cpp" />
     <ClCompile Include="GameProcNationSelect.cpp" />
+    <ClCompile Include="Genie.cpp" />
     <ClCompile Include="IconItemSkill.cpp" />
     <ClCompile Include="ItemRepairMgr.cpp" />
     <ClCompile Include="LayoutChecks.cpp" />
@@ -179,6 +180,7 @@
     <ClCompile Include="UIDroppedItemDlg.cpp" />
     <ClCompile Include="UIEndingDisplay.cpp" />
     <ClCompile Include="UIExitMenu.cpp" />
+    <ClCompile Include="UIGenie.cpp" />
     <ClCompile Include="UIHelp.cpp" />
     <ClCompile Include="UIHotKeyDlg.cpp" />
     <ClCompile Include="UIImageTooltipDlg.cpp" />
@@ -245,6 +247,7 @@
     <ClInclude Include="GameProcLogIn_1098.h" />
     <ClInclude Include="GameProcMain.h" />
     <ClInclude Include="GameProcNationSelect.h" />
+    <ClInclude Include="Genie.h" />
     <ClInclude Include="GenieRules.h" />
     <ClInclude Include="GenieSettings.h" />
     <ClInclude Include="IconItemSkill.h" />
@@ -295,6 +298,7 @@
     <ClInclude Include="UIDroppedItemDlg.h" />
     <ClInclude Include="UIEndingDisplay.h" />
     <ClInclude Include="UIExitMenu.h" />
+    <ClInclude Include="UIGenie.h" />
     <ClInclude Include="UIHelp.h" />
     <ClInclude Include="UIHotKeyDlg.h" />
     <ClInclude Include="UIImageTooltipDlg.h" />

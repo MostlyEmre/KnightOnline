@@ -22,6 +22,7 @@
 #include "UIManager.h"
 #include "UIOptions.h"
 #include "UIPowerUpStore.h"
+#include "UIGenie.h"
 #include "UINotice.h"
 #include "UIHelp.h"
 #include "UIHotKeyDlg.h"
@@ -65,6 +66,7 @@ CUILoading* CGameProcedure::s_pUILoading                         = nullptr; // ë
 CUIMessageBoxManager* CGameProcedure::s_pMsgBoxMgr               = nullptr; // MessageBox Manager
 CUIOptions* CGameProcedure::s_pUIOptions                         = nullptr;
 CUIPowerUpStore* CGameProcedure::s_pUIPowerUpStore               = nullptr;
+CUIGenie* CGameProcedure::s_pUIGenie                             = nullptr;
 //bool				CGameProcedure::s_bUseSpeedHack = false;
 
 CGameProcedure* CGameProcedure::s_pProcPrev                      = nullptr;
@@ -287,6 +289,8 @@ void CGameProcedure::StaticMemberRelease()
 	s_pUIOptions = nullptr;
 	delete s_pUIPowerUpStore;
 	s_pUIPowerUpStore = nullptr;
+	delete s_pUIGenie;
+	s_pUIGenie = nullptr;
 
 	delete s_pMsgBoxMgr;
 	s_pMsgBoxMgr = nullptr;
@@ -322,6 +326,8 @@ void CGameProcedure::Tick()
 		s_pUIOptions->TakeInput(s_pLocalInput);
 	if (s_pUIPowerUpStore != nullptr)
 		s_pUIPowerUpStore->TakeInput(s_pLocalInput);
+	if (s_pUIGenie != nullptr)
+		s_pUIGenie->TakeInput(s_pLocalInput);
 
 	ProcessUIKeyInput();
 
@@ -495,7 +501,8 @@ bool CGameProcedure::IsOptionsOpen()
 
 bool CGameProcedure::IsModalWindowOpen()
 {
-	return IsOptionsOpen() || (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible());
+	return IsOptionsOpen() || (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
+		   || (s_pUIGenie != nullptr && s_pUIGenie->IsVisible());
 }
 
 void CGameProcedure::RenderModalWindows()
@@ -503,8 +510,10 @@ void CGameProcedure::RenderModalWindows()
 	if (!IsModalWindowOpen())
 		return;
 
-	// The Options window over the store.
+	// The Options window over the store and Genie's window.
 	CUIManager::RenderStateSet();
+	if (s_pUIGenie != nullptr && s_pUIGenie->IsVisible())
+		s_pUIGenie->Render();
 	if (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
 		s_pUIPowerUpStore->Render();
 	if (IsOptionsOpen())

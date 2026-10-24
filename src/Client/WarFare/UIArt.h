@@ -111,6 +111,9 @@ public:
 
 	bool ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg) override;
 
+	/// \brief A key that closes the window, besides Esc (the one that opens it, say)
+	void SetToggleKey(int iDIK);
+
 protected:
 	/// \brief Sizes the window and puts the frame, the title and the close button in. Children added
 	/// later are drawn over the ones added before them, so this comes first.
@@ -122,6 +125,7 @@ private:
 	CN3UIEdit* m_pEditFocused     = nullptr; // the text field that had the keyboard before opening
 	CGameProcedure* m_pProcOpened = nullptr;
 	bool m_bHoldInput             = false;
+	int m_iToggleKey              = 0;
 };
 
 #endif // CLIENT_WARFARE_UIART_H
