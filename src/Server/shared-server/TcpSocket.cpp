@@ -212,7 +212,10 @@ void TcpSocket::CloseProcess()
 	{
 		asio::error_code ec;
 		_socket->shutdown(asio::socket_base::shutdown_both, ec);
-		if (ec)
+
+		// When the peer has already closed the connection, BSD sockets (macOS) fail shutdown()
+		// with ENOTCONN where Windows succeeds. Nothing is wrong then.
+		if (ec && ec != asio::error::not_connected)
 		{
 			spdlog::error("TcpSocket({})::CloseProcess: shutdown() failed. [socketId={} error={}]",
 				GetImplName(), _socketId, ec.message());
