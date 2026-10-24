@@ -3,6 +3,7 @@ add_executable(FileIO.Tests
   FileReaderSetup_test.cpp
   FileWriter_test.cpp
   FileWriterSetup_test.cpp
+  MemoryReader_test.cpp
   PathResolver_test.cpp)
 
 set_target_properties(FileIO.Tests PROPERTIES

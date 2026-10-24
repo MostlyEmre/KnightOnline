@@ -5,6 +5,7 @@
     <ClCompile Include="FileReaderSetup_test.cpp" />
     <ClCompile Include="FileWriter_test.cpp" />
     <ClCompile Include="FileWriterSetup_test.cpp" />
+    <ClCompile Include="MemoryReader_test.cpp" />
     <ClCompile Include="PathResolver_test.cpp" />
   </ItemGroup>
 </Project>

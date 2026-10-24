@@ -2,8 +2,9 @@
 #include "N3TableBaseImpl.h"
 
 #include <FileIO/FileReader.h>
-#include <FileIO/FileWriter.h>
-#include <FileIO/PathResolver.h>
+#include <FileIO/MemoryReader.h>
+
+#include <vector>
 
 #ifdef _N3GAME
 #include "LogWriter.h"
@@ -31,24 +32,20 @@ bool CN3TableBaseImpl::LoadFromFile(const std::string& szFN)
 		return false;
 	}
 
-	std::error_code ec;
-
-	// 파일 암호화 풀기.. .. 임시 파일에다 쓴다음 ..
-	std::string szFNTmp      = szFN + ".tmp";
+	// 파일 암호화 풀기..
 	size_t encryptedFileSize = static_cast<size_t>(encryptedFile.Size());
 	if (encryptedFileSize == 0)
 	{
 		encryptedFile.Close();
-		std::filesystem::remove(PathResolver::Resolve(szFNTmp), ec); // 임시 파일 지우기..
 		return false;
 	}
 
 	// 원래 파일을 읽고..
-	uint8_t* pDatas = new uint8_t[encryptedFileSize];
-	encryptedFile.Read(pDatas, encryptedFileSize); // 암호화된 데이터 읽고..
-	encryptedFile.Close();                         // 원래 파일 닫고
+	std::vector<uint8_t> datas(encryptedFileSize);
+	encryptedFile.Read(datas.data(), encryptedFileSize); // 암호화된 데이터 읽고..
+	encryptedFile.Close();                               // 원래 파일 닫고
 
-												   // 테이블 만드는 툴에서 쓰는 키와 같은 키..
+														 // 테이블 만드는 툴에서 쓰는 키와 같은 키..
 	uint16_t key_r  = 0x0816;
 	uint16_t key_c1 = 0x6081;
 	uint16_t key_c2 = 0x1608;
@@ -70,38 +67,17 @@ bool CN3TableBaseImpl::LoadFromFile(const std::string& szFN)
 	//}
 
 	// 암호화 풀고..
-	for (uint32_t i = 0; i < encryptedFileSize; i++)
+	for (uint8_t& byCipher : datas)
 	{
-		uint8_t byData = (pDatas[i] ^ (key_r >> 8));
-		key_r          = (pDatas[i] + key_r) * key_c1 + key_c2;
-		pDatas[i]      = byData;
+		uint8_t byData = (byCipher ^ (key_r >> 8));
+		key_r          = (byCipher + key_r) * key_c1 + key_c2;
+		byCipher       = byData;
 	}
 
-	// TODO: Rather than write to file to read it back again, we should just read it from a memory stream.
-
-	// 임시 파일에 쓴다음.. 다시 연다..
-	{
-		FileWriter tmpFileWriter;
-		if (!tmpFileWriter.Create(szFNTmp))
-		{
-			tmpFileWriter.Close();
-			delete[] pDatas;
-			return false;
-		}
-
-		tmpFileWriter.Write(pDatas, encryptedFileSize); // 임시파일에 암호화 풀린 데이터 쓰기
-	}
-
-	delete[] pDatas;
-	pDatas = nullptr;
-
-	// 임시 파일 읽기 모드로 열기.
-	FileReader decryptedFile;
-	if (!decryptedFile.OpenExisting(szFNTmp))
-	{
-		std::filesystem::remove(PathResolver::Resolve(szFNTmp), ec);
-		return false;
-	}
+	// Read the decrypted table straight from memory (it used to go through a temporary file next
+	// to the table, which also needed the data folder to be writable).
+	MemoryReader decryptedFile;
+	decryptedFile.Open(std::move(datas), szFN);
 
 	bool bResult = Load(decryptedFile);
 	decryptedFile.Close();
@@ -112,9 +88,6 @@ bool CN3TableBaseImpl::LoadFromFile(const std::string& szFN)
 		CLogWriter::Write("N3TableBase - incorrect table ({})", szFN);
 #endif
 	}
-
-	// 임시 파일 지우기..
-	std::filesystem::remove(PathResolver::Resolve(szFNTmp), ec);
 
 	return bResult;
 }
