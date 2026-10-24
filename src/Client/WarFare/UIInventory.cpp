@@ -697,7 +697,7 @@ int CUIInventory::GetArmDestinationIndex(__IconItemSkill* spItem)
 	return -1;
 }
 
-bool CUIInventory::CheckIconDropIfSuccessSendToServer(__IconItemSkill* spItem)
+bool CUIInventory::CheckIconDropIfSuccessSendToServer([[maybe_unused]] __IconItemSkill* spItem)
 {
 	assert(spItem == s_sSelectedIconInfo.pItemSelect);
 
