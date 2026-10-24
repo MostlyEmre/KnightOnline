@@ -2073,6 +2073,9 @@ void CUser::SendMyInfo(int type)
 		sendIndex); // account status (0 = none, 1 = normal prem with expiry in hours, 2 = pc room)
 	SetByte(sendBuffer, m_pUserData->m_byPremiumType, sendIndex);
 	SetShort(sendBuffer, m_pUserData->m_sPremiumTime, sendIndex);
+	// Officially, signing up to the beginner helper event (and not having had its reward yet) makes
+	// the user a "chicken" again on every login.
+	m_bIsChicken = CheckExistEvent(QUEST_BEGINNER_QUEST, QUEST_STATE_IN_PROGRESS);
 	SetByte(sendBuffer, static_cast<uint8_t>(m_bIsChicken), sendIndex);
 	SetDWORD(sendBuffer, m_pUserData->m_iMannerPoint, sendIndex);
 
@@ -2781,6 +2784,26 @@ void CUser::ZoneChange(int zone, float x, float z)
 	m_pMain->Send_AIServer(m_pUserData->m_bZone, ai_send_buff, ai_send_index);
 
 	m_bZoneChangeFlag = false;
+}
+
+void CUser::ZoneChangeParty(int zone, float x, float z)
+{
+	_PARTY_GROUP* party = m_sPartyIndex != -1 ? m_pMain->m_PartyMap.GetData(m_sPartyIndex)
+											  : nullptr;
+	if (party == nullptr)
+	{
+		ZoneChange(zone, x, z);
+		return;
+	}
+
+	for (int i = 0; i < MAX_PARTY_SIZE; i++)
+	{
+		std::shared_ptr<CUser> member = party->userSocketIds[i] >= 0
+											? m_pMain->GetUserPtr(party->userSocketIds[i])
+											: nullptr;
+		if (member != nullptr && member->m_bResHpType != USER_DEAD)
+			member->ZoneChange(zone, x, z);
+	}
 }
 
 void CUser::Warp(char* pBuf)
@@ -5698,9 +5721,8 @@ fail_return:
 
 void CUser::StateChange(char* pBuf)
 {
-	int index = 0, sendIndex = 0;
+	int index    = 0;
 	uint8_t type = 0, buff = 0;
-	char sendBuffer[128] {};
 
 	type = GetByte(pBuf, index);
 	buff = GetByte(pBuf, index);
@@ -5719,10 +5741,6 @@ void CUser::StateChange(char* pBuf)
 	else if (type == 3)
 		m_bAbnormalType = buff;
 
-	SetByte(sendBuffer, WIZ_STATE_CHANGE, sendIndex);
-	SetShort(sendBuffer, _socketId, sendIndex);
-	SetByte(sendBuffer, type, sendIndex);
-
 	uint32_t nResult = 0;
 	if (type == 1)
 		nResult = m_bResHpType;
@@ -5736,8 +5754,51 @@ void CUser::StateChange(char* pBuf)
 	else
 		nResult = buff;
 
-	SetDWORD(sendBuffer, nResult, sendIndex);
+	SendStateChange(type, nResult);
+}
 
+void CUser::StateChangeServerDirect(uint8_t type, uint32_t value)
+{
+	// As the official server checks them (the client's own requests only go up to 5).
+	if (type >= 10)
+		return;
+
+	// Operators only!!!
+	if ((type == 5 || (type == 3 && value == 5)) && m_pUserData->m_bAuthority != AUTHORITY_MANAGER)
+		return;
+
+	if (type == 1)
+	{
+		if (m_pUserData->m_sHp <= 0 || m_bResHpType == USER_DEAD)
+			return;
+
+		// State 5 has no name here; officially it's checked alongside blinking.
+		if ((value == 2 && (m_bResHpType == USER_BLINKING || m_bResHpType == 5))
+			|| (value == 5 && m_bResHpType == USER_BLINKING))
+			return;
+	}
+
+	uint32_t result = value;
+	if (type == 1)
+		result = m_bResHpType = static_cast<uint8_t>(value);
+	else if (type == 2)
+		result = m_bNeedParty = static_cast<uint8_t>(value);
+	else if (type == 3)
+		result = m_bAbnormalType = static_cast<uint8_t>(value);
+	else if (type == 8)
+		result = static_cast<uint8_t>(m_bIsChicken = (value != 0));
+
+	SendStateChange(type, result);
+}
+
+void CUser::SendStateChange(uint8_t type, uint32_t value)
+{
+	int sendIndex = 0;
+	char sendBuffer[128] {};
+	SetByte(sendBuffer, WIZ_STATE_CHANGE, sendIndex);
+	SetShort(sendBuffer, _socketId, sendIndex);
+	SetByte(sendBuffer, type, sendIndex);
+	SetDWORD(sendBuffer, value, sendIndex);
 	m_pMain->Send_Region(sendBuffer, sendIndex, m_pUserData->m_bZone, m_RegionX, m_RegionZ);
 }
 
@@ -5918,12 +5979,13 @@ void CUser::ChangeMannerPoint(const int loyaltyAmount)
 
 			CurrencyChange(partyMember->m_pUserData->m_iMannerPoint, partyPointChange);
 
+			// The helper is told their own new points (officially as well).
 			char sendBuff[128] {};
 			int sendIndex = 0;
 			SetByte(sendBuff, WIZ_LOYALTY_CHANGE, sendIndex);
 			SetByte(sendBuff, LOYALTY_CHANGE_MANNER, sendIndex);
-			SetInt(sendBuff, m_pUserData->m_iMannerPoint, sendIndex);
-			Send(sendBuff, sendIndex);
+			SetInt(sendBuff, partyMember->m_pUserData->m_iMannerPoint, sendIndex);
+			partyMember->Send(sendBuff, sendIndex);
 		}
 	}
 }
@@ -12242,6 +12304,20 @@ bool CUser::RunEvent(const EVENT_DATA* pEventData)
 				StatPointResetRequest(true);
 				break;
 
+			case EXEC_ROB_ALLITEM_PARTY:
+				RobAllItemParty(pExec->m_ExecInt[0]);
+				break;
+
+			case EXEC_ZONE_CHANGE_PARTY:
+				ZoneChangeParty(pExec->m_ExecInt[0], static_cast<float>(pExec->m_ExecInt[1]),
+					static_cast<float>(pExec->m_ExecInt[2]));
+				break;
+
+			case EXEC_STATE_CHANGE:
+				StateChangeServerDirect(static_cast<uint8_t>(pExec->m_ExecInt[0]),
+					static_cast<uint32_t>(pExec->m_ExecInt[1]));
+				break;
+
 			case EXEC_CHANGE_MANNER:
 				ChangeMannerPoint(pExec->m_ExecInt[0]);
 				break;
@@ -12769,6 +12845,64 @@ bool CUser::RobItem(int itemId, int16_t count)
 
 	Send(sendBuffer, sendIndex);
 	return true;
+}
+
+bool CUser::RobAllItem(int itemId)
+{
+	if (m_pMain->m_ItemTableMap.GetData(itemId) == nullptr)
+		return false;
+
+	int i = SLOT_MAX;
+	for (; i < SLOT_MAX + HAVE_MAX; i++)
+	{
+		if (m_pUserData->m_sItemArray[i].nNum == itemId)
+			break;
+	}
+
+	if (i >= SLOT_MAX + HAVE_MAX)
+		return false;
+
+	_ITEM_DATA& item    = m_pUserData->m_sItemArray[i];
+	item.nNum           = 0;
+	item.sDuration      = 0;
+	item.sCount         = 0;
+	item.byFlag         = 0;
+	item.sTimeRemaining = 0;
+	item.nSerialNum     = 0;
+
+	int sendIndex       = 0;
+	char sendBuffer[256] {};
+	SendItemWeight();
+	SetByte(sendBuffer, WIZ_ITEM_COUNT_CHANGE, sendIndex);
+	SetShort(sendBuffer, 1, sendIndex);
+	SetByte(sendBuffer, 1, sendIndex);
+	SetByte(sendBuffer, i - SLOT_MAX, sendIndex);
+	SetDWORD(sendBuffer, itemId, sendIndex);
+	SetDWORD(sendBuffer, 0, sendIndex);
+	SetByte(sendBuffer, ITEM_COUNT_CHANGE_EXISTING, sendIndex);
+	SetShort(sendBuffer, 0, sendIndex);
+	Send(sendBuffer, sendIndex);
+	return true;
+}
+
+void CUser::RobAllItemParty(int itemId)
+{
+	_PARTY_GROUP* party = m_sPartyIndex != -1 ? m_pMain->m_PartyMap.GetData(m_sPartyIndex)
+											  : nullptr;
+	if (party == nullptr)
+	{
+		RobAllItem(itemId);
+		return;
+	}
+
+	for (int i = 0; i < MAX_PARTY_SIZE; i++)
+	{
+		std::shared_ptr<CUser> member = party->userSocketIds[i] >= 0
+											? m_pMain->GetUserPtr(party->userSocketIds[i])
+											: nullptr;
+		if (member != nullptr)
+			member->RobAllItem(itemId);
+	}
 }
 
 bool CUser::CheckAndRobItems(const std::span<const ItemPair> items, const int gold)

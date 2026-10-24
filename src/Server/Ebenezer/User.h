@@ -351,6 +351,15 @@ public:
 	/// \return true when all items were successfully taken, false otherwise
 	bool RobItem(int itemId, int16_t count);
 
+	/// \brief Removes the first stack of itemId from the user's inventory, whatever its count
+	/// (officially, what DESTROY_ITEM does)
+	/// \return false when there's no such item
+	bool RobAllItem(int itemId);
+
+	/// \brief ROB_ALLITEM_PARTY: RobAllItem() for everyone in the user's party, or the user alone
+	/// without one.
+	void RobAllItemParty(int itemId);
+
 	/// \brief Attempts to remove all the items from the user in the input array
 	/// \return true when all items were successfully taken, false otherwise
 	bool CheckAndRobItems(std::span<const ItemPair> items, int gold = 0);
@@ -562,8 +571,21 @@ public:
 	void ChangeMannerPoint(int loyaltyChange);
 
 	void StateChange(char* pBuf);
+
+	/// \brief STATE_CHANGE: a state change made by a quest. Officially it accepts more state
+	/// types than the client's request (StateChange()), such as 8, the beginner helper event's
+	/// "chicken" flag.
+	void StateChangeServerDirect(uint8_t type, uint32_t value);
+
+	/// \brief Tells the region about one of the user's states.
+	void SendStateChange(uint8_t type, uint32_t value);
+
 	void PointChange(char* pBuf);
 	void ZoneChange(int zone, float x, float z);
+
+	/// \brief ZONE_CHANGE_PARTY: ZoneChange() for everyone alive in the user's party, or the user
+	/// alone without one.
+	void ZoneChangeParty(int zone, float x, float z);
 	void ItemGet(char* pBuf);
 	static bool IsValidName(const char* name);
 	void AllCharInfoToAgent();

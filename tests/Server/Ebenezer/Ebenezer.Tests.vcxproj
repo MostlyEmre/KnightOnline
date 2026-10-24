@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="EventExec_test.cpp" />
     <ClCompile Include="EventLogic_test.cpp" />
     <ClCompile Include="data\ItemExchange_test_data.h" />
     <ClCompile Include="ItemExchange_test.cpp" />

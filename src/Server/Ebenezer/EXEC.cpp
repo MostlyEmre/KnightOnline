@@ -199,6 +199,24 @@ bool EXEC::Parse(const char* line, const std::string& filename, int lineNumber)
 			m_Exec = EXEC_STAT_POINT_FREE;
 			break;
 
+		// E ROB_ALLITEM_PARTY {item ID}
+		case "ROB_ALLITEM_PARTY"_djb2:
+			m_Exec      = EXEC_ROB_ALLITEM_PARTY;
+			argsToParse = 1;
+			break;
+
+		// E ZONE_CHANGE_PARTY {zoneId} {x} {z}
+		case "ZONE_CHANGE_PARTY"_djb2:
+			m_Exec      = EXEC_ZONE_CHANGE_PARTY;
+			argsToParse = 3;
+			break;
+
+		// E STATE_CHANGE {state type} {value}
+		case "STATE_CHANGE"_djb2:
+			m_Exec      = EXEC_STATE_CHANGE;
+			argsToParse = 2;
+			break;
+
 		// E CHANGE_MANNER {delta}
 		case "CHANGE_MANNER"_djb2:
 			m_Exec      = EXEC_CHANGE_MANNER;
