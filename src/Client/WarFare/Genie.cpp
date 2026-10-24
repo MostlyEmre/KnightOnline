@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string_view>
 #include <vector>
 
 namespace
@@ -149,9 +150,9 @@ void CGenie::Stop(Genie::StopReason eReason)
 		HaltActions();
 	}
 
-	const char* szMessage = Genie::StopMessage(eReason);
-	if (szMessage[0] != '\0' && eReason != Genie::StopReason::LeftGame)
-		m_pMain->MsgOutput(szMessage, COLOR_STOPPED);
+	const std::string_view szMessage = Genie::StopMessage(eReason);
+	if (!szMessage.empty() && eReason != Genie::StopReason::LeftGame)
+		m_pMain->MsgOutput(std::string(szMessage), COLOR_STOPPED);
 }
 
 void CGenie::HaltActions()

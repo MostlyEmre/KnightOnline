@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -156,7 +157,7 @@ inline void Load(CIni& ini, Settings& out)
 	// Coins can go past an int; the floor is kept as text.
 	const std::string szFloor = ini.GetString(SECTION, "CoinFloor", "0");
 	int64_t iFloor            = 0;
-	std::from_chars(szFloor.data(), szFloor.data() + szFloor.size(), iFloor);
+	std::from_chars(std::to_address(szFloor.begin()), std::to_address(szFloor.end()), iFloor);
 	out.iCoinFloor              = std::max<int64_t>(0, iFloor);
 
 	out.potionMerchant.iNpcID   = ini.GetInt(SECTION, "PotionMerchantNpc", -1);
