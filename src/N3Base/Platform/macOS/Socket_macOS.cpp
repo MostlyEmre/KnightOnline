@@ -5,8 +5,11 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cstring>
 #include <vector>
 
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <poll.h>
 
 namespace Platform
@@ -70,11 +73,19 @@ int TcpSocket::Connect(
 	}
 	else
 	{
-		asio::ip::tcp::resolver resolver(Context());
-		auto results = resolver.resolve(asio::ip::tcp::v4(), szHost, std::to_string(port), ec);
-		if (ec || results.empty())
+		// A blocking lookup, like gethostbyname in the Windows version.
+		addrinfo hints {};
+		hints.ai_family   = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+		addrinfo* result  = nullptr;
+		if (getaddrinfo(szHost.c_str(), nullptr, &hints, &result) != 0 || result == nullptr)
 			return -1;
-		endpoint = *results.begin();
+
+		sockaddr_in address {};
+		std::memcpy(&address, result->ai_addr, sizeof(address));
+		freeaddrinfo(result);
+		endpoint = asio::ip::tcp::endpoint(
+			asio::ip::address_v4(ntohl(address.sin_addr.s_addr)), port);
 	}
 
 	_impl->socket.open(asio::ip::tcp::v4(), ec);
