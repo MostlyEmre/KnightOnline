@@ -1,6 +1,7 @@
 ﻿#include "../Shell.h"
 #include "Cocoa/CocoaApp.h"
 #include "CodePage.h"
+#include "MacState.h"
 #include "NotImplemented.h"
 
 #include <cctype>
@@ -67,10 +68,13 @@ void ShowMessageBox(HWND /*hWndOwner*/, const wchar_t* text, const wchar_t* capt
 
 void ShellOpen(const std::string& target)
 {
-	// Windows programs (the client launches Option.exe) don't exist here.
+	// Windows programs don't exist here. The game launches Option.exe, then quits; the Settings
+	// window takes its place.
 	std::string lower = target;
 	for (char& ch : lower)
 		ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+	if (lower == "option.exe")
+		macOS::RequestOptionsAfterQuit();
 	if (lower.size() >= 4 && lower.ends_with(".exe"))
 		return;
 

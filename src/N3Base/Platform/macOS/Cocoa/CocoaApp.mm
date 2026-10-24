@@ -4,6 +4,7 @@
 
 #import <AppKit/AppKit.h>
 #import <Carbon/Carbon.h> // kVK_* virtual key codes
+#import <IOKit/pwr_mgt/IOPMLib.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 
@@ -51,6 +52,8 @@ struct AppState
 	NSCursor* blank         = nil;
 	CGFloat wheelRemainder  = 0.0;
 	CGFloat wheelRemainderX = 0.0;
+	InputOptions input;
+	IOPMAssertionID awakeAssertion = kIOPMNullAssertionID;
 };
 
 AppState& App()
@@ -213,7 +216,10 @@ void TrackKeys(NSEvent* event)
 			break;
 
 		case NSEventTypeLeftMouseDown:
-			app.tappedButtons |= 0x1;
+			app.tappedButtons |= app.input.bControlClick
+										 && (event.modifierFlags & NSEventModifierFlagControl) != 0
+									 ? 0x2
+									 : 0x1;
 			break;
 
 		case NSEventTypeRightMouseDown:
@@ -502,11 +508,13 @@ NSCursor* BlankCursor()
 
 	// Sideways: which way the fingers moved, whatever the "natural scrolling" setting, and only
 	// while they're on the trackpad (no momentum after they lift).
-	if (event.momentumPhase != NSEventPhaseNone || !app.events.OnMouseHWheel)
+	if (event.momentumPhase != NSEventPhaseNone || !app.events.OnMouseHWheel
+		|| !app.input.bSwipeTurns)
 		return;
 
-	CGFloat across   = event.isDirectionInvertedFromDevice ? event.scrollingDeltaX
-														   : -event.scrollingDeltaX;
+	CGFloat across = (event.isDirectionInvertedFromDevice ? event.scrollingDeltaX
+														  : -event.scrollingDeltaX)
+					 * app.input.dSwipeScale;
 	CGFloat sideways = (event.hasPreciseScrollingDeltas ? across / 10.0 : across)
 					   + app.wheelRemainderX;
 	int sidewaysDelta   = static_cast<int>(sideways * 120.0);
@@ -674,6 +682,12 @@ NSCursor* BlankCursor()
 	std::fprintf(stderr, "KnightOnline: app resigned active\n");
 }
 
+- (void)showSettings:(id)sender
+{
+	if (App().events.OnShowSettings)
+		App().events.OnShowSettings();
+}
+
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)sender
 {
 	// Cmd-Q: ask the game like closing the window does.
@@ -688,7 +702,7 @@ namespace Platform::macOS::Cocoa
 {
 
 bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool bFullscreen,
-	bool bTakeFocus, const WindowEvents& events)
+	bool bTakeFocus, const WindowOptions& options, const WindowEvents& events)
 {
 	AppState& app = App();
 	if (app.window != nil || iWidth <= 0 || iHeight <= 0)
@@ -706,7 +720,12 @@ bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool 
 		NSMenu* menuBar     = [[NSMenu alloc] init];
 		NSMenuItem* appItem = [[NSMenuItem alloc] init];
 		[menuBar addItem:appItem];
-		NSMenu* appMenu = [[NSMenu alloc] init];
+		NSMenu* appMenu      = [[NSMenu alloc] init];
+		NSMenuItem* settings = [appMenu addItemWithTitle:@"Settings…"
+												  action:@selector(showSettings:)
+										   keyEquivalent:@","];
+		settings.target      = app.appDelegate;
+		[appMenu addItem:NSMenuItem.separatorItem];
 		[appMenu addItemWithTitle:[@"Quit " stringByAppendingString:title]
 						   action:@selector(terminate:)
 					keyEquivalent:@"q"];
@@ -715,12 +734,15 @@ bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool 
 
 		[NSApp finishLaunching];
 
-		app.width               = iWidth;
-		app.height              = iHeight;
-		app.fullscreen          = bFullscreen;
-		app.events              = events;
+		app.width           = iWidth;
+		app.height          = iHeight;
+		app.fullscreen      = bFullscreen;
+		app.events          = events;
 
-		NSRect content          = NSMakeRect(0, 0, iWidth, iHeight);
+		// In a window, the game's resolution in points, times the window size setting.
+		CGFloat windowScale = options.iScalePercent / 100.0;
+		NSRect content      = NSMakeRect(
+            0, 0, round(iWidth * windowScale), round(iHeight * windowScale));
 		NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
 								  | NSWindowStyleMaskMiniaturizable;
 		if (bFullscreen)
@@ -776,21 +798,24 @@ bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool 
 			// A whole-number scale (the game at the screen's size in points, on Retina) stays sharp.
 			CGFloat scale = MIN(gameRect.size.width * app.window.backingScaleFactor / iWidth,
 				gameRect.size.height * app.window.backingScaleFactor / iHeight);
-			app.layer.magnificationFilter = scale == floor(scale) ? kCAFilterNearest
-																  : kCAFilterLinear;
+			app.layer.magnificationFilter = !options.bSmooth && scale == floor(scale)
+												? kCAFilterNearest
+												: kCAFilterLinear;
 			app.window.level              = NSMainMenuWindowLevel + 1;
 			NSApp.presentationOptions     = NSApplicationPresentationHideDock
 										| NSApplicationPresentationHideMenuBar;
 		}
 		else
 		{
-			// Points map 1:1 to game pixels, so on Retina each pixel is shown as an exact 2x2 block.
+			// At 100%, points map 1:1 to game pixels, so on Retina each pixel is shown as an exact
+			// 2x2 block (and 3x3 at 150%).
 			app.layer.contentsGravity     = kCAGravityResize;
-			app.layer.magnificationFilter = kCAFilterNearest;
+			app.layer.magnificationFilter = options.bSmooth ? kCAFilterLinear : kCAFilterNearest;
 
 			// Reopen where the player last left the window, like other Mac apps.
 			if (![app.window setFrameUsingName:@"KnightOnline"])
 				[app.window center];
+			[app.window setContentSize:content.size]; // the saved frame may be from another size
 			app.window.frameAutosaveName = @"KnightOnline";
 		}
 
@@ -949,7 +974,63 @@ void ActivateGameWindow()
 
 uint32_t PressedMouseButtons()
 {
-	return static_cast<uint32_t>(NSEvent.pressedMouseButtons) | App().tappedButtons;
+	auto buttons = static_cast<uint32_t>(NSEvent.pressedMouseButtons);
+	if (App().input.bControlClick && (buttons & 0x1) != 0
+		&& (NSEvent.modifierFlags & NSEventModifierFlagControl) != 0)
+		buttons = (buttons & ~0x1u) | 0x2u; // the Mac's Control-click is a right-click
+	return buttons | App().tappedButtons;
+}
+
+void SetInputOptions(const InputOptions& options)
+{
+	App().input = options;
+}
+
+void SetKeepAwake(bool bAwake)
+{
+	AppState& app = App();
+	if (bAwake && app.awakeAssertion == kIOPMNullAssertionID)
+		IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleDisplaySleep,
+			kIOPMAssertionLevelOn, CFSTR("Playing Knight Online"), &app.awakeAssertion);
+	else if (!bAwake && app.awakeAssertion != kIOPMNullAssertionID)
+	{
+		IOPMAssertionRelease(app.awakeAssertion);
+		app.awakeAssertion = kIOPMNullAssertionID;
+	}
+}
+
+void HideGameWindow()
+{
+	@autoreleasepool
+	{
+		[App().window orderOut:nil];
+		NSApp.presentationOptions = NSApplicationPresentationDefault;
+	}
+}
+
+void RelaunchApp()
+{
+	@autoreleasepool
+	{
+		NSBundle* bundle = NSBundle.mainBundle;
+		if ([bundle.bundlePath hasSuffix:@".app"])
+		{
+			NSWorkspaceOpenConfiguration*
+				configuration = [NSWorkspaceOpenConfiguration configuration];
+			configuration.createsNewApplicationInstance = YES;
+			[NSWorkspace.sharedWorkspace openApplicationAtURL:bundle.bundleURL
+												configuration:configuration
+											completionHandler:nil];
+		}
+		else
+		{
+			NSTask* task             = [[NSTask alloc] init];
+			task.executableURL       = bundle.executableURL;
+			task.currentDirectoryURL = [NSURL
+				fileURLWithPath:NSFileManager.defaultManager.currentDirectoryPath];
+			[task launchAndReturnError:nil];
+		}
+	}
 }
 
 bool IsOptionDown()

@@ -159,6 +159,8 @@ elseif(APPLE)
     Platform/macOS/Cocoa/CoreTextFont.h
     Platform/macOS/Cocoa/MetalRenderer.h
     Platform/macOS/Cocoa/MetalRenderer.mm
+    Platform/macOS/Cocoa/OptionsWindow.h
+    Platform/macOS/Cocoa/OptionsWindow.mm
     Platform/macOS/CodePage.cpp
     Platform/macOS/CodePage.h
     Platform/macOS/Crypto_macOS.cpp
@@ -173,6 +175,8 @@ elseif(APPLE)
     Platform/macOS/MacState.h
     Platform/macOS/NotImplemented.h
     Platform/macOS/ScreenCapture_macOS.cpp
+    Platform/macOS/Options_macOS.cpp
+    Platform/macOS/Options_macOS.h
     Platform/macOS/Settings_macOS.cpp
     Platform/macOS/Shell_macOS.cpp
     Platform/macOS/Socket_macOS.cpp
@@ -189,10 +193,12 @@ if(APPLE)
     Platform/macOS/Cocoa/CocoaApp.mm
     Platform/macOS/Cocoa/CoreTextFont.cpp
     Platform/macOS/Cocoa/MetalRenderer.mm
+    Platform/macOS/Cocoa/OptionsWindow.mm
     PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
   set_source_files_properties(
     Platform/macOS/Cocoa/CocoaApp.mm
     Platform/macOS/Cocoa/MetalRenderer.mm
+    Platform/macOS/Cocoa/OptionsWindow.mm
     PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 
   set(N3BASE_APPLE_LIBS
@@ -200,6 +206,7 @@ if(APPLE)
     "-framework Carbon"
     "-framework CoreText"
     "-framework ImageIO"
+    "-framework IOKit"
     "-framework Metal"
     "-framework QuartzCore"
     "-framework UniformTypeIdentifiers"

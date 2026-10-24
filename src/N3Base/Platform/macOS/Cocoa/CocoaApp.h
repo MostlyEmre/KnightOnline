@@ -22,6 +22,22 @@ struct WindowEvents
 	std::function<void()> OnCloseRequested;
 	std::function<void(int iDelta)> OnMouseWheel;  // 120 per notch, like WHEEL_DELTA
 	std::function<void(int iDelta)> OnMouseHWheel; // sideways, positive to the right
+	std::function<void()> OnShowSettings;          // the app menu's Settings... (Cmd-,)
+};
+
+/// \brief How the game window shows the game's image (the [macOS] settings, Options_macOS.h).
+struct WindowOptions
+{
+	int iScalePercent = 100;   // window mode: the window's size against the game's resolution
+	bool bSmooth      = false; // filter the scaled image; otherwise nearest neighbour
+};
+
+/// \brief Trackpad and mouse settings.
+struct InputOptions
+{
+	bool bSwipeTurns   = true;  // two fingers sideways send OnMouseHWheel
+	double dSwipeScale = 1.0;   // and how much; negative reverses it
+	bool bControlClick = false; // a Control-click is a right-click
 };
 
 /// \brief What the keyboard does while the text input field has focus (NSTextInputClient).
@@ -41,7 +57,20 @@ struct TextInputEvents
 /// activating the application, so it doesn't take the keyboard from whatever the user is doing.
 /// Returns false on failure.
 bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool bFullscreen,
-	bool bTakeFocus, const WindowEvents& events);
+	bool bTakeFocus, const WindowOptions& options, const WindowEvents& events);
+
+/// \brief Applies the trackpad and mouse settings.
+void SetInputOptions(const InputOptions& options);
+
+/// \brief Keeps the display from sleeping (an IOKit power assertion) while bAwake.
+void SetKeepAwake(bool bAwake);
+
+/// \brief Hides the game window and gives back the menu bar and Dock (before showing the
+/// Settings window once the game has ended).
+void HideGameWindow();
+
+/// \brief Starts another instance of the game (the app bundle, or this executable outside one).
+void RelaunchApp();
 
 /// \brief Dispatches the pending window-system events without waiting.
 void PumpEvents();

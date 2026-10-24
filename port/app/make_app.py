@@ -144,6 +144,7 @@ def main():
                 "CFBundleShortVersionString": "1.298",
                 "CFBundleVersion": "1298",
                 "LSApplicationCategoryType": "public.app-category.role-playing-games",
+                "LSSupportsGameMode": True,
                 "LSMinimumSystemVersion": min_os(client),
                 "NSHighResolutionCapable": True,
                 "NSHumanReadableCopyright": "Open-KO (github.com/Open-KO/KnightOnline), built from github.com/MostlyEmre/KnightOnline",
