@@ -50,3 +50,5 @@ jobs:
 
     - name: Build tools
       run: msbuild /m /p:Configuration="${{matrix.BUILD_CONFIGURATION}}" /p:Platform="${{matrix.BUILD_PLATFORM}}" ClientTools.slnx
+
+# Fork CI: touched once to build the tools against the macOS port's N3Base changes (reverted after).
