@@ -1,4 +1,4 @@
-#include "Direct3D9_macOS.h"
+﻿#include "Direct3D9_macOS.h"
 #include "Cocoa/CocoaApp.h"
 #include "Cocoa/MetalRenderer.h"
 

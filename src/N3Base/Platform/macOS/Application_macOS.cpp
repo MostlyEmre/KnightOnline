@@ -1,4 +1,4 @@
-#include "../Application.h"
+﻿#include "../Application.h"
 #include "Cocoa/CocoaApp.h"
 #include "InputScript.h"
 #include "MacState.h"

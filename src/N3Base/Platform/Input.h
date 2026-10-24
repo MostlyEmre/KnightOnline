@@ -1,4 +1,4 @@
-#ifndef N3BASE_PLATFORM_INPUT_H
+﻿#ifndef N3BASE_PLATFORM_INPUT_H
 #define N3BASE_PLATFORM_INPUT_H
 
 #pragma once

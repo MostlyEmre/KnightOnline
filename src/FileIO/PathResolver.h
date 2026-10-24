@@ -1,4 +1,4 @@
-#ifndef FILEIO_PATHRESOLVER_H
+﻿#ifndef FILEIO_PATHRESOLVER_H
 #define FILEIO_PATHRESOLVER_H
 
 #pragma once

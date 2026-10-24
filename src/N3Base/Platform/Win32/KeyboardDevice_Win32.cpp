@@ -1,4 +1,4 @@
-#include "../Input.h"
+﻿#include "../Input.h"
 
 // DirectInput lives in its own file so that only users of KeyboardDevice link dinput8.
 #include <dinput.h>

@@ -1,4 +1,4 @@
-#include <nanodbc/nanodbc.h>
+﻿#include <nanodbc/nanodbc.h>
 
 #include "Backend.h"
 #include "ProcContext.h"

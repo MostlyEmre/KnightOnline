@@ -1,4 +1,4 @@
-#include "../Input.h"
+﻿#include "../Input.h"
 #include "Cocoa/CocoaApp.h"
 #include "InputScript.h"
 

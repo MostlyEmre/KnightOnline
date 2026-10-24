@@ -1,4 +1,4 @@
-#ifndef N3BASE_PLATFORM_TIME_H
+﻿#ifndef N3BASE_PLATFORM_TIME_H
 #define N3BASE_PLATFORM_TIME_H
 
 #pragma once

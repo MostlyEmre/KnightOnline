@@ -1,4 +1,4 @@
-#include "../Crypto.h"
+﻿#include "../Crypto.h"
 
 #include <array>
 #include <cstdint>

@@ -1,4 +1,4 @@
-#include "Backend.h"
+﻿#include "Backend.h"
 #include "Collation.h"
 
 #include <nanodbc/nanodbc.h>

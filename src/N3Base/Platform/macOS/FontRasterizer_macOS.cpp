@@ -1,4 +1,4 @@
-#include "../FontRasterizer.h"
+﻿#include "../FontRasterizer.h"
 #include "Cocoa/CoreTextFont.h"
 #include "CodePage.h"
 

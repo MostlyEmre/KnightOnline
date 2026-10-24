@@ -1,4 +1,4 @@
-#include "../Shell.h"
+﻿#include "../Shell.h"
 #include "Cocoa/CocoaApp.h"
 #include "CodePage.h"
 #include "NotImplemented.h"

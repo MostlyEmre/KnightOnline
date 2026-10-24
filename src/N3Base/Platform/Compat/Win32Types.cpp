@@ -1,4 +1,4 @@
-#include "Win32Types.h"
+﻿#include "Win32Types.h"
 
 #include <span>
 #include <string_view>

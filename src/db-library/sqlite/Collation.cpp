@@ -1,4 +1,4 @@
-#include "Collation.h"
+﻿#include "Collation.h"
 
 #include <array>
 #include <cstddef>

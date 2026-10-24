@@ -1,4 +1,4 @@
-#include "PathResolver.h"
+﻿#include "PathResolver.h"
 
 #if !defined(_WIN32)
 #include <algorithm>

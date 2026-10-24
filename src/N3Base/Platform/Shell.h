@@ -1,4 +1,4 @@
-#ifndef N3BASE_PLATFORM_SHELL_H
+﻿#ifndef N3BASE_PLATFORM_SHELL_H
 #define N3BASE_PLATFORM_SHELL_H
 
 #pragma once

@@ -1,4 +1,4 @@
-#include "../ScreenCapture.h"
+﻿#include "../ScreenCapture.h"
 #include "NotImplemented.h"
 
 namespace Platform

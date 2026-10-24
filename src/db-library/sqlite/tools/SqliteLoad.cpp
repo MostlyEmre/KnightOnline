@@ -1,4 +1,4 @@
-// openko-sqlite-load <database> <script.sql> [--check]
+﻿// openko-sqlite-load <database> <script.sql> [--check]
 //
 // Creates <database> (replacing any existing file) from a SQL script with the SQLite backend's
 // collations registered, then runs an integrity check. The seed database is built this way

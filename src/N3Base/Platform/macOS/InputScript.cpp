@@ -1,4 +1,4 @@
-#include "InputScript.h"
+﻿#include "InputScript.h"
 #include "../Compat/DInputKeys.h"
 #include "Cocoa/CocoaApp.h"
 #include "Direct3D9_macOS.h"

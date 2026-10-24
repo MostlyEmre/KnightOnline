@@ -1,4 +1,4 @@
-#include "../Application.h"
+﻿#include "../Application.h"
 #include "Win32Internal.h"
 
 #include "../../LogWriter.h"

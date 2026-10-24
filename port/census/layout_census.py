@@ -582,7 +582,7 @@ def emit_checks(repo, finds, layouts):
         out += body
         out += ["#if defined(__clang__) || defined(__GNUC__)", "#pragma GCC diagnostic pop", "#endif"]
         path = os.path.join(repo, directory, filename)
-        open(path, "w").write("\n".join(out).rstrip() + "\n")
+        open(path, "w", encoding="utf-8-sig").write("\n".join(out).rstrip() + "\n")  # BOM, per .editorconfig
         print(f"wrote {os.path.relpath(path, repo)} ({len(types)} types)", file=sys.stderr)
 
 

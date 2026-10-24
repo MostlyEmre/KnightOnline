@@ -1,4 +1,4 @@
-// C++ reimplementations of the T-SQL stored procedures the servers call
+﻿// C++ reimplementations of the T-SQL stored procedures the servers call
 // (OpenKO-db ManualSetup/8_CreateStoredProc_*.sql). Each one follows its T-SQL statement
 // by statement, keeping the behaviour the servers can observe:
 // - variables and OUTPUT-only parameters start NULL, and comparisons use three-valued logic;

@@ -1,4 +1,4 @@
-// winsock2.h must come before <windows.h> (which the platform headers include); this file is
+﻿// winsock2.h must come before <windows.h> (which the platform headers include); this file is
 // therefore built without the precompiled header.
 // The client keeps the WinSock 1.1 calls it always used (inet_addr, gethostbyname, WSAAsyncSelect).
 #ifndef _WINSOCK_DEPRECATED_NO_WARNINGS

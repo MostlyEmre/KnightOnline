@@ -1,4 +1,4 @@
-#ifndef N3BASE_PLATFORM_CRYPTO_H
+﻿#ifndef N3BASE_PLATFORM_CRYPTO_H
 #define N3BASE_PLATFORM_CRYPTO_H
 
 #pragma once

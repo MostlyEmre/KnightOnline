@@ -1,4 +1,4 @@
-#ifndef N3BASE_PLATFORM_TYPES_H
+﻿#ifndef N3BASE_PLATFORM_TYPES_H
 #define N3BASE_PLATFORM_TYPES_H
 
 #pragma once

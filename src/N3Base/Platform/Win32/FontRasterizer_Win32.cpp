@@ -1,4 +1,4 @@
-#include "../FontRasterizer.h"
+﻿#include "../FontRasterizer.h"
 
 namespace Platform
 {

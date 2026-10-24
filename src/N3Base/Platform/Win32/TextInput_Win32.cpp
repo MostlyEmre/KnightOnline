@@ -1,4 +1,4 @@
-#include "../TextInput.h"
+﻿#include "../TextInput.h"
 #include "Win32Internal.h"
 
 #include <imm.h>

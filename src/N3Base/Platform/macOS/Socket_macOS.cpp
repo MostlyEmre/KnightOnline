@@ -1,4 +1,4 @@
-#include "../Socket.h"
+﻿#include "../Socket.h"
 #include "MacState.h"
 
 #include <asio.hpp>

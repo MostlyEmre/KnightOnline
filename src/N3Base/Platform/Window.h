@@ -1,4 +1,4 @@
-#ifndef N3BASE_PLATFORM_WINDOW_H
+﻿#ifndef N3BASE_PLATFORM_WINDOW_H
 #define N3BASE_PLATFORM_WINDOW_H
 
 #pragma once

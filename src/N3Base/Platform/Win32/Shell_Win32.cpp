@@ -1,4 +1,4 @@
-#include "../Shell.h"
+﻿#include "../Shell.h"
 
 #include <shellapi.h>
 
