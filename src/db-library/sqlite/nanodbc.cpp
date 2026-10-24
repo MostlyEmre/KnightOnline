@@ -186,17 +186,16 @@ void WriteScalar(void* ptr, int kind, const Value& value)
 } // namespace
 
 // ODBC SQL type codes (sql.h / sqlext.h), as SQL Server's driver reports them.
-constexpr int SqlChar          = 1;
-constexpr int SqlVarchar       = 12;
-constexpr int SqlLongVarchar   = -1;
-constexpr int SqlBit           = -7;
-constexpr int SqlTinyInt       = -6;
-constexpr int SqlSmallInt      = 5;
-constexpr int SqlInteger       = 4;
-constexpr int SqlBigInt        = -5;
-constexpr int SqlDouble        = 8;
-constexpr int SqlVarBinary     = -3;
-constexpr int SqlTypeTimestamp = 93;
+constexpr int SqlChar        = 1;
+constexpr int SqlVarchar     = 12;
+constexpr int SqlLongVarchar = -1;
+constexpr int SqlBit         = -7;
+constexpr int SqlTinyInt     = -6;
+constexpr int SqlSmallInt    = 5;
+constexpr int SqlInteger     = 4;
+constexpr int SqlBigInt      = -5;
+constexpr int SqlDouble      = 8;
+constexpr int SqlVarBinary   = -3;
 
 int DatatypeFromDeclared(std::string type)
 {
