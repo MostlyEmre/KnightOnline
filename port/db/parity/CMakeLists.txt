@@ -9,6 +9,10 @@ target_link_libraries(db-parity-probe PRIVATE
   nanodbc
 )
 
+set_target_properties(db-parity-probe PROPERTIES
+  CXX_SCAN_FOR_MODULES OFF
+)
+
 if(OPENKO_COMPILE_WARNINGS_AS_ERROR)
   set_property(TARGET db-parity-probe PROPERTY COMPILE_WARNING_AS_ERROR ON)
 endif()

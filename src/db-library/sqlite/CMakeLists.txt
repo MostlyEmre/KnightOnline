@@ -51,6 +51,10 @@ add_executable(openko-sqlite-load
 target_include_directories(openko-sqlite-load PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(openko-sqlite-load PRIVATE nanodbc sqlite3)
 
+set_target_properties(openko-sqlite-load PROPERTIES
+  CXX_SCAN_FOR_MODULES OFF
+)
+
 if(OPENKO_COMPILE_WARNINGS_AS_ERROR)
   set_property(TARGET openko-sqlite-load PROPERTY COMPILE_WARNING_AS_ERROR ON)
 endif()

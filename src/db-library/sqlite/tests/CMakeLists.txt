@@ -11,6 +11,10 @@ target_link_libraries(DbSqlite.Tests PRIVATE
   gtest_main
 )
 
+set_target_properties(DbSqlite.Tests PROPERTIES
+  CXX_SCAN_FOR_MODULES OFF
+)
+
 if(OPENKO_COMPILE_WARNINGS_AS_ERROR)
   set_property(TARGET DbSqlite.Tests PROPERTY COMPILE_WARNING_AS_ERROR ON)
 endif()
