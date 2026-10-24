@@ -9,11 +9,11 @@
 #include "GameDefine.h"
 #include <MathUtils/Vector3.h>
 
-#include <cstddef>
-
-// offsetof on a struct with fields in both a base and itself (not standard-layout) is
-// conditionally supported. Every compiler here supports it for single non-virtual
-// inheritance; GCC and Clang warn about it.
+// __builtin_offsetof rather than offsetof: MSVC's offsetof macro is a constant expression
+// only to MSVC itself (Clang folds it as an extension, which clang-tidy reports). On a
+// struct with fields in both a base and itself (not standard-layout) it's conditionally
+// supported; every compiler here supports it for single non-virtual inheritance, and GCC
+// and Clang warn about it.
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
@@ -21,22 +21,22 @@
 
 // Map.cpp
 static_assert(sizeof(Ebenezer::_WARP_INFO) == 320);
-static_assert(offsetof(Ebenezer::_WARP_INFO, sWarpID) == 0);
-static_assert(offsetof(Ebenezer::_WARP_INFO, strWarpName) == 2);
-static_assert(offsetof(Ebenezer::_WARP_INFO, strAnnounce) == 34);
-static_assert(offsetof(Ebenezer::_WARP_INFO, dwPay) == 292);
-static_assert(offsetof(Ebenezer::_WARP_INFO, sZone) == 296);
-static_assert(offsetof(Ebenezer::_WARP_INFO, fX) == 300);
-static_assert(offsetof(Ebenezer::_WARP_INFO, fY) == 304);
-static_assert(offsetof(Ebenezer::_WARP_INFO, fZ) == 308);
-static_assert(offsetof(Ebenezer::_WARP_INFO, fR) == 312);
-static_assert(offsetof(Ebenezer::_WARP_INFO, sNation) == 316);
+static_assert(__builtin_offsetof(Ebenezer::_WARP_INFO, sWarpID) == 0);
+static_assert(__builtin_offsetof(Ebenezer::_WARP_INFO, strWarpName) == 2);
+static_assert(__builtin_offsetof(Ebenezer::_WARP_INFO, strAnnounce) == 34);
+static_assert(__builtin_offsetof(Ebenezer::_WARP_INFO, dwPay) == 292);
+static_assert(__builtin_offsetof(Ebenezer::_WARP_INFO, sZone) == 296);
+static_assert(__builtin_offsetof(Ebenezer::_WARP_INFO, fX) == 300);
+static_assert(__builtin_offsetof(Ebenezer::_WARP_INFO, fY) == 304);
+static_assert(__builtin_offsetof(Ebenezer::_WARP_INFO, fZ) == 308);
+static_assert(__builtin_offsetof(Ebenezer::_WARP_INFO, fR) == 312);
+static_assert(__builtin_offsetof(Ebenezer::_WARP_INFO, sNation) == 316);
 
 // N3ShapeMgr.cpp
 static_assert(sizeof(__Vector3) == 12);
-static_assert(offsetof(__Vector3, x) == 0);
-static_assert(offsetof(__Vector3, y) == 4);
-static_assert(offsetof(__Vector3, z) == 8);
+static_assert(__builtin_offsetof(__Vector3, x) == 0);
+static_assert(__builtin_offsetof(__Vector3, y) == 4);
+static_assert(__builtin_offsetof(__Vector3, z) == 8);
 
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic pop

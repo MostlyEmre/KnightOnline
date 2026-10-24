@@ -537,7 +537,7 @@ def emit_checks(repo, finds, layouts):
                 if not fld["name"] or fld["bits"] < 0:
                     continue
                 if fld["width"] is None:
-                    body.append(f"static_assert(offsetof({spelling}, {fld['name']}) == {fld['offset']});")
+                    body.append(f"static_assert(__builtin_offsetof({spelling}, {fld['name']}) == {fld['offset']});")
                     continue
                 uses_bits = True
                 body.append(f"static_assert(std::is_same_v<decltype({spelling}::{fld['name']}), {bitfield_type(fld)}>);")
@@ -555,9 +555,8 @@ def emit_checks(repo, finds, layouts):
         ]
         out += [f"#include {i}" for i in includes[: len(EXTRA_INCLUDES.get(comp, []))]]
         out += [f"#include {i}" for i in sorted(includes[len(EXTRA_INCLUDES.get(comp, [])) :])]
-        out += ["", "#include <cstddef>"]
         if uses_bits:
-            out += ["#include <cstdint>", "#include <type_traits>"]
+            out += ["", "#include <cstdint>", "#include <type_traits>"]
         out += [""]
         if uses_bits:
             out += [
@@ -569,9 +568,11 @@ def emit_checks(repo, finds, layouts):
                 "",
             ]
         out += [
-            "// offsetof on a struct with fields in both a base and itself (not standard-layout) is",
-            "// conditionally supported. Every compiler here supports it for single non-virtual",
-            "// inheritance; GCC and Clang warn about it.",
+            "// __builtin_offsetof rather than offsetof: MSVC's offsetof macro is a constant expression",
+            "// only to MSVC itself (Clang folds it as an extension, which clang-tidy reports). On a",
+            "// struct with fields in both a base and itself (not standard-layout) it's conditionally",
+            "// supported; every compiler here supports it for single non-virtual inheritance, and GCC",
+            "// and Clang warn about it.",
             "#if defined(__clang__) || defined(__GNUC__)",
             "#pragma GCC diagnostic push",
             '#pragma GCC diagnostic ignored "-Winvalid-offsetof"',

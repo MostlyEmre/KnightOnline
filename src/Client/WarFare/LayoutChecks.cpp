@@ -11,7 +11,6 @@
 #include "N3River.h"
 #include "N3TerrainDef.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -21,9 +20,11 @@
 // bit-field in a struct has the same type and they fit in one unit of it, which is what the
 // is_same checks below hold in place.
 
-// offsetof on a struct with fields in both a base and itself (not standard-layout) is
-// conditionally supported. Every compiler here supports it for single non-virtual
-// inheritance; GCC and Clang warn about it.
+// __builtin_offsetof rather than offsetof: MSVC's offsetof macro is a constant expression
+// only to MSVC itself (Clang folds it as an extension, which clang-tidy reports). On a
+// struct with fields in both a base and itself (not standard-layout) it's conditionally
+// supported; every compiler here supports it for single non-virtual inheritance, and GCC
+// and Clang warn about it.
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
@@ -31,35 +32,35 @@
 
 // N3Pond.cpp
 static_assert(sizeof(CN3Pond::__VertexPond) == 44);
-static_assert(offsetof(CN3Pond::__VertexPond, x) == 0);
-static_assert(offsetof(CN3Pond::__VertexPond, y) == 4);
-static_assert(offsetof(CN3Pond::__VertexPond, z) == 8);
-static_assert(offsetof(CN3Pond::__VertexPond, nx) == 12);
-static_assert(offsetof(CN3Pond::__VertexPond, ny) == 16);
-static_assert(offsetof(CN3Pond::__VertexPond, nz) == 20);
-static_assert(offsetof(CN3Pond::__VertexPond, color) == 24);
-static_assert(offsetof(CN3Pond::__VertexPond, u) == 28);
-static_assert(offsetof(CN3Pond::__VertexPond, v) == 32);
-static_assert(offsetof(CN3Pond::__VertexPond, u2) == 36);
-static_assert(offsetof(CN3Pond::__VertexPond, v2) == 40);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, x) == 0);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, y) == 4);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, z) == 8);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, nx) == 12);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, ny) == 16);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, nz) == 20);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, color) == 24);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, u) == 28);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, v) == 32);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, u2) == 36);
+static_assert(__builtin_offsetof(CN3Pond::__VertexPond, v2) == 40);
 
 // N3River.cpp
 static_assert(sizeof(CN3River::__VertexRiver) == 44);
-static_assert(offsetof(CN3River::__VertexRiver, x) == 0);
-static_assert(offsetof(CN3River::__VertexRiver, y) == 4);
-static_assert(offsetof(CN3River::__VertexRiver, z) == 8);
-static_assert(offsetof(CN3River::__VertexRiver, nx) == 12);
-static_assert(offsetof(CN3River::__VertexRiver, ny) == 16);
-static_assert(offsetof(CN3River::__VertexRiver, nz) == 20);
-static_assert(offsetof(CN3River::__VertexRiver, color) == 24);
-static_assert(offsetof(CN3River::__VertexRiver, u) == 28);
-static_assert(offsetof(CN3River::__VertexRiver, v) == 32);
-static_assert(offsetof(CN3River::__VertexRiver, u2) == 36);
-static_assert(offsetof(CN3River::__VertexRiver, v2) == 40);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, x) == 0);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, y) == 4);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, z) == 8);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, nx) == 12);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, ny) == 16);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, nz) == 20);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, color) == 24);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, u) == 28);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, v) == 32);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, u2) == 36);
+static_assert(__builtin_offsetof(CN3River::__VertexRiver, v2) == 40);
 
 // N3Terrain.cpp
 static_assert(sizeof(__MapData) == 8);
-static_assert(offsetof(__MapData, fHeight) == 0);
+static_assert(__builtin_offsetof(__MapData, fHeight) == 0);
 static_assert(std::is_same_v<decltype(__MapData::bIsTileFull), uint32_t>);
 static_assert(std::is_same_v<decltype(__MapData::Tex1Dir), uint32_t>);
 static_assert(std::is_same_v<decltype(__MapData::Tex2Dir), uint32_t>);
