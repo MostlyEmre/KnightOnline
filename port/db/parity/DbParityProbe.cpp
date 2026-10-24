@@ -92,7 +92,16 @@ std::string ReadCell(const nanodbc::result& r, short col, const std::string& nam
 	{
 		return std::format("{:.17g}", r.get<double>(col));
 	}
-	return JsonString(r.get<std::string>(col));
+	try
+	{
+		return JsonString(r.get<std::string>(col));
+	}
+	catch (const nanodbc::type_incompatible_error&)
+	{
+		// nanodbc (ODBC) can't render tinyint (SQL_C_UTINYINT) as a string; read it as a number
+		// and render the same text the SQLite backend produces.
+		return JsonString(std::to_string(r.get<int64_t>(col)));
+	}
 }
 
 std::string ReadRow(const nanodbc::result& r, const std::vector<std::string>& names)
@@ -154,6 +163,10 @@ std::string DrainSequence(nanodbc::result& r)
 	{
 		steps += std::string(firstStep ? "" : ",") + "{\"error\":" + ErrorJson(ex) + "}";
 	}
+	catch (const std::exception& ex)
+	{
+		steps += std::string(firstStep ? "" : ",") + "{\"exception\":" + JsonString(ex.what()) + "}";
+	}
 	return steps + "]";
 }
 
@@ -182,7 +195,11 @@ public:
 		{
 			line += ",\"error\":" + ErrorJson(ex) + ",\"outputs\":" + outputs();
 		}
-		_out << line << "}\n";
+		catch (const std::exception& ex)
+		{
+			line += ",\"exception\":" + JsonString(ex.what());
+		}
+		_out << line << "}" << std::endl;
 	}
 
 	/// \brief Runs a raw statement with bound parameters, as the servers' hand-written queries do.
@@ -203,7 +220,11 @@ public:
 		{
 			line += ",\"error\":" + ErrorJson(ex);
 		}
-		_out << line << "}\n";
+		catch (const std::exception& ex)
+		{
+			line += ",\"exception\":" + JsonString(ex.what());
+		}
+		_out << line << "}" << std::endl;
 	}
 
 	/// \brief Dumps a table with rows sorted client-side, so differing server-side order of ties
@@ -238,7 +259,11 @@ public:
 		{
 			line += ",\"error\":" + ErrorJson(ex);
 		}
-		_out << line << "}\n";
+		catch (const std::exception& ex)
+		{
+			line += ",\"exception\":" + JsonString(ex.what());
+		}
+		_out << line << "}" << std::endl;
 	}
 
 private:

@@ -79,6 +79,16 @@ private:
 	std::string _message;
 };
 
+/// \brief Same as nanodbc's; real nanodbc raises it for conversions its C type can't make
+/// (e.g. a tinyint read as a string). The SQLite backend converts freely and never throws it.
+class type_incompatible_error : public std::runtime_error
+{
+public:
+	type_incompatible_error() : std::runtime_error("type incompatible")
+	{
+	}
+};
+
 class statement;
 class result;
 
