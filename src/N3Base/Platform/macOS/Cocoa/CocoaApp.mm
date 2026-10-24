@@ -7,7 +7,9 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 
+#include <algorithm>
 #include <array>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <vector>
@@ -40,9 +42,15 @@ struct AppState
 	bool hasMarkedText = false;
 
 	std::array<uint8_t, 256> keys {};
-	NSCursor* cursor       = nil;
-	NSCursor* blank        = nil;
-	CGFloat wheelRemainder = 0.0;
+	// A trackpad tap or a quick key press can go down and up between two frames; the game polls
+	// once a frame, so such presses are held down until the next pump.
+	uint32_t tappedButtons = 0;               // mouse buttons pressed during the last pump
+	std::array<bool, 256> pressedThisPump {}; // keys that went down during this pump
+	std::array<bool, 256> releaseNextPump {}; // and up again before it ended
+	NSCursor* cursor        = nil;
+	NSCursor* blank         = nil;
+	CGFloat wheelRemainder  = 0.0;
+	CGFloat wheelRemainderX = 0.0;
 };
 
 AppState& App()
@@ -186,9 +194,34 @@ void TrackKeys(NSEvent* event)
 	switch (event.type)
 	{
 		case NSEventTypeKeyDown:
+			if (uint8_t dik = ScanCode(event.keyCode); dik != 0)
+			{
+				app.keys[dik]            = 0x80;
+				app.pressedThisPump[dik] = true;
+				app.releaseNextPump[dik] = false;
+			}
+			break;
+
 		case NSEventTypeKeyUp:
 			if (uint8_t dik = ScanCode(event.keyCode); dik != 0)
-				app.keys[dik] = event.type == NSEventTypeKeyDown ? 0x80 : 0;
+			{
+				if (app.pressedThisPump[dik])
+					app.releaseNextPump[dik] = true;
+				else
+					app.keys[dik] = 0;
+			}
+			break;
+
+		case NSEventTypeLeftMouseDown:
+			app.tappedButtons |= 0x1;
+			break;
+
+		case NSEventTypeRightMouseDown:
+			app.tappedButtons |= 0x2;
+			break;
+
+		case NSEventTypeOtherMouseDown:
+			app.tappedButtons |= 1u << std::min<NSInteger>(event.buttonNumber, 31);
 			break;
 
 		case NSEventTypeFlagsChanged:
@@ -214,6 +247,17 @@ CGFloat MainDisplayHeight()
 {
 	NSArray<NSScreen*>* screens = NSScreen.screens;
 	return screens.count > 0 ? screens[0].frame.size.height : 0.0;
+}
+
+// The part of the main screen a fullscreen game uses: all of it but the notch row, if any (in
+// the screen's own coordinates, origin bottom left).
+NSRect FullscreenGameRect()
+{
+	NSScreen* screen  = NSScreen.mainScreen;
+	NSRect frame      = screen.frame;
+	NSEdgeInsets safe = screen.safeAreaInsets;
+	return NSMakeRect(safe.left, safe.bottom, frame.size.width - safe.left - safe.right,
+		frame.size.height - safe.top - safe.bottom);
 }
 
 // Where the game's image sits on screen (Cocoa global coordinates: points, origin bottom left).
@@ -445,9 +489,7 @@ NSCursor* BlankCursor()
 
 - (void)scrollWheel:(NSEvent*)event
 {
-	AppState& app = App();
-	if (!app.events.OnMouseWheel)
-		return;
+	AppState& app       = App();
 
 	// Notches for wheels; for precise (trackpad) scrolling, one notch per 10 points.
 	CGFloat notches     = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 10.0
@@ -455,8 +497,22 @@ NSCursor* BlankCursor()
 	notches            += app.wheelRemainder;
 	int delta           = static_cast<int>(notches * 120.0);
 	app.wheelRemainder  = notches - delta / 120.0;
-	if (delta != 0)
+	if (delta != 0 && app.events.OnMouseWheel)
 		app.events.OnMouseWheel(delta);
+
+	// Sideways: which way the fingers moved, whatever the "natural scrolling" setting, and only
+	// while they're on the trackpad (no momentum after they lift).
+	if (event.momentumPhase != NSEventPhaseNone || !app.events.OnMouseHWheel)
+		return;
+
+	CGFloat across   = event.isDirectionInvertedFromDevice ? event.scrollingDeltaX
+														   : -event.scrollingDeltaX;
+	CGFloat sideways = (event.hasPreciseScrollingDeltas ? across / 10.0 : across)
+					   + app.wheelRemainderX;
+	int sidewaysDelta   = static_cast<int>(sideways * 120.0);
+	app.wheelRemainderX = sideways - sidewaysDelta / 120.0;
+	if (sidewaysDelta != 0)
+		app.events.OnMouseHWheel(sidewaysDelta);
 }
 
 // NSTextInputClient
@@ -543,6 +599,25 @@ NSCursor* BlankCursor()
 
 @end
 
+// Borderless windows (fullscreen) can't become key or main unless they say so, and without a key
+// window the game gets no keyboard input.
+@interface KOWindow : NSWindow
+@end
+
+@implementation KOWindow
+
+- (BOOL)canBecomeKeyWindow
+{
+	return YES;
+}
+
+- (BOOL)canBecomeMainWindow
+{
+	return YES;
+}
+
+@end
+
 @interface KOWindowDelegate : NSObject <NSWindowDelegate>
 @end
 
@@ -558,6 +633,7 @@ NSCursor* BlankCursor()
 
 - (void)windowDidBecomeKey:(NSNotification*)notification
 {
+	std::fprintf(stderr, "KnightOnline: window became key\n");
 	AppState& app = App();
 	app.active    = true;
 	if (app.events.OnActivate)
@@ -567,6 +643,7 @@ NSCursor* BlankCursor()
 - (void)windowDidResignKey:(NSNotification*)notification
 {
 	// Keys released while away never send key-ups.
+	std::fprintf(stderr, "KnightOnline: window resigned key\n");
 	AppState& app = App();
 	app.active    = false;
 	app.keys.fill(0);
@@ -580,6 +657,22 @@ NSCursor* BlankCursor()
 @end
 
 @implementation KOAppDelegate
+
+- (void)applicationDidBecomeActive:(NSNotification*)notification
+{
+	// The app can be activated before its window exists (a launch from Finder activates it while
+	// the servers start), or without its window becoming key; make sure keyboard input reaches it.
+	AppState& app = App();
+	std::fprintf(stderr, "KnightOnline: app became active (window key: %s)\n",
+		app.window != nil && app.window.isKeyWindow ? "yes" : "no");
+	if (app.window != nil && !app.window.isKeyWindow)
+		[app.window makeKeyAndOrderFront:nil];
+}
+
+- (void)applicationDidResignActive:(NSNotification*)notification
+{
+	std::fprintf(stderr, "KnightOnline: app resigned active\n");
+}
 
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)sender
 {
@@ -635,11 +728,14 @@ bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool 
 			content = NSScreen.mainScreen.frame;
 			style   = NSWindowStyleMaskBorderless;
 		}
+		// The game's image goes below the camera housing on screens with a notch.
+		NSRect gameRect = bFullscreen ? FullscreenGameRect()
+									  : NSMakeRect(0, 0, content.size.width, content.size.height);
 
-		app.window = [[NSWindow alloc] initWithContentRect:content
-												 styleMask:style
-												   backing:NSBackingStoreBuffered
-													 defer:NO];
+		app.window      = [[KOWindow alloc] initWithContentRect:content
+                                                 styleMask:style
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
 		if (app.window == nil)
 			return false;
 
@@ -649,10 +745,23 @@ bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool 
 		app.windowDelegate                 = [[KOWindowDelegate alloc] init];
 		app.window.delegate                = app.windowDelegate;
 
-		app.view                           = [[KOGameView alloc]
-            initWithFrame:NSMakeRect(0, 0, content.size.width, content.size.height)];
+		app.view                           = [[KOGameView alloc] initWithFrame:gameRect];
 		app.view.wantsLayer                = YES;
-		app.window.contentView             = app.view;
+		if (bFullscreen)
+		{
+			// Black around the image (the notch row, and bars if the aspect ratios differ).
+			NSView* backdrop               = [[NSView alloc]
+                initWithFrame:NSMakeRect(0, 0, content.size.width, content.size.height)];
+			backdrop.wantsLayer            = YES;
+			backdrop.layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
+			app.window.backgroundColor     = NSColor.blackColor;
+			app.window.contentView         = backdrop;
+			[backdrop addSubview:app.view];
+		}
+		else
+		{
+			app.window.contentView = app.view;
+		}
 		[app.window makeFirstResponder:app.view];
 
 		app.layer                 = (CAMetalLayer*) app.view.layer;
@@ -663,8 +772,12 @@ bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool 
 		app.layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
 		if (bFullscreen)
 		{
-			app.layer.contentsGravity     = kCAGravityResizeAspect;
-			app.layer.magnificationFilter = kCAFilterLinear;
+			app.layer.contentsGravity = kCAGravityResizeAspect;
+			// A whole-number scale (the game at the screen's size in points, on Retina) stays sharp.
+			CGFloat scale = MIN(gameRect.size.width * app.window.backingScaleFactor / iWidth,
+				gameRect.size.height * app.window.backingScaleFactor / iHeight);
+			app.layer.magnificationFilter = scale == floor(scale) ? kCAFilterNearest
+																  : kCAFilterLinear;
 			app.window.level              = NSMainMenuWindowLevel + 1;
 			NSApp.presentationOptions     = NSApplicationPresentationHideDock
 										| NSApplicationPresentationHideMenuBar;
@@ -692,7 +805,7 @@ bool CreateGameWindow(const std::string& szTitle, int iWidth, int iHeight, bool 
 		if (bTakeFocus)
 		{
 			[app.window makeKeyAndOrderFront:nil];
-			[NSApp activateIgnoringOtherApps:YES];
+			[NSApp activate];
 		}
 		else
 		{
@@ -707,6 +820,17 @@ void PumpEvents()
 {
 	@autoreleasepool
 	{
+		// Presses that were down and up within the last pump have had their frame.
+		AppState& app     = App();
+		app.tappedButtons = 0;
+		for (size_t dik = 0; dik < app.keys.size(); dik++)
+		{
+			if (app.releaseNextPump[dik])
+				app.keys[dik] = 0;
+			app.releaseNextPump[dik] = false;
+			app.pressedThisPump[dik] = false;
+		}
+
 		while (NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
 												   untilDate:nil
 													  inMode:NSDefaultRunLoopMode
@@ -752,6 +876,14 @@ void ScreenToClient(int& x, int& y)
 	CGFloat cy     = (image.origin.y + image.size.height - cocoaY) * app.height / image.size.height;
 	x              = static_cast<int>(floor(cx));
 	y              = static_cast<int>(floor(cy));
+
+	// A fullscreen game owns the screen: as on Windows, the cursor is never outside it, so the
+	// game sees it reach its edges (where it turns the camera) at the edges of the screen.
+	if (app.fullscreen)
+	{
+		x = std::clamp(x, 0, app.width - 1);
+		y = std::clamp(y, 0, app.height - 1);
+	}
 }
 
 void ClientToScreen(int& x, int& y)
@@ -785,9 +917,22 @@ void WindowScreenRect(int& left, int& top, int& right, int& bottom)
 	bottom        = static_cast<int>(h - frame.origin.y);
 }
 
+void FullscreenSize(int& width, int& height)
+{
+	@autoreleasepool
+	{
+		NSRect rect = FullscreenGameRect();
+		width       = static_cast<int>(rect.size.width);
+		height      = static_cast<int>(rect.size.height);
+	}
+}
+
 bool IsActive()
 {
-	return App().active;
+	// Asked live rather than tracked: the key-window notifications can come before the game is
+	// listening, or not at all when the app was activated before its window existed.
+	NSWindow* window = App().window;
+	return window != nil && window.isKeyWindow;
 }
 
 void ActivateGameWindow()
@@ -798,13 +943,13 @@ void ActivateGameWindow()
 			return;
 
 		[App().window makeKeyAndOrderFront:nil];
-		[NSApp activateIgnoringOtherApps:YES];
+		[NSApp activate];
 	}
 }
 
 uint32_t PressedMouseButtons()
 {
-	return static_cast<uint32_t>(NSEvent.pressedMouseButtons);
+	return static_cast<uint32_t>(NSEvent.pressedMouseButtons) | App().tappedButtons;
 }
 
 bool IsOptionDown()
@@ -820,7 +965,7 @@ bool IsControlDown()
 bool IsKeyDown(int iScanCode)
 {
 	AppState& app = App();
-	return iScanCode >= 0 && iScanCode < 256 && app.active
+	return iScanCode >= 0 && iScanCode < 256 && IsActive()
 		   && app.keys[static_cast<size_t>(iScanCode)] != 0;
 }
 

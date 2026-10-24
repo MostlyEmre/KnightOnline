@@ -20,7 +20,8 @@ struct WindowEvents
 {
 	std::function<void(bool bActive)> OnActivate;
 	std::function<void()> OnCloseRequested;
-	std::function<void(int iDelta)> OnMouseWheel; // 120 per notch, like WHEEL_DELTA
+	std::function<void(int iDelta)> OnMouseWheel;  // 120 per notch, like WHEEL_DELTA
+	std::function<void(int iDelta)> OnMouseHWheel; // sideways, positive to the right
 };
 
 /// \brief What the keyboard does while the text input field has focus (NSTextInputClient).
@@ -61,6 +62,10 @@ void WarpCursor(int iScreenX, int iScreenY);
 
 /// \brief The game window's frame in screen coordinates.
 void WindowScreenRect(int& left, int& top, int& right, int& bottom);
+
+/// \brief The size, in points, of the main screen's area a fullscreen game fills: the whole
+/// screen below the notch, if there is one.
+void FullscreenSize(int& width, int& height);
 
 /// \brief Whether the game window has keyboard focus.
 bool IsActive();

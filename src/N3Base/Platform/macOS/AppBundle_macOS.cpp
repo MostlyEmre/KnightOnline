@@ -8,8 +8,11 @@
 #include <array>
 #include <chrono>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -152,12 +155,35 @@ bool InitializeProcess()
 		return true; // not the app bundle: run from the working directory
 
 	std::filesystem::path userDir = macOS::AppSupportDirectory();
-	std::filesystem::create_directories(userDir, ec);
+	std::filesystem::create_directories(userDir / "Logs", ec);
+
+	// Launched from Finder, the game's own diagnostics would go nowhere; keep them.
+	if (std::freopen((userDir / "Logs" / "KnightOnline.log").c_str(), "a", stderr) != nullptr)
+	{
+		std::time_t now = std::time(nullptr);
+		std::array<char, 32> stamp {};
+		std::strftime(stamp.data(), stamp.size(), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+		fmt::print(stderr, "\n=== KnightOnline started {} (pid {})\n", stamp.data(), getpid());
+		std::fflush(stderr);
+	}
 	std::filesystem::current_path(userDir, ec);
 	if (ec)
 	{
 		Fail("Couldn't use " + userDir.string() + ": " + ec.message());
 		return false;
+	}
+
+	// First run: play fullscreen at the screen's size (below the notch) rather than 1024x768
+	// scaled up between black bars. The player can change it like any other option.
+	std::filesystem::path options = userDir / "Option.ini";
+	if (!std::filesystem::exists(options, ec)
+		&& !std::filesystem::exists(clientData / "Option.ini", ec))
+	{
+		int width = 0, height = 0;
+		macOS::Cocoa::FullscreenSize(width, height);
+		std::ofstream file(options);
+		file << "[ViewPort]\nWidth=" << width << "\nHeight=" << height
+			 << "\n\n[Screen]\nWindowMode=0\n";
 	}
 
 	PathResolver::SetOverlay(userDir, clientData);

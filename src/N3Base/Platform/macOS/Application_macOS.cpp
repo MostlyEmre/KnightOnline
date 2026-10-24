@@ -61,10 +61,18 @@ HWND CreateMainWindow(
 		if (s_handlers.OnMouseWheel && !macOS::InputScript::IsActive())
 			s_handlers.OnMouseWheel(static_cast<short>(iDelta));
 	};
+	events.OnMouseHWheel = [](int iDelta)
+	{
+		if (s_handlers.OnMouseHWheel && !macOS::InputScript::IsActive())
+			s_handlers.OnMouseHWheel(static_cast<short>(iDelta));
+	};
 
+	// Test scripts run in a window that doesn't take focus, so they never cover the screen or take
+	// the keyboard of whoever is using the Mac.
+	bool bScripted   = macOS::InputScript::IsActive();
+	bool bFullscreen = !desc.bWindowed && !bScripted;
 	if (!macOS::Cocoa::CreateGameWindow(desc.szTitle != nullptr ? desc.szTitle : "",
-			desc.iClientWidth, desc.iClientHeight, !desc.bWindowed, !macOS::InputScript::IsActive(),
-			events))
+			desc.iClientWidth, desc.iClientHeight, bFullscreen, !bScripted, events))
 		return nullptr;
 
 	return macOS::MainWindow();
