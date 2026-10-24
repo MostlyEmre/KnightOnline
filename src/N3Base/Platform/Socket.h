@@ -45,8 +45,10 @@ public:
 	/// \brief The last system error code of this thread.
 	static int LastError();
 
-private:
+	/// \brief Opaque; each platform's implementation defines it.
 	struct Impl;
+
+private:
 	std::unique_ptr<Impl> _impl;
 };
 

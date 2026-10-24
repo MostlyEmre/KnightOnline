@@ -70,6 +70,11 @@ else()
   set(OPENKO_BUILD_TOOLS OFF)
 endif()
 
+# The macOS client's platform layer has Objective-C++ (AppKit) sources.
+if(APPLE AND OPENKO_BUILD_CLIENT)
+  enable_language(OBJCXX)
+endif()
+
 message(STATUS "OpenKO feature: OPENKO_BUILD_CLIENT - ${OPENKO_BUILD_CLIENT}")
 message(STATUS "OpenKO feature: OPENKO_BUILD_CLIENT_TOOLS - ${OPENKO_BUILD_CLIENT_TOOLS}")
 message(STATUS "OpenKO feature: OPENKO_BUILD_TOOLS - ${OPENKO_BUILD_TOOLS}")

@@ -247,6 +247,8 @@ static_assert(sizeof(RECT) == 16, "RECT layout");
 #define VK_MBUTTON                              0x04
 #define VK_TAB                                  0x09
 #define VK_RETURN                               0x0D
+#define VK_SHIFT                                0x10
+#define VK_CONTROL                              0x11
 #define VK_MENU                                 0x12
 
 // --- pure helpers (user32 / kernel32 / CRT names, no OS involvement) -------------------

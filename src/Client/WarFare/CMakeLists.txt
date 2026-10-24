@@ -343,6 +343,24 @@ set_target_properties(WarFare PROPERTIES
 if(WIN32)
   set_target_properties(WarFare PROPERTIES WIN32_EXECUTABLE TRUE)
   target_sources(WarFare PRIVATE Resource.rc)
+elseif(APPLE)
+  # There are no executable resources outside Windows: the cursors in Resource.rc are copied
+  # next to the executable as Cursors/<resource ID>.cur, where Platform::LoadCursorResource looks.
+  file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/resource.h" WARFARE_RESOURCE_IDS REGEX "^#define +IDC_[A-Z0-9_]+ +[0-9]+")
+  file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/Resource.rc" WARFARE_CURSOR_LINES REGEX "^IDC_[A-Z0-9_]+ +CURSOR +\"")
+  foreach(cursor_line IN LISTS WARFARE_CURSOR_LINES)
+    string(REGEX MATCH "^(IDC_[A-Z0-9_]+) +CURSOR +\"([^\"]+)\"" _ "${cursor_line}")
+    set(cursor_name "${CMAKE_MATCH_1}")
+    set(cursor_file "${CMAKE_MATCH_2}")
+    foreach(id_line IN LISTS WARFARE_RESOURCE_IDS)
+      if(id_line MATCHES "^#define +${cursor_name} +([0-9]+)")
+        add_custom_command(TARGET WarFare POST_BUILD
+          COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/${cursor_file}" "$<TARGET_FILE_DIR:WarFare>/Cursors/${CMAKE_MATCH_1}.cur"
+        )
+      endif()
+    endforeach()
+  endforeach()
 endif()
 
 # Enable warnings as errors

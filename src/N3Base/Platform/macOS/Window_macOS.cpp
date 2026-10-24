@@ -1,52 +1,53 @@
 #include "../Window.h"
-#include "NotImplemented.h"
+#include "Cocoa/CocoaApp.h"
+#include "InputScript.h"
+#include "MacState.h"
 
 namespace Platform
 {
 
 BOOL GetClientRect(HWND /*hWnd*/, RECT* lpRect)
 {
-	macOS::NotImplemented("GetClientRect");
-	*lpRect = {};
-	return FALSE;
+	*lpRect = { 0, 0, macOS::Cocoa::ClientWidth(), macOS::Cocoa::ClientHeight() };
+	return TRUE;
 }
 
 BOOL GetWindowRect(HWND /*hWnd*/, RECT* lpRect)
 {
-	macOS::NotImplemented("GetWindowRect");
-	*lpRect = {};
-	return FALSE;
+	int left = 0, top = 0, right = 0, bottom = 0;
+	macOS::Cocoa::WindowScreenRect(left, top, right, bottom);
+	*lpRect = { left, top, right, bottom };
+	return TRUE;
 }
 
 void SetFocus(HWND /*hWnd*/)
 {
-	macOS::NotImplemented("SetFocus");
+	// The game window is the only one; keyboard focus within it is the text input field's business.
 }
 
 HWND GetActiveWindow()
 {
-	macOS::NotImplemented("GetActiveWindow");
-	return nullptr;
+	return macOS::Cocoa::IsActive() || macOS::InputScript::IsActive() ? macOS::MainWindow()
+																	  : nullptr;
 }
 
-void PostQuitMessage(int /*nExitCode*/)
+void PostQuitMessage(int nExitCode)
 {
-	macOS::NotImplemented("PostQuitMessage");
+	macOS::RequestQuit(nExitCode);
 }
 
 void PumpEvents()
 {
-	macOS::NotImplemented("PumpEvents");
+	macOS::Cocoa::PumpEvents();
 }
 
 void EnterDisplayMode(bool /*bWindowed*/, int /*iWidth*/, int /*iHeight*/, int /*iColorDepth*/)
 {
-	macOS::NotImplemented("EnterDisplayMode");
+	// The display mode stays as it is: fullscreen scales the game's image to the display instead.
 }
 
 void LeaveDisplayMode(bool /*bWindowed*/, int /*iWidth*/, int /*iHeight*/, int /*iColorDepth*/)
 {
-	macOS::NotImplemented("LeaveDisplayMode");
 }
 
 } // namespace Platform

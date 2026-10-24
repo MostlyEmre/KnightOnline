@@ -1,6 +1,9 @@
 #include "../Shell.h"
+#include "Cocoa/CocoaApp.h"
+#include "CodePage.h"
 #include "NotImplemented.h"
 
+#include <cctype>
 #include <climits>
 #include <cstdio>
 #include <cstdlib>
@@ -53,19 +56,25 @@ std::string WideToUtf8(const wchar_t* text)
 
 void ShowMessageBox(HWND /*hWndOwner*/, const char* text, const char* caption)
 {
-	macOS::NotImplemented("ShowMessageBox");
-	std::string line = std::string("[") + caption + "] " + text + "\n";
-	std::fputs(line.c_str(), stderr);
+	macOS::Cocoa::ShowAlert(macOS::AnsiToUtf8(caption != nullptr ? caption : ""),
+		macOS::AnsiToUtf8(text != nullptr ? text : ""));
 }
 
-void ShowMessageBox(HWND hWndOwner, const wchar_t* text, const wchar_t* caption)
+void ShowMessageBox(HWND /*hWndOwner*/, const wchar_t* text, const wchar_t* caption)
 {
-	ShowMessageBox(hWndOwner, WideToUtf8(text).c_str(), WideToUtf8(caption).c_str());
+	macOS::Cocoa::ShowAlert(WideToUtf8(caption), WideToUtf8(text));
 }
 
-void ShellOpen(const std::string& /*target*/)
+void ShellOpen(const std::string& target)
 {
-	macOS::NotImplemented("ShellOpen");
+	// Windows programs (the client launches Option.exe) don't exist here.
+	std::string lower = target;
+	for (char& ch : lower)
+		ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+	if (lower.size() >= 4 && lower.ends_with(".exe"))
+		return;
+
+	macOS::Cocoa::OpenURL(macOS::AnsiToUtf8(target));
 }
 
 std::string GetExecutablePath()
@@ -86,7 +95,20 @@ std::string GetExecutablePath()
 
 LANGID GetUserDefaultLangID()
 {
-	macOS::NotImplemented("GetUserDefaultLangID");
+	// The client only tells Taiwan (0x0404) apart; map the languages it might meet.
+	std::string language = macOS::Cocoa::PreferredLanguage();
+	if (language.starts_with("zh-Hant") || language == "zh-TW")
+		return 0x0404;
+	if (language.starts_with("zh"))
+		return 0x0804;
+	if (language.starts_with("ko"))
+		return 0x0412;
+	if (language.starts_with("ja"))
+		return 0x0411;
+	if (language.starts_with("tr"))
+		return 0x041F;
+	if (language.starts_with("de"))
+		return 0x0407;
 	return 0x0409; // en-US
 }
 

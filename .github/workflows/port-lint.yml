@@ -14,6 +14,7 @@ on:
       - '.clang-tidy'
       - 'src/db-library/**'
       - 'src/N3Base/Platform/**'
+      - 'src/FileIO/**'
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -71,7 +72,7 @@ jobs:
           python3 -m venv tidy && tidy/bin/pip install --quiet clang-tidy==19.1.0
           sdk="$(xcrun --show-sdk-path)"
           status=0
-          for f in src/N3Base/Platform/FileSystem.cpp src/N3Base/Platform/Compat/*.cpp src/N3Base/Platform/macOS/*.cpp; do
+          for f in src/FileIO/PathResolver.cpp src/N3Base/Platform/FileSystem.cpp src/N3Base/Platform/Compat/*.cpp src/N3Base/Platform/macOS/*.cpp src/N3Base/Platform/macOS/Cocoa/*.cpp; do
             tidy/bin/clang-tidy -p build --quiet --extra-arg=-isysroot --extra-arg="$sdk" "$f" || status=1
           done
           exit $status

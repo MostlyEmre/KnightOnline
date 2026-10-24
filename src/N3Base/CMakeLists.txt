@@ -145,18 +145,31 @@ if(WIN32)
 
   # winsock2.h has to precede <windows.h>, which the precompiled header includes.
   set_source_files_properties(Platform/Win32/Socket_Win32.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
-else()
+elseif(APPLE)
   list(APPEND N3BASE_COMMON_PLATFORM_SOURCES
     Platform/Compat/D3D9.h
     Platform/Compat/DInputKeys.h
     Platform/Compat/Win32Types.cpp
     Platform/Compat/Win32Types.h
     Platform/macOS/Application_macOS.cpp
+    Platform/macOS/Cocoa/CocoaApp.h
+    Platform/macOS/Cocoa/CocoaApp.mm
+    Platform/macOS/Cocoa/CoreTextFont.cpp
+    Platform/macOS/Cocoa/CoreTextFont.h
+    Platform/macOS/Cocoa/MetalRenderer.h
+    Platform/macOS/Cocoa/MetalRenderer.mm
+    Platform/macOS/CodePage.cpp
+    Platform/macOS/CodePage.h
     Platform/macOS/Crypto_macOS.cpp
+    Platform/macOS/D3DX_macOS.cpp
     Platform/macOS/Direct3D9_macOS.cpp
+    Platform/macOS/Direct3D9_macOS.h
     Platform/macOS/FontRasterizer_macOS.cpp
     Platform/macOS/Input_macOS.cpp
+    Platform/macOS/InputScript.cpp
+    Platform/macOS/InputScript.h
     Platform/macOS/KeyboardDevice_macOS.cpp
+    Platform/macOS/MacState.h
     Platform/macOS/NotImplemented.h
     Platform/macOS/ScreenCapture_macOS.cpp
     Platform/macOS/Settings_macOS.cpp
@@ -165,6 +178,31 @@ else()
     Platform/macOS/TextInput_macOS.cpp
     Platform/macOS/Time_macOS.cpp
     Platform/macOS/Window_macOS.cpp
+  )
+endif()
+
+if(APPLE)
+  # The Cocoa side never sees the Win32 compat types (they clash with Objective-C's and
+  # CoreFoundation's), so it stays out of the precompiled header, which has them.
+  set_source_files_properties(
+    Platform/macOS/Cocoa/CocoaApp.mm
+    Platform/macOS/Cocoa/CoreTextFont.cpp
+    Platform/macOS/Cocoa/MetalRenderer.mm
+    PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+  set_source_files_properties(
+    Platform/macOS/Cocoa/CocoaApp.mm
+    Platform/macOS/Cocoa/MetalRenderer.mm
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+
+  set(N3BASE_APPLE_LIBS
+    "-framework AppKit"
+    "-framework Carbon"
+    "-framework CoreText"
+    "-framework ImageIO"
+    "-framework Metal"
+    "-framework QuartzCore"
+    "-framework UniformTypeIdentifiers"
+    asio
   )
 endif()
 
@@ -315,6 +353,9 @@ if(OPENKO_BUILD_CLIENT)
   target_link_libraries(N3Base_client PUBLIC ${N3BASE_COMMON_DEPENDENCIES_PUBLIC})
   target_link_libraries(N3Base_client PRIVATE ${N3BASE_COMMON_LIBS_PRIVATE})
   target_link_libraries(N3Base_client PRIVATE ${N3BASE_COMMON_DEPENDENCIES_PRIVATE})
+  if(APPLE)
+    target_link_libraries(N3Base_client PRIVATE ${N3BASE_APPLE_LIBS})
+  endif()
 
   target_include_directories(N3Base_client INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/../" # so we can access <N3Base/...>
