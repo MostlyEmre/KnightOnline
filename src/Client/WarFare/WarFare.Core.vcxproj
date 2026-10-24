@@ -166,6 +166,7 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="SubProcPerTrade.cpp" />
+    <ClCompile Include="UIArt.cpp" />
     <ClCompile Include="UICharacterCreate.cpp" />
     <ClCompile Include="UICharacterSelect.cpp" />
     <ClCompile Include="UIChat.cpp" />
@@ -280,6 +281,7 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="ServerMesh.h" />
     <ClInclude Include="SubProcPerTrade.h" />
+    <ClInclude Include="UIArt.h" />
     <ClInclude Include="UICharacterCreate.h" />
     <ClInclude Include="UICharacterSelect.h" />
     <ClInclude Include="UIChat.h" />

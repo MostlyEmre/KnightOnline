@@ -10,6 +10,8 @@
 #include "GameDef.h"
 #include "N3UIWndBase.h"
 
+class CUIArtButton;
+
 class CUIDroppedItemDlg : public CN3UIWndBase
 {
 public:
@@ -22,8 +24,14 @@ public:
 	int m_iBackupiOrder;
 
 protected:
+	CUIArtButton* m_pBtnLootAll; // not in the uif: added under the items
+	bool m_bLootingAll;          // picking the items up one after another
+	bool m_bLootPending;         // a pick-up request is waiting for its result
+
 	int GetInventoryEmptyInviOrder(__IconItemSkill* spItem = nullptr);
 	int GetItemiOrder(__IconItemSkill* spItem);
+	bool RequestItem(int iOrder);
+	void LootNext();
 
 public:
 	CUIDroppedItemDlg();
@@ -37,6 +45,9 @@ public:
 	void EnterDroppedState(int xpos, int ypos);
 	void LeaveDroppedState();
 	void GetItemByIDToInventory(uint8_t bResult, int iItemId, int iGold, int iPos, int iItemCount, const std::string& characterName);
+
+	/// \brief After a pick-up result (and GetItemByIDToInventory): Loot All asks for the next item.
+	void ContinueLootAll(uint8_t bResult);
 	void AddToItemTable(int iItemId, int iItemCount, int iOrder);
 	void AddToItemTableToInventory(int iItemId, int iItemCount, int iOrder);
 

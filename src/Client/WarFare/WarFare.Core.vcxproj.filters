@@ -212,6 +212,9 @@
     <ClCompile Include="UICharacterSelect.cpp">
       <Filter>Scene\Character selection</Filter>
     </ClCompile>
+    <ClCompile Include="UIArt.cpp">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClCompile>
     <ClCompile Include="UIChat.cpp">
       <Filter>Scene\Ingame\UI</Filter>
     </ClCompile>
@@ -512,6 +515,9 @@
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
     <ClInclude Include="UILevelGuide.h">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UIArt.h">
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
     <ClInclude Include="UIChat.h">

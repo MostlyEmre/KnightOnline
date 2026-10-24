@@ -1,5 +1,6 @@
 ﻿#include "StdAfx.h"
 #include "UIOptions.h"
+#include "UIArt.h"
 #include "GameProcMain.h"
 #include "LocalInput.h"
 #include "PacketDef.h"
@@ -21,53 +22,15 @@
 namespace
 {
 
-// The message box art (the in-game message box and the help window use it). The texture is
-// 512x512; pieces are in texels.
-constexpr const char* ART_TEXTURE = "ui_us\\ui_message_us.dxt";
-constexpr float ART_SIZE          = 512.0f;
-
-struct Art
-{
-	int left, top, right, bottom;
-};
-
-// The frame, in nine pieces, as the help window puts it together. The corners are 64x64.
-constexpr Art ART_FRAME_TOP_LEFT { 330, 2, 394, 66 };
-constexpr Art ART_FRAME_TOP { 334, 2, 394, 66 };
-constexpr Art ART_FRAME_TOP_RIGHT { 395, 2, 459, 66 };
-constexpr Art ART_FRAME_LEFT { 330, 68, 394, 124 };
-constexpr Art ART_FRAME_CENTER { 395, 67, 453, 124 };
-constexpr Art ART_FRAME_RIGHT { 395, 67, 459, 126 };
-constexpr Art ART_FRAME_BOTTOM_LEFT { 330, 67, 394, 131 };
-constexpr Art ART_FRAME_BOTTOM { 337, 67, 394, 131 };
-constexpr Art ART_FRAME_BOTTOM_RIGHT { 395, 67, 459, 131 };
-constexpr int FRAME_CORNER = 64;
-
-// The bars the message box buttons are made of (97x29): dark, blue pressed in, blue.
-constexpr Art ART_BAR_DARK { 332, 134, 429, 163 };
-constexpr Art ART_BAR_PRESSED { 332, 163, 429, 192 };
-constexpr Art ART_BAR_BLUE { 332, 192, 429, 221 };
-constexpr int BAR_CAP                       = 8; // the bars' ends, which aren't stretched
-
-// The help window's close button (23x24) and page arrows (32x17): normal, down, mouse over.
-constexpr Art ART_CLOSE[]                   = { { 12, 379, 32, 399 }, { 56, 379, 76, 399 }, { 33, 377, 53, 397 } };
-constexpr Art ART_ARROW_LEFT[]              = { { 94, 408, 126, 425 }, { 94, 444, 126, 461 }, { 94, 481, 126, 498 } };
-constexpr Art ART_ARROW_RIGHT[]             = { { 127, 408, 159, 425 }, { 127, 444, 159, 461 }, { 127, 481, 159, 498 } };
-
-constexpr const char* FONT                  = "Arial";
 constexpr D3DCOLOR COLOR_TITLE              = 0xffffffff;
 constexpr D3DCOLOR COLOR_LABEL              = 0xfffae6af;
 constexpr D3DCOLOR COLOR_VALUE              = 0xffffffff;
-constexpr D3DCOLOR COLOR_BUTTON             = 0xfffbe3b7;
 constexpr D3DCOLOR COLOR_SELECTED           = 0xffffffff;
-constexpr D3DCOLOR COLOR_SHADOW             = 0xff000000;
 constexpr D3DCOLOR COLOR_NOTE               = 0xff80ff80;
 
 // Layout, from the window's top left.
 constexpr int WIDTH                         = 520;
 constexpr int TAB_TOP                       = 38;
-constexpr int BAR_WIDTH                     = 97;
-constexpr int BAR_HEIGHT                    = 29;
 constexpr int TAB_GAP                       = 3;
 constexpr int ROW_TOP                       = 82;
 constexpr int ROW_PITCH                     = 34;
@@ -81,8 +44,6 @@ constexpr int BOX_RIGHT                     = 458;
 constexpr int NEXT_LEFT                     = BOX_RIGHT + 4;
 constexpr int BOTTOM_HEIGHT                 = 84; // below the rows: the note, the buttons and the margin
 
-constexpr uint32_t STRING_STYLE             = UISTYLE_STRING_SINGLELINE | UISTYLE_STRING_ALIGNVCENTER;
-
 // The pages, in order. A platform's settings may add others, after these.
 const char* const PAGES[]                   = { "Display", "Graphics", "Sound", "Controls", "Performance" };
 
@@ -90,62 +51,6 @@ const char* const PAGES[]                   = { "Display", "Graphics", "Sound", 
 // widths).
 constexpr std::pair<int, int> RESOLUTIONS[] = { { 1024, 768 }, { 1152, 864 }, { 1280, 1024 }, { 1366, 768 }, { 1600, 1200 },
 	{ 1920, 1080 } };
-
-RECT MakeRect(int iLeft, int iTop, int iRight, int iBottom)
-{
-	RECT rc {};
-	rc.left   = iLeft;
-	rc.top    = iTop;
-	rc.right  = iRight;
-	rc.bottom = iBottom;
-	return rc;
-}
-
-RECT OffsetBy(const RECT& rc, int iX, int iY)
-{
-	return MakeRect(rc.left + iX, rc.top + iY, rc.right + iX, rc.bottom + iY);
-}
-
-void SetArt(CN3UIImage* pImage, const Art& art)
-{
-	pImage->SetUVRect(art.left / ART_SIZE, art.top / ART_SIZE, art.right / ART_SIZE, art.bottom / ART_SIZE);
-}
-
-CN3UIImage* AddImage(CN3UIBase* pParent, const RECT& rc, const Art& art)
-{
-	auto* pImage = new CN3UIImage();
-	pImage->Init(pParent);
-	pImage->SetTex(ART_TEXTURE);
-	SetArt(pImage, art);
-	pImage->SetRegion(rc);
-	return pImage;
-}
-
-// A bar stretched to any width, keeping its ends as they are.
-std::vector<CN3UIImage*> AddBar(CN3UIBase* pParent, const RECT& rc, const Art& art)
-{
-	const Art left { art.left, art.top, art.left + BAR_CAP, art.bottom };
-	const Art middle { art.left + BAR_CAP, art.top, art.right - BAR_CAP, art.bottom };
-	const Art right { art.right - BAR_CAP, art.top, art.right, art.bottom };
-	return {
-		AddImage(pParent, MakeRect(rc.left, rc.top, rc.left + BAR_CAP, rc.bottom), left),
-		AddImage(pParent, MakeRect(rc.left + BAR_CAP, rc.top, rc.right - BAR_CAP, rc.bottom), middle),
-		AddImage(pParent, MakeRect(rc.right - BAR_CAP, rc.top, rc.right, rc.bottom), right),
-	};
-}
-
-CN3UIString* AddString(CN3UIBase* pParent, const RECT& rc, const std::string& szText, uint32_t dwFontHeight, bool bBold, D3DCOLOR color,
-	uint32_t dwAlign = UISTYLE_STRING_ALIGNLEFT)
-{
-	auto* pString = new CN3UIString();
-	pString->Init(pParent);
-	pString->SetFont(FONT, dwFontHeight, bBold ? TRUE : FALSE, FALSE);
-	pString->SetRegion(rc);
-	pString->SetStyle(STRING_STYLE | dwAlign);
-	pString->SetColor(color);
-	pString->SetString(szText);
-	return pString;
-}
 
 std::string OptionIniPath()
 {
@@ -161,44 +66,6 @@ void SaveOption(const char* szSection, const char* szKey, int iValue)
 }
 
 } // namespace
-
-// A button made in code (CN3UIButton only gets its pictures from a uif), from three pieces of art:
-// normal, down and mouse over. Disabled looks normal.
-class COptionsButton : public CN3UIButton
-{
-public:
-	static COptionsButton* Create(CN3UIBase* pParent, const RECT& rc, const Art (&arts)[3])
-	{
-		auto* pButton = new COptionsButton();
-		pButton->Init(pParent);
-		for (int i = 0; i < NUM_BTN_STATE; i++)
-		{
-			CN3UIImage* pImage = AddImage(pButton, rc, arts[i < 3 ? i : 0]);
-			pImage->SetReserved(i);
-			pButton->m_ImageRef[i] = pImage;
-		}
-		pButton->SetRegion(rc);
-		return pButton;
-	}
-
-	// A message box style button: a bar with a label.
-	static COptionsButton* Create(CN3UIBase* pParent, const RECT& rc, const std::string& szLabel, CN3UIString** ppLabel = nullptr)
-	{
-		COptionsButton* pButton = Create(pParent, rc, { ART_BAR_DARK, ART_BAR_PRESSED, ART_BAR_BLUE });
-		AddString(pButton, OffsetBy(rc, 1, 1), szLabel, 11, true, COLOR_SHADOW, UISTYLE_STRING_ALIGNCENTER);
-		CN3UIString* pLabel = AddString(pButton, rc, szLabel, 11, true, COLOR_BUTTON, UISTYLE_STRING_ALIGNCENTER);
-		if (ppLabel != nullptr)
-			*ppLabel = pLabel;
-		return pButton;
-	}
-
-	// A selected tab looks pressed in.
-	void SetSelected(bool bSelected)
-	{
-		SetArt(m_ImageRef[BS_NORMAL], bSelected ? ART_BAR_PRESSED : ART_BAR_DARK);
-		SetArt(m_ImageRef[BS_ON], bSelected ? ART_BAR_PRESSED : ART_BAR_BLUE);
-	}
-};
 
 CUIOptions::CUIOptions()
 {
@@ -348,37 +215,37 @@ void CUIOptions::Build()
 	}
 
 	const int iHeight = ROW_TOP + static_cast<int>(iRows) * ROW_PITCH + BOTTOM_HEIGHT;
-	SetRegion(MakeRect(0, 0, WIDTH, iHeight));
+	SetRegion(UIArt::MakeRect(0, 0, WIDTH, iHeight));
 
 	// Children added later are drawn over the ones added before them, so the frame comes first.
 	// It's drawn three times: the art is see-through (73%), which makes text hard to read over a
 	// busy screen.
-	const int iRight  = WIDTH - FRAME_CORNER;
-	const int iBottom = iHeight - FRAME_CORNER;
+	const int iRight  = WIDTH - UIArt::FRAME_CORNER;
+	const int iBottom = iHeight - UIArt::FRAME_CORNER;
 	for (int i = 0; i < 3; i++)
 	{
-		AddImage(this, MakeRect(0, 0, FRAME_CORNER, FRAME_CORNER), ART_FRAME_TOP_LEFT);
-		AddImage(this, MakeRect(iRight, 0, WIDTH, FRAME_CORNER), ART_FRAME_TOP_RIGHT);
-		AddImage(this, MakeRect(0, iBottom, FRAME_CORNER, iHeight), ART_FRAME_BOTTOM_LEFT);
-		AddImage(this, MakeRect(iRight, iBottom, WIDTH, iHeight), ART_FRAME_BOTTOM_RIGHT);
-		AddImage(this, MakeRect(FRAME_CORNER, 0, iRight, FRAME_CORNER), ART_FRAME_TOP);
-		AddImage(this, MakeRect(FRAME_CORNER, iBottom, iRight, iHeight), ART_FRAME_BOTTOM);
-		AddImage(this, MakeRect(0, FRAME_CORNER, FRAME_CORNER, iBottom), ART_FRAME_LEFT);
-		AddImage(this, MakeRect(iRight, FRAME_CORNER, WIDTH, iBottom), ART_FRAME_RIGHT);
-		AddImage(this, MakeRect(FRAME_CORNER, FRAME_CORNER, iRight, iBottom), ART_FRAME_CENTER);
+		UIArt::AddImage(this, UIArt::MakeRect(0, 0, UIArt::FRAME_CORNER, UIArt::FRAME_CORNER), UIArt::FRAME_TOP_LEFT);
+		UIArt::AddImage(this, UIArt::MakeRect(iRight, 0, WIDTH, UIArt::FRAME_CORNER), UIArt::FRAME_TOP_RIGHT);
+		UIArt::AddImage(this, UIArt::MakeRect(0, iBottom, UIArt::FRAME_CORNER, iHeight), UIArt::FRAME_BOTTOM_LEFT);
+		UIArt::AddImage(this, UIArt::MakeRect(iRight, iBottom, WIDTH, iHeight), UIArt::FRAME_BOTTOM_RIGHT);
+		UIArt::AddImage(this, UIArt::MakeRect(UIArt::FRAME_CORNER, 0, iRight, UIArt::FRAME_CORNER), UIArt::FRAME_TOP);
+		UIArt::AddImage(this, UIArt::MakeRect(UIArt::FRAME_CORNER, iBottom, iRight, iHeight), UIArt::FRAME_BOTTOM);
+		UIArt::AddImage(this, UIArt::MakeRect(0, UIArt::FRAME_CORNER, UIArt::FRAME_CORNER, iBottom), UIArt::FRAME_LEFT);
+		UIArt::AddImage(this, UIArt::MakeRect(iRight, UIArt::FRAME_CORNER, WIDTH, iBottom), UIArt::FRAME_RIGHT);
+		UIArt::AddImage(this, UIArt::MakeRect(UIArt::FRAME_CORNER, UIArt::FRAME_CORNER, iRight, iBottom), UIArt::FRAME_CENTER);
 	}
 
-	AddString(this, MakeRect(16, 8, 300, 30), "Options", 12, true, COLOR_TITLE);
-	m_pBtnCloseX        = COptionsButton::Create(this, MakeRect(WIDTH - 28, 4, WIDTH - 5, 28), ART_CLOSE);
+	UIArt::AddString(this, UIArt::MakeRect(16, 8, 300, 30), "Options", 12, true, COLOR_TITLE);
+	m_pBtnCloseX        = CUIArtButton::Create(this, UIArt::MakeRect(WIDTH - 28, 4, WIDTH - 5, 28), UIArt::CLOSE);
 
 	const int iTabs     = static_cast<int>(m_Pages.size());
-	const int iTabsLeft = (WIDTH - (iTabs * BAR_WIDTH + (iTabs - 1) * TAB_GAP)) / 2;
+	const int iTabsLeft = (WIDTH - (iTabs * UIArt::BAR_WIDTH + (iTabs - 1) * TAB_GAP)) / 2;
 	for (int i = 0; i < iTabs; i++)
 	{
-		const int iLeft     = iTabsLeft + i * (BAR_WIDTH + TAB_GAP);
+		const int iLeft     = iTabsLeft + i * (UIArt::BAR_WIDTH + TAB_GAP);
 		CN3UIString* pLabel = nullptr;
-		m_Tabs.push_back(
-			COptionsButton::Create(this, MakeRect(iLeft, TAB_TOP, iLeft + BAR_WIDTH, TAB_TOP + BAR_HEIGHT), m_Pages[i], &pLabel));
+		m_Tabs.push_back(CUIArtButton::Create(
+			this, UIArt::MakeRect(iLeft, TAB_TOP, iLeft + UIArt::BAR_WIDTH, TAB_TOP + UIArt::BAR_HEIGHT), m_Pages[i], &pLabel));
 		m_TabLabels.push_back(pLabel);
 	}
 
@@ -387,29 +254,30 @@ void CUIOptions::Build()
 	{
 		Row& row            = m_Rows[i];
 		const int iTop      = ROW_TOP + static_cast<int>(i) * ROW_PITCH;
-		const int iArrowTop = iTop + (BAR_HEIGHT - ARROW_HEIGHT) / 2;
-		const RECT rcBox    = MakeRect(BOX_LEFT, iTop, BOX_RIGHT, iTop + BAR_HEIGHT);
-		row.pLabel          = AddString(this, MakeRect(LABEL_LEFT, iTop, LABEL_RIGHT, iTop + BAR_HEIGHT), "", 11, true, COLOR_LABEL);
-		row.pPrev           = COptionsButton::Create(
-            this, MakeRect(PREV_LEFT, iArrowTop, PREV_LEFT + ARROW_WIDTH, iArrowTop + ARROW_HEIGHT), ART_ARROW_LEFT);
-		row.boxImages = AddBar(this, rcBox, ART_BAR_DARK);
+		const int iArrowTop = iTop + (UIArt::BAR_HEIGHT - ARROW_HEIGHT) / 2;
+		const RECT rcBox    = UIArt::MakeRect(BOX_LEFT, iTop, BOX_RIGHT, iTop + UIArt::BAR_HEIGHT);
+		row.pLabel          = UIArt::AddString(
+            this, UIArt::MakeRect(LABEL_LEFT, iTop, LABEL_RIGHT, iTop + UIArt::BAR_HEIGHT), "", 11, true, COLOR_LABEL);
+		row.pPrev = CUIArtButton::Create(
+			this, UIArt::MakeRect(PREV_LEFT, iArrowTop, PREV_LEFT + ARROW_WIDTH, iArrowTop + ARROW_HEIGHT), UIArt::ARROW_LEFT);
+		row.boxImages = UIArt::AddBar(this, rcBox, UIArt::BAR_DARK);
 
 		// The value is a button without pictures over its box.
 		row.pBox      = new CN3UIButton();
 		row.pBox->Init(this);
 		row.pBox->SetRegion(rcBox);
-		row.pValue = AddString(this, rcBox, "", 10, true, COLOR_VALUE, UISTYLE_STRING_ALIGNCENTER);
-		row.pNext  = COptionsButton::Create(
-            this, MakeRect(NEXT_LEFT, iArrowTop, NEXT_LEFT + ARROW_WIDTH, iArrowTop + ARROW_HEIGHT), ART_ARROW_RIGHT);
+		row.pValue = UIArt::AddString(this, rcBox, "", 10, true, COLOR_VALUE, UISTYLE_STRING_ALIGNCENTER);
+		row.pNext  = CUIArtButton::Create(
+            this, UIArt::MakeRect(NEXT_LEFT, iArrowTop, NEXT_LEFT + ARROW_WIDTH, iArrowTop + ARROW_HEIGHT), UIArt::ARROW_RIGHT);
 	}
 
 	const int iNoteTop   = ROW_TOP + static_cast<int>(iRows) * ROW_PITCH + 2;
-	m_pTextNote          = AddString(this, MakeRect(LABEL_LEFT, iNoteTop, WIDTH - LABEL_LEFT, iNoteTop + 18),
+	m_pTextNote          = UIArt::AddString(this, UIArt::MakeRect(LABEL_LEFT, iNoteTop, WIDTH - LABEL_LEFT, iNoteTop + 18),
 				 "* Takes effect when the game restarts.", 10, false, COLOR_NOTE);
 
 	const int iButtonTop = iNoteTop + 18 + 12;
-	m_pBtnRestart        = COptionsButton::Create(this, MakeRect(0, iButtonTop, BAR_WIDTH, iButtonTop + BAR_HEIGHT), "Restart");
-	m_pBtnClose          = COptionsButton::Create(this, MakeRect(0, iButtonTop, BAR_WIDTH, iButtonTop + BAR_HEIGHT), "Close");
+	m_pBtnRestart = CUIArtButton::Create(this, UIArt::MakeRect(0, iButtonTop, UIArt::BAR_WIDTH, iButtonTop + UIArt::BAR_HEIGHT), "Restart");
+	m_pBtnClose   = CUIArtButton::Create(this, UIArt::MakeRect(0, iButtonTop, UIArt::BAR_WIDTH, iButtonTop + UIArt::BAR_HEIGHT), "Close");
 }
 
 void CUIOptions::Open()
@@ -487,7 +355,7 @@ void CUIOptions::ShowPage(int iPage)
 	{
 		m_Tabs[i]->SetState(UI_STATE_BUTTON_NORMAL);
 		m_Tabs[i]->SetSelected(i == iPage);
-		m_TabLabels[i]->SetColor(i == iPage ? COLOR_SELECTED : COLOR_BUTTON);
+		m_TabLabels[i]->SetColor(i == iPage ? COLOR_SELECTED : UIArt::COLOR_BUTTON);
 	}
 
 	size_t iRow = 0;
@@ -555,8 +423,8 @@ void CUIOptions::UpdateButtons()
 	const int iLeft     = GetRegion().left + WIDTH / 2;
 	const int iTop      = m_pBtnClose->GetRegion().top;
 	m_pBtnRestart->SetVisible(bRestart);
-	m_pBtnRestart->SetPos(iLeft - BAR_WIDTH - 3, iTop);
-	m_pBtnClose->SetPos(bRestart ? iLeft + 3 : iLeft - BAR_WIDTH / 2, iTop);
+	m_pBtnRestart->SetPos(iLeft - UIArt::BAR_WIDTH - 3, iTop);
+	m_pBtnClose->SetPos(bRestart ? iLeft + 3 : iLeft - UIArt::BAR_WIDTH / 2, iTop);
 }
 
 void CUIOptions::Restart()

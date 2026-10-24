@@ -4887,7 +4887,10 @@ bool CGameProcMain::MsgRecv_ItemDroppedGetResult(Packet& pkt) // 땅에 떨어�
 	}
 
 	if (m_pUIDroppedItemDlg != nullptr)
+	{
 		m_pUIDroppedItemDlg->GetItemByIDToInventory(bResult, iItemID, iGoldID, bPos, sItemCount, szString);
+		m_pUIDroppedItemDlg->ContinueLootAll(bResult);
+	}
 	return true;
 }
 

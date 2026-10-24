@@ -59,6 +59,8 @@ set(WARFARE_SCENE_INGAME_UI_SOURCES
   ItemRepairMgr.h
   SubProcPerTrade.cpp
   SubProcPerTrade.h
+  UIArt.cpp
+  UIArt.h
   UIChat.cpp
   UIChat.h
   UIClassChange.cpp

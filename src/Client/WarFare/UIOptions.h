@@ -16,7 +16,7 @@ class CN3UIButton;
 class CN3UIEdit;
 class CN3UIImage;
 class CN3UIString;
-class COptionsButton;
+class CUIArtButton;
 
 // The game's Options window, for platforms without Option.exe (Platform::HasOptionsProgram()):
 // Option.exe's settings that the game reads, and the platform's own, on pages. There's no uif for
@@ -73,7 +73,7 @@ private:
 	std::vector<Setting> m_Settings;
 	std::map<std::string, int> m_StartValues; // the restart settings' values the game started with
 	std::vector<std::string> m_Pages;
-	std::vector<COptionsButton*> m_Tabs;
+	std::vector<CUIArtButton*> m_Tabs;
 	std::vector<CN3UIString*> m_TabLabels;
 	std::vector<Row> m_Rows;
 	int m_iPage                   = 0;

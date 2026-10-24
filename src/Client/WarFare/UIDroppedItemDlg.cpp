@@ -17,6 +17,7 @@
 #include "PlayerNPC.h"
 #include "UIHotKeyDlg.h"
 #include "UISkillTreeDlg.h"
+#include "UIArt.h"
 #include "text_resources.h"
 
 #include <N3Base/N3UIArea.h>
@@ -33,6 +34,9 @@ CUIDroppedItemDlg::CUIDroppedItemDlg()
 	m_iItemBundleID = 0;
 	m_pUITooltipDlg = nullptr;
 	m_iBackupiOrder = 0;
+	m_pBtnLootAll   = nullptr;
+	m_bLootingAll   = false;
+	m_bLootPending  = false;
 }
 
 CUIDroppedItemDlg::~CUIDroppedItemDlg()
@@ -43,6 +47,7 @@ CUIDroppedItemDlg::~CUIDroppedItemDlg()
 void CUIDroppedItemDlg::Release()
 {
 	CN3UIWndBase::Release();
+	m_pBtnLootAll = nullptr; // a child, deleted with the others
 
 	for (int i = 0; i < MAX_ITEM_BUNDLE_DROP_PIECE; i++)
 	{
@@ -124,6 +129,13 @@ void CUIDroppedItemDlg::InitIconWnd(e_UIWND eWnd)
 	m_pUITooltipDlg->SetVisible(false);
 
 	CN3UIWndBase::InitIconWnd(eWnd);
+
+	// A Loot All button under the items, the window's width; the window grows to take it.
+	RECT rc       = GetRegion();
+	m_pBtnLootAll = CUIArtButton::Create(
+		this, UIArt::MakeRect(rc.left, rc.bottom + 1, rc.right, rc.bottom + 1 + UIArt::BAR_HEIGHT), "Loot All");
+	rc.bottom += 1 + UIArt::BAR_HEIGHT;
+	SetRegion(rc);
 }
 
 void CUIDroppedItemDlg::InitIconUpdate()
@@ -168,6 +180,8 @@ void CUIDroppedItemDlg::EnterDroppedState(int xpos, int ypos)
 		SetVisible(true);
 
 	SetPos(xpos, ypos - 150);
+	m_bLootingAll  = false;
+	m_bLootPending = false;
 
 	for (int i = 0; i < MAX_ITEM_BUNDLE_DROP_PIECE; i++)
 	{
@@ -195,6 +209,8 @@ void CUIDroppedItemDlg::LeaveDroppedState()
 {
 	if (IsVisible())
 		SetVisible(false);
+
+	m_bLootingAll = false;
 
 	for (int i = 0; i < MAX_ITEM_BUNDLE_DROP_PIECE; i++)
 		m_bSendedIconArray[i] = false;
@@ -373,20 +389,23 @@ bool CUIDroppedItemDlg::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 	if (pSender == nullptr)
 		return false;
 
-	int iOrder = -1, iOrderInv = -1;
+	if (pSender == m_pBtnLootAll)
+	{
+		if (dwMsg == UIMSG_BUTTON_CLICK && !m_bLootingAll)
+		{
+			m_bLootingAll = true;
+			if (!m_bLootPending)
+				LootNext();
+		}
 
-	uint32_t dwBitMask        = 0x000f0000;
+		return true;
+	}
 
-	__TABLE_ITEM_BASIC* pItem = nullptr;
-	__IconItemSkill* spItem   = nullptr;
-	std::string szIconFN;
-	e_PartPosition ePart = PART_POS_UNKNOWN;
-	e_PlugPosition ePlug = PLUG_POS_UNKNOWN;
-	e_ItemType eType     = ITEM_TYPE_UNKNOWN;
+	int iOrder              = -1;
 
-	// 서버에 보내지 않은 아이템이니까.. 서버에 보낸다..
-	uint8_t byBuff[16];
-	int iOffset = 0;
+	uint32_t dwBitMask      = 0x000f0000;
+
+	__IconItemSkill* spItem = nullptr;
 
 	switch (dwMsg & dwBitMask)
 	{
@@ -401,53 +420,20 @@ bool CUIDroppedItemDlg::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		case UIMSG_ICON_UP:
 			SetState(UI_STATE_COMMON_NONE);
 
-			// 아이템이 돈인지 검사..
-			pItem  = nullptr; // 아이템 테이블 구조체 포인터..
 			spItem = GetHighlightIconItem((CN3UIIcon*) pSender);
 			if (spItem == nullptr)
 				break;
-
-			pItem = CGameBase::s_pTbl_Items_Basic.Find(spItem->pItemBasic->dwID); // 열 데이터 얻기..
-			if (pItem == nullptr)
-			{
-				__ASSERT(0, "NULL Item!!!");
-				CLogWriter::Write("CUIDroppedItemDlg::ReceiveMessage - UIMSG_ICON_UP - NULL Icon : {}", spItem->pItemBasic->dwID);
-				break;
-			}
-
-			// 아이템에 따른 파일 이름을 만들어서
-			eType  = CGameBase::MakeResrcFileNameForUPC(pItem, spItem->pItemExt, nullptr, &szIconFN, ePart, ePlug);
 
 			// 보낸 아이콘 배열이랑 비교..
 			iOrder = GetItemiOrder(spItem);
 			if (m_iBackupiOrder != iOrder)
 				break;
 
-			// 한번 보냈던 패킷이면 break..
-			if (m_bSendedIconArray[iOrder])
+			// Loot All is picking the items up one at a time already.
+			if (m_bLootingAll)
 				break;
 
-			m_bSendedIconArray[iOrder] = true;
-
-			CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_ITEM_GET);
-			CAPISocket::MP_AddDword(byBuff, iOffset, m_iItemBundleID);
-
-			// 돈이 아니면 인벤토리 리스트에 추가....
-			if (ITEM_TYPE_GOLD != eType)
-				CAPISocket::MP_AddDword(byBuff, iOffset, spItem->pItemBasic->dwID + spItem->pItemExt->dwID);
-			else
-				CAPISocket::MP_AddDword(byBuff, iOffset, spItem->pItemBasic->dwID);
-
-			CGameProcedure::s_pSocket->Send(byBuff, iOffset);
-
-			// 보낸 아이콘 정보 셋팅..
-			s_sRecoveryJobInfo.pItemSource                    = spItem;
-			s_sRecoveryJobInfo.UIWndSourceStart.UIWnd         = UIWND_DROPITEM;
-			s_sRecoveryJobInfo.UIWndSourceStart.UIWndDistrict = UIWND_DISTRICT_DROPITEM;
-			s_sRecoveryJobInfo.UIWndSourceStart.iOrder        = iOrder;
-			s_sRecoveryJobInfo.UIWndSourceEnd.UIWnd           = UIWND_INVENTORY;
-			s_sRecoveryJobInfo.UIWndSourceEnd.UIWndDistrict   = UIWND_DISTRICT_INVENTORY_INV;
-			s_sRecoveryJobInfo.UIWndSourceEnd.iOrder          = iOrderInv;
+			RequestItem(iOrder);
 			break;
 
 		case UIMSG_ICON_DOWN:
@@ -462,6 +448,91 @@ bool CUIDroppedItemDlg::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 	}
 
 	return true;
+}
+
+// Asks the server for the item in that slot, once. The result comes back to GetItemByIDToInventory.
+bool CUIDroppedItemDlg::RequestItem(int iOrder)
+{
+	if (iOrder < 0 || iOrder >= MAX_ITEM_BUNDLE_DROP_PIECE)
+		return false;
+
+	__IconItemSkill* spItem = m_pMyDroppedItem[iOrder];
+	if (spItem == nullptr || m_bSendedIconArray[iOrder])
+		return false;
+
+	// 아이템이 돈인지 검사..
+	__TABLE_ITEM_BASIC* pItem = CGameBase::s_pTbl_Items_Basic.Find(spItem->pItemBasic->dwID); // 열 데이터 얻기..
+	if (pItem == nullptr)
+	{
+		__ASSERT(0, "NULL Item!!!");
+		CLogWriter::Write("CUIDroppedItemDlg::RequestItem - NULL Icon : {}", spItem->pItemBasic->dwID);
+		return false;
+	}
+
+	// 아이템에 따른 파일 이름을 만들어서
+	std::string szIconFN;
+	e_PartPosition ePart       = PART_POS_UNKNOWN;
+	e_PlugPosition ePlug       = PLUG_POS_UNKNOWN;
+	e_ItemType eType           = CGameBase::MakeResrcFileNameForUPC(pItem, spItem->pItemExt, nullptr, &szIconFN, ePart, ePlug);
+
+	m_bSendedIconArray[iOrder] = true;
+	m_bLootPending             = true;
+
+	// 서버에 보내지 않은 아이템이니까.. 서버에 보낸다..
+	uint8_t byBuff[16];
+	int iOffset = 0;
+	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_ITEM_GET);
+	CAPISocket::MP_AddDword(byBuff, iOffset, m_iItemBundleID);
+
+	// 돈이 아니면 인벤토리 리스트에 추가....
+	if (ITEM_TYPE_GOLD != eType)
+		CAPISocket::MP_AddDword(byBuff, iOffset, spItem->pItemBasic->dwID + spItem->pItemExt->dwID);
+	else
+		CAPISocket::MP_AddDword(byBuff, iOffset, spItem->pItemBasic->dwID);
+
+	CGameProcedure::s_pSocket->Send(byBuff, iOffset);
+
+	// 보낸 아이콘 정보 셋팅..
+	s_sRecoveryJobInfo.pItemSource                    = spItem;
+	s_sRecoveryJobInfo.UIWndSourceStart.UIWnd         = UIWND_DROPITEM;
+	s_sRecoveryJobInfo.UIWndSourceStart.UIWndDistrict = UIWND_DISTRICT_DROPITEM;
+	s_sRecoveryJobInfo.UIWndSourceStart.iOrder        = iOrder;
+	s_sRecoveryJobInfo.UIWndSourceEnd.UIWnd           = UIWND_INVENTORY;
+	s_sRecoveryJobInfo.UIWndSourceEnd.UIWndDistrict   = UIWND_DISTRICT_INVENTORY_INV;
+	s_sRecoveryJobInfo.UIWndSourceEnd.iOrder          = -1;
+	return true;
+}
+
+// Loot All: asks for the next item not asked for yet, or stops when there's none. One request at a
+// time, as a result is matched to its item through s_sRecoveryJobInfo.
+void CUIDroppedItemDlg::LootNext()
+{
+	for (int i = 0; i < MAX_ITEM_BUNDLE_DROP_PIECE; i++)
+	{
+		if (RequestItem(i))
+			return;
+	}
+
+	m_bLootingAll = false;
+}
+
+void CUIDroppedItemDlg::ContinueLootAll(uint8_t bResult)
+{
+	if (!m_bLootPending)
+		return;
+
+	m_bLootPending = false;
+	if (!m_bLootingAll)
+		return;
+
+	// 0: couldn't, 6: too many or too heavy, 7: the inventory is full.
+	if (bResult == 0 || bResult == 6 || bResult == 7 || !IsVisible())
+	{
+		m_bLootingAll = false;
+		return;
+	}
+
+	LootNext();
 }
 
 void CUIDroppedItemDlg::GetItemByIDToInventory(
