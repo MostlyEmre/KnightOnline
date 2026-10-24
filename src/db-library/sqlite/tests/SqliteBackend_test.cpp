@@ -42,6 +42,15 @@ protected:
 				[nServerNo] INTEGER NOT NULL) WITHOUT ROWID;
 			CREATE TABLE [T] ([id] INTEGER PRIMARY KEY, [name] TEXT COLLATE KO_CI, [data] BLOB,
 				[stamp] TEXT, [ratio] REAL);
+			CREATE TABLE [S] ([id] INTEGER PRIMARY KEY, [name] varchar(20) COLLATE KO_CI, [note] text,
+				[blob] BLOB);
+			CREATE TABLE [TB_USER] ([strAccountID] varchar(21) COLLATE KO_CI NOT NULL PRIMARY KEY,
+				[strPasswd] varchar(13) COLLATE KO_CI, [strAuthority] tinyint, [PremiumExpire] TEXT) WITHOUT ROWID;
+			CREATE TABLE [ACCOUNT_CHAR] ([strAccountID] varchar(21) COLLATE KO_CI NOT NULL PRIMARY KEY,
+				[bNation] tinyint, [bCharNum] tinyint) WITHOUT ROWID;
+			INSERT INTO [S] VALUES (1, CAST(X'41420043' AS TEXT), CAST(X'41420043' AS TEXT), NULL);
+			INSERT INTO [TB_USER] VALUES ('BitShift', 'test', 1, NULL);
+			INSERT INTO [ACCOUNT_CHAR] VALUES ('bitshift', 1, 2);
 			INSERT INTO [CURRENTUSER] VALUES ('Probe', 1);
 			INSERT INTO [T] VALUES (1, 'Alpha', X'0100FF00', '2016-05-26 21:48:24.150', 1.5),
 				(2, 'beta  ', NULL, NULL, NULL), (3, 'GAMMA', X'', '2026-03-31 21:50:00.000', -2.25);
@@ -225,4 +234,50 @@ TEST_F(SqliteBackendTest, UnknownProcedureIsReportedLikeSqlServer)
 	{
 		EXPECT_EQ(ex.native(), 2812);
 	}
+}
+
+TEST_F(SqliteBackendTest, BoundCharacterColumnsEndAtNulLikeNanodbc)
+{
+	nanodbc::statement stmt(_conn, "SELECT [name], [note] FROM [S]");
+	nanodbc::result r = stmt.execute();
+	ASSERT_TRUE(r.next());
+	EXPECT_EQ(r.get<std::string>(0), "AB");                    // varchar: C string
+	EXPECT_EQ(r.get<std::string>(1), std::string("AB\0C", 4)); // text: long data
+	EXPECT_EQ(r.get<std::vector<uint8_t>>(0), (std::vector<uint8_t> { 'A', 'B', 0, 'C' }));
+}
+
+TEST_F(SqliteBackendTest, EmptyBinaryParameterIsStoredAsNull)
+{
+	std::vector<uint8_t> empty;
+	nanodbc::statement stmt(_conn, "UPDATE [S] SET [blob] = ? WHERE [id] = 1");
+	stmt.bind_binary(0, empty);
+	stmt.execute();
+	nanodbc::statement check(_conn, "SELECT [blob] FROM [S] WHERE [id] = 1");
+	nanodbc::result r = check.execute();
+	ASSERT_TRUE(r.next());
+	EXPECT_TRUE(r.is_null(0));
+}
+
+TEST_F(SqliteBackendTest, ProcedureWithoutResultsLeavesNoCursor)
+{
+	// ACCOUNT_LOGIN only assigns variables: SQL Server sends no results at all, so the output
+	// is available at once and SQLNumResultCols / SQLRowCount fail with 24000.
+	int16_t ret = -1;
+	nanodbc::statement stmt(_conn, "{CALL ACCOUNT_LOGIN(?,?,?)}");
+	stmt.bind(0, "BITSHIFT");
+	stmt.bind(1, "TEST");
+	stmt.bind(2, &ret, nanodbc::statement::PARAM_OUT);
+	nanodbc::result r = stmt.execute();
+	EXPECT_EQ(ret, 2); // nation 1 + 1
+	EXPECT_THROW(r.columns(), nanodbc::database_error);
+	EXPECT_THROW(r.affected_rows(), nanodbc::database_error);
+	EXPECT_FALSE(r.next_result());
+}
+
+TEST_F(SqliteBackendTest, EmptyResultSetReportsZeroRows)
+{
+	nanodbc::statement stmt(_conn, "SELECT [id] FROM [T] WHERE [id] > 100");
+	nanodbc::result r = stmt.execute();
+	EXPECT_EQ(r.affected_rows(), 0);
+	EXPECT_FALSE(r.next());
 }

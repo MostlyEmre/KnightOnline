@@ -43,6 +43,8 @@ const std::set<std::string> DateColumns = { "BuyTime", "CreateTime", "EditorTime
 	"UpdateDate", "UpdateTime", "tWriteTime", "timeLender", "timeRegister", "timeRental" };
 const std::set<std::string> FloatColumns = { "Ac", "Axe", "Bow", "Club", "Evasionrate", "Hitrate",
 	"Hp", "Mp", "Pole", "ShortSword", "Sp", "Spear", "Staff", "Sword" };
+// text-type (long data) columns.
+const std::set<std::string> LongTextColumns = { "path" };
 // Written with GETDATE() by procedures and defaults: compared only for NULL-ness.
 const std::set<std::string> VolatileColumns = { "UpdateTime", "CreateTime" };
 
@@ -92,6 +94,13 @@ std::string ReadCell(const nanodbc::result& r, short col, const std::string& nam
 	{
 		return std::format("{:.17g}", r.get<double>(col));
 	}
+	// Integers are read as numbers: nanodbc's number-to-string conversion sizes its buffer by
+	// the column's digit count without room for the sign, so -10000 in a smallint comes back
+	// as "-1000".
+	static const std::set<int> IntegerTypes = { -7 /*SQL_BIT*/, -6 /*SQL_TINYINT*/,
+		5 /*SQL_SMALLINT*/, 4 /*SQL_INTEGER*/, -5 /*SQL_BIGINT*/ };
+	if (IntegerTypes.contains(r.column_datatype(col)))
+		return JsonString(std::to_string(r.get<int64_t>(col)));
 	try
 	{
 		return JsonString(r.get<std::string>(col));
@@ -131,11 +140,7 @@ std::string DrainSequence(nanodbc::result& r)
 	{
 		do
 		{
-			if (!firstStep)
-				steps += ",";
-			firstStep  = false;
-
-			short cols = r.columns();
+			short cols       = r.columns();
 			std::string step = "{\"affected\":" + std::to_string(r.affected_rows());
 			if (cols > 0)
 			{
@@ -155,7 +160,8 @@ std::string DrainSequence(nanodbc::result& r)
 				}
 				step += "]";
 			}
-			steps += step + "}";
+			steps += (firstStep ? "" : ",") + step + "}";
+			firstStep = false;
 		}
 		while (r.next_result());
 	}
@@ -235,16 +241,32 @@ public:
 		std::string line = "{\"case\":" + JsonString("dump:" + table) + ",\"kind\":\"dump\"";
 		try
 		{
-			auto conn               = db::ConnectionManager::CreatePoolConnection(DbType::GAME);
-			nanodbc::statement stmt = conn->CreateStatement("SELECT * FROM [" + table + "]");
-			nanodbc::result r       = stmt.execute();
-			std::vector<std::string> names;
-			std::string columns = "[";
-			for (short i = 0; i < r.columns(); i++)
+			auto conn = db::ConnectionManager::CreatePoolConnection(DbType::GAME);
+
+			// ODBC wants long-data columns read after the bound ones, so list them last (as
+			// SqlBuilder does with BlobColumns()).
+			std::vector<std::string> names, longData;
 			{
-				names.push_back(r.column_name(i));
-				columns += (i > 0 ? "," : "") + JsonString(names.back());
+				nanodbc::statement head = conn->CreateStatement("SELECT * FROM [" + table + "] WHERE 1 = 0");
+				nanodbc::result columnsOnly = head.execute();
+				for (short i = 0; i < columnsOnly.columns(); i++)
+				{
+					std::string name = columnsOnly.column_name(i);
+					if (BinaryColumns.contains(name) || LongTextColumns.contains(name))
+						longData.push_back(name);
+					else
+						names.push_back(name);
+				}
 			}
+			names.insert(names.end(), longData.begin(), longData.end());
+			std::string select = "SELECT ", columns = "[";
+			for (size_t i = 0; i < names.size(); i++)
+			{
+				select += (i > 0 ? ", [" : "[") + names[i] + "]";
+				columns += (i > 0 ? "," : "") + JsonString(names[i]);
+			}
+			nanodbc::statement stmt = conn->CreateStatement(select + " FROM [" + table + "]");
+			nanodbc::result r       = stmt.execute();
 			std::vector<std::string> rows;
 			while (r.next())
 				rows.push_back(ReadRow(r, names));

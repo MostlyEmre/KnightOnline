@@ -135,16 +135,23 @@ def create_table(table):
 	lines = []
 	for col in cols:
 		kind = column_kind(col)
-		decl = {"int": "INTEGER", "real": "REAL", "date": "TEXT", "blob": "BLOB", "text": "TEXT COLLATE KO_CI"}[kind]
+		# Declared types keep the SQL Server type names where SQLite's affinity rules agree
+		# (tinyint/int -> INTEGER, float -> REAL, char/varchar/text -> TEXT); the backend uses
+		# the declared type to tell long-data (text) columns from bound character columns.
+		t = col["type"].lower()
+		length = col.get("length")
+		if kind == "text":
+			sized = length is not None and int(length) > 0 and t not in ("text", "ntext")
+			decl = (f"{t}({int(length)})" if sized else t) + " COLLATE KO_CI"
+		else:
+			decl = {"int": t, "real": "float", "date": "TEXT", "blob": "BLOB"}[kind]
 		line = f"  {quote_ident(col['name'])} {decl}"
 		if not col.get("allowNull", False):
 			line += " NOT NULL"
 		line += default_clause(col, kind)
-		t = col["type"].lower()
 		if kind == "int":
 			lo, hi = INT_RANGES[t]
 			line += f" CONSTRAINT range_{col['name']} CHECK ({quote_ident(col['name'])} BETWEEN {lo} AND {hi})"
-		length = col.get("length")
 		if kind in ("text", "blob") and length is not None and int(length) > 0:
 			line += f" CONSTRAINT len_{col['name']} CHECK (length(CAST({quote_ident(col['name'])} AS BLOB)) <= {int(length)})"
 		lines.append(line)
@@ -242,6 +249,9 @@ def render(tok, col, kind):
 	t = col["type"].lower()
 	length = int(col.get("length") or 0)
 	if tok.kind == "null":
+		# kodb-util (which loads the SQL Server reference) writes NULL text-type values as ''.
+		if t in ("text", "ntext"):
+			return "''"
 		return "NULL"
 	if kind == "int":
 		if tok.kind == "num":

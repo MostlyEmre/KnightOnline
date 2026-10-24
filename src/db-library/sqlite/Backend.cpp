@@ -186,7 +186,7 @@ void ThrowSqliteError(sqlite3* db, int rc, std::string_view context)
 		case SQLITE_CONSTRAINT_CHECK:
 			// Schema CHECKs are named len_* (SQL Server: string truncation) or range_* (overflow).
 			if (message.find("len_") != std::string::npos)
-				throw nanodbc::database_error("22001", message, 2628);
+				throw nanodbc::database_error("42000", message, 2628);
 			throw nanodbc::database_error("22003", message, 220);
 		case SQLITE_BUSY:
 		case SQLITE_BUSY_SNAPSHOT:

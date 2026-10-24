@@ -203,6 +203,10 @@ public:
 	long affected_rows() const;
 	short columns() const;
 	string column_name(short column) const;
+
+	/// \brief The column's ODBC SQL type code (SQL_TINYINT, SQL_VARCHAR, ...), from the declared
+	/// column type, or from the value for computed columns.
+	int column_datatype(short column) const;
 	short column(const string& columnName) const;
 
 	bool next();

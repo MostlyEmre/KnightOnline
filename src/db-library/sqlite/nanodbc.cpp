@@ -185,6 +185,61 @@ void WriteScalar(void* ptr, int kind, const Value& value)
 
 } // namespace
 
+// ODBC SQL type codes (sql.h / sqlext.h), as SQL Server's driver reports them.
+constexpr int SqlChar          = 1;
+constexpr int SqlVarchar       = 12;
+constexpr int SqlLongVarchar   = -1;
+constexpr int SqlBit           = -7;
+constexpr int SqlTinyInt       = -6;
+constexpr int SqlSmallInt      = 5;
+constexpr int SqlInteger       = 4;
+constexpr int SqlBigInt        = -5;
+constexpr int SqlDouble        = 8;
+constexpr int SqlVarBinary     = -3;
+constexpr int SqlTypeTimestamp = 93;
+
+int DatatypeFromDeclared(std::string type)
+{
+	std::transform(type.begin(), type.end(), type.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	if (type.starts_with("tinyint"))
+		return SqlTinyInt;
+	if (type.starts_with("smallint"))
+		return SqlSmallInt;
+	if (type.starts_with("bigint"))
+		return SqlBigInt;
+	if (type.starts_with("int") || type == "integer")
+		return SqlInteger;
+	if (type.starts_with("bit"))
+		return SqlBit;
+	if (type.starts_with("float") || type.starts_with("real"))
+		return SqlDouble;
+	if (type.starts_with("varchar"))
+		return SqlVarchar;
+	if (type.starts_with("char"))
+		return SqlChar;
+	if (type.starts_with("text") || type.starts_with("ntext"))
+		return SqlLongVarchar;
+	if (type == "blob")
+		return SqlVarBinary;
+	return 0;
+}
+
+int DatatypeFromValue(const Value& v)
+{
+	switch (v.Kind)
+	{
+		case Value::Type::Integer:
+			return SqlInteger;
+		case Value::Type::Real:
+			return SqlDouble;
+		case Value::Type::Blob:
+			return SqlVarBinary;
+		default:
+			return SqlVarchar;
+	}
+}
+
 class connection_impl
 {
 public:
@@ -261,10 +316,13 @@ struct bound_param
 				return Ptr != nullptr ? Value::Text(static_cast<const char*>(Ptr)) : Value::Null();
 			case kind::owned_text:
 				return Value::Text(Owned);
+			// nanodbc sends an empty binary as a zero length with a null buffer, which
+			// SQL Server stores as NULL (measured on rig B).
 			case kind::binary_ptr:
-				return Value::Blob(std::string_view(static_cast<const char*>(Ptr), Size));
+				return Size > 0 ? Value::Blob(std::string_view(static_cast<const char*>(Ptr), Size))
+								: Value::Null();
 			case kind::owned_binary:
-				return Value::Blob(Owned);
+				return !Owned.empty() ? Value::Blob(Owned) : Value::Null();
 			default:
 				return Value::Null();
 		}
@@ -284,6 +342,16 @@ public:
 	virtual bool at_end() const                         = 0;
 	virtual bool first()                                = 0;
 	virtual const Value& value(short column) const      = 0;
+
+	/// \brief ODBC SQL type code of a column.
+	virtual int datatype(short column) const            = 0;
+
+	/// \brief Whether the column is long data (text/ntext), which nanodbc reads with
+	/// SQLGetData and lengths; ordinary character columns are bound and read as C strings.
+	virtual bool is_long(short /*column*/) const
+	{
+		return false;
+	}
 
 	short column_index(const std::string& name) const
 	{
@@ -408,13 +476,41 @@ public:
 		{
 			const char* name = sqlite3_column_name(s, i);
 			_columns.emplace_back(name != nullptr ? name : "");
+
+			const char* decl = sqlite3_column_decltype(s, i);
+			std::string type = decl != nullptr ? decl : "";
+			_types.push_back(DatatypeFromDeclared(type));
+			std::transform(type.begin(), type.end(), type.begin(),
+				[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			_long.push_back(type.starts_with("text") || type.starts_with("ntext"));
 		}
 		_row.resize(static_cast<size_t>(n));
+
+		// SQL Server reports a row count of 0 up front for an empty result set and -1 while
+		// rows are pending (measured on rig B), so look one row ahead.
+		_pending = fetch();
+		_empty   = !_pending;
 	}
 
 	long affected_rows() const override
 	{
-		return SelectAffectedRows;
+		return _empty ? 0 : SelectAffectedRows;
+	}
+
+	bool is_long(short column) const override
+	{
+		check_column(column);
+		return _long[static_cast<size_t>(column)];
+	}
+
+	int datatype(short column) const override
+	{
+		check_column(column);
+		int type = _types[static_cast<size_t>(column)];
+		return type != 0
+				   ? type
+				   : (_hasRow || _pending ? DatatypeFromValue(_row[static_cast<size_t>(column)])
+										  : SqlVarchar);
 	}
 
 	short columns() const override
@@ -430,24 +526,14 @@ public:
 
 	bool next() override
 	{
-		if (_done)
-			return false;
-
-		sqlite3_stmt* s = _stmt->Stmt;
-		int rc          = sqlite3_step(s);
-		if (rc == SQLITE_ROW)
+		if (_pending)
 		{
-			for (size_t i = 0; i < _row.size(); i++)
-				_row[i] = read_column(s, static_cast<int>(i));
-			_hasRow = true;
+			_pending = false;
+			_hasRow  = true;
 			return true;
 		}
-
-		_done   = true;
-		_hasRow = false;
-		if (rc != SQLITE_DONE)
-			db::sqlite::ThrowSqliteError(sqlite3_db_handle(s), rc, "fetch");
-		return false;
+		_hasRow = fetch();
+		return _hasRow;
 	}
 
 	bool next_result() override
@@ -462,7 +548,7 @@ public:
 
 	bool first() override
 	{
-		if (_hasRow || _done)
+		if (_hasRow || (_done && !_pending))
 			ThrowProgrammingError("first() on a forward-only result");
 		return next();
 	}
@@ -476,6 +562,27 @@ public:
 	}
 
 private:
+	// Steps the statement into _row; false at the end.
+	bool fetch()
+	{
+		if (_done)
+			return false;
+
+		sqlite3_stmt* s = _stmt->Stmt;
+		int rc          = sqlite3_step(s);
+		if (rc == SQLITE_ROW)
+		{
+			for (size_t i = 0; i < _row.size(); i++)
+				_row[i] = read_column(s, static_cast<int>(i));
+			return true;
+		}
+
+		_done = true;
+		if (rc != SQLITE_DONE)
+			db::sqlite::ThrowSqliteError(sqlite3_db_handle(s), rc, "fetch");
+		return false;
+	}
+
 	static Value read_column(sqlite3_stmt* s, int i)
 	{
 		switch (sqlite3_column_type(s, i))
@@ -506,8 +613,12 @@ private:
 	std::shared_ptr<statement_impl> _stmt;
 	std::vector<std::string> _columns;
 	std::vector<Value> _row;
-	bool _hasRow = false;
-	bool _done   = false;
+	std::vector<bool> _long;
+	std::vector<int> _types;
+	bool _hasRow  = false;
+	bool _pending = false;
+	bool _empty   = false;
+	bool _done    = false;
 };
 
 // The ODBC result sequence of a procedure call or a DML statement: row counts, result
@@ -535,16 +646,38 @@ public:
 
 	long affected_rows() const override
 	{
+		// A procedure that produced nothing at all leaves no cursor, so SQLRowCount fails
+		// too (measured on rig B).
+		if (_steps.empty())
+			ThrowInvalidCursorState();
 		if (_index >= _steps.size())
 			return -1;
 		const Step& step = _steps[_index];
-		return step.Kind == Step::Type::Rows ? SelectAffectedRows : static_cast<long>(step.Count);
+		if (step.Kind == Step::Type::Rows)
+			return step.Data.Rows.empty() ? 0 : SelectAffectedRows;
+		return static_cast<long>(step.Count);
 	}
 
 	short columns() const override
 	{
+		if (_steps.empty())
+			ThrowInvalidCursorState();
 		const Step* step = current_rows();
 		return step != nullptr ? static_cast<short>(step->Data.Columns.size()) : 0;
+	}
+
+	int datatype(short column) const override
+	{
+		const Step* step = current_rows();
+		if (step == nullptr || column < 0
+			|| static_cast<size_t>(column) >= step->Data.Columns.size())
+			throw database_error("07009", "[SQLite] column index out of range", 0);
+		for (const auto& row : step->Data.Rows)
+		{
+			if (!row[static_cast<size_t>(column)].IsNull())
+				return DatatypeFromValue(row[static_cast<size_t>(column)]);
+		}
+		return SqlVarchar;
 	}
 
 	std::string column_name(short column) const override
@@ -974,6 +1107,11 @@ string result::column_name(short column) const
 	return Impl(_impl).column_name(column);
 }
 
+int result::column_datatype(short column) const
+{
+	return Impl(_impl).datatype(column);
+}
+
 short result::column(const string& columnName) const
 {
 	return Impl(_impl).column_index(columnName);
@@ -1058,6 +1196,11 @@ std::string result::get_string(short column) const
 		case Value::Type::Real:
 			return std::format("{:.17g}", v.Real);
 		case Value::Type::Text:
+			// nanodbc reads bound character columns as C strings, so they end at the first NUL;
+			// long-data (text) columns are read with lengths and keep every byte.
+			if (!Impl(_impl).is_long(column))
+				return v.Bytes.substr(0, v.Bytes.find('\0'));
+			return v.Bytes;
 		case Value::Type::Blob:
 			return v.Bytes;
 		default:

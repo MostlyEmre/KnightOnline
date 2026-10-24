@@ -19,8 +19,8 @@ namespace
 const sqlite3_destructor_type Transient     = SQLITE_TRANSIENT;
 
 // Whether "SELECT @var = col FROM ..." hands the client a row count, as INSERT/UPDATE/DELETE
-// do while NOCOUNT is OFF. Calibrated against SQL Server by the rig B parity probe.
-constexpr bool AssignSelectProducesRowCount = true;
+// do while NOCOUNT is OFF. Measured on rig B (SQL Server 2022, ODBC Driver 18): it doesn't.
+constexpr bool AssignSelectProducesRowCount = false;
 
 void BindValue(sqlite3_stmt* stmt, int index, const Value& value)
 {
@@ -73,7 +73,7 @@ void ConstraintStep(ProcContext& ctx, sqlite3* db, int rc, int& nativeOut)
 			if (detail.find("len_") != std::string::npos)
 			{
 				nativeOut = 2628;
-				ctx.Error("22001", nativeOut,
+				ctx.Error("42000", nativeOut, // ODBC Driver 18 reports 2628 as 42000 (rig B)
 					"String or binary data would be truncated (" + detail + ")");
 			}
 			else
