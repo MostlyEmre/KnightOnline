@@ -1,6 +1,7 @@
 add_executable(Ebenezer.Tests
   EventExec_test.cpp
   EventLogic_test.cpp
+  Genie_test.cpp
   ItemExchange_test.cpp
   ItemUpgrade_test.cpp
   RankStipendReward_test.cpp

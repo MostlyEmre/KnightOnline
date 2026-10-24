@@ -279,6 +279,9 @@ public:
 	/// \brief The Power-up Store's items, in the store's order
 	std::vector<_SHOPPING_MALL_ITEM> m_ShoppingMallItems;
 
+	/// \brief Whether players may run Genie (auto-hunt): [GENIE] ENABLED in the config, on by default
+	bool m_bGenieEnabled = true;
+
 	/// \brief User Knights Ranking cache. Officially this is split into two caches
 	/// that track stipend claims in-memory, which means stipends reset on a server crash/restart.
 	/// \originalName m_UserKnightsRankKarus, m_UserKnightsRankElmorad

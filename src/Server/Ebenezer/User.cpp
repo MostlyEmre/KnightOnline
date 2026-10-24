@@ -200,6 +200,7 @@ void CUser::Initialize()
 	m_bShoppingMallState      = SHOPPING_MALL_CLOSED;
 	m_bShoppingMallBuyPending = false;
 	m_iKnightCash             = 0;
+	m_bGenieActive            = false;
 
 	TcpServerSocket::Initialize();
 }
@@ -696,6 +697,10 @@ void CUser::Parsing(int len, char* pData)
 
 		case WIZ_SHOPPING_MALL:
 			ShoppingMall(pData + index);
+			break;
+
+		case WIZ_GENIE:
+			Genie(pData + index);
 			break;
 
 		case WIZ_REPORT_BUG:
@@ -14679,6 +14684,9 @@ void CUser::GameStart(char* pBuf)
 		if (bRecastSavedMagic)
 			ItemMallMagicRecast(false);
 #endif
+
+		// OpenKO: whether the client may offer Genie (auto-hunt).
+		SendGenieAvailable();
 	}
 }
 
@@ -15378,6 +15386,47 @@ void CUser::RecvKnightCashAdd(const char* pBuf)
 	SetInt(sendBuffer, amount, sendIndex);
 	SetInt(sendBuffer, knightCash, sendIndex);
 	Send(sendBuffer, sendIndex);
+}
+
+void CUser::SendGenieAvailable()
+{
+	char sendBuffer[8] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_GENIE, sendIndex);
+	SetByte(sendBuffer, GENIE_AVAILABLE, sendIndex);
+	SetByte(sendBuffer, m_pMain->m_bGenieEnabled ? 1 : 0, sendIndex);
+	Send(sendBuffer, sendIndex);
+}
+
+void CUser::Genie(char* pBuf)
+{
+	if (GetState() != CONNECTION_STATE_GAMESTART)
+		return;
+
+	int index = 0;
+	switch (GetByte(pBuf, index))
+	{
+		case GENIE_START:
+		{
+			m_bGenieActive = m_pMain->m_bGenieEnabled && m_bResHpType != USER_DEAD
+							 && m_pUserData->m_sHp > 0;
+
+			char sendBuffer[8] {};
+			int sendIndex = 0;
+			SetByte(sendBuffer, WIZ_GENIE, sendIndex);
+			SetByte(sendBuffer, GENIE_START, sendIndex);
+			SetByte(sendBuffer, m_bGenieActive ? 1 : 0, sendIndex);
+			Send(sendBuffer, sendIndex);
+		}
+		break;
+
+		case GENIE_STOP:
+			m_bGenieActive = false;
+			break;
+
+		default:
+			break;
+	}
 }
 
 } // namespace Ebenezer

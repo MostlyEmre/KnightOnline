@@ -1249,6 +1249,7 @@ bool EbenezerApp::LoadConfig(CIni& iniFile)
 
 	m_nCastleCapture = iniFile.GetInt("CASTLE", "NATION", 1);
 	m_nServerNo      = iniFile.GetInt("ZONE_INFO", "MY_INFO", 1);
+	m_bGenieEnabled  = iniFile.GetBool("GENIE", "ENABLED", true);
 	m_nServerGroup   = static_cast<e_ServerGroupType>(iniFile.GetInt("ZONE_INFO", "SERVER_NUM", 0));
 	serverCount      = iniFile.GetInt("ZONE_INFO", "SERVER_COUNT", 1);
 	if (serverCount < 1)

@@ -219,6 +219,8 @@ public:
 	bool m_bShoppingMallBuyPending           = false; // waiting on Aujard for a purchase
 	int m_iKnightCash                        = 0;     // as Aujard last told it
 
+	bool m_bGenieActive                      = false; // Genie (auto-hunt) is running
+
 	// Game socket specific:
 	_REGION_BUFFER* _regionBuffer            = nullptr;
 
@@ -322,6 +324,13 @@ public:
 
 	/// \return the number of empty inventory slots
 	int GetEmptySlotCount() const;
+
+	/// \brief Handles WIZ_GENIE: Genie (auto-hunt) starting and stopping
+	/// \see e_GenieOpcode
+	void Genie(char* pBuf);
+
+	/// \brief Tells the client whether Genie is allowed (GENIE_AVAILABLE)
+	void SendGenieAvailable();
 
 	/// \brief Whether a Power-up Store item fits in the inventory
 	/// \return STORE_BUY_SUCCESS if it does, otherwise STORE_BUY_NO_ROOM or STORE_BUY_TOO_HEAVY

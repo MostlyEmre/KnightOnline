@@ -3,6 +3,7 @@
   <ItemGroup>
     <ClCompile Include="EventExec_test.cpp" />
     <ClCompile Include="EventLogic_test.cpp" />
+    <ClCompile Include="Genie_test.cpp" />
     <ClCompile Include="ItemExchange_test.cpp" />
     <ClCompile Include="data\ItemExchange_test_data.h">
       <Filter>data</Filter>

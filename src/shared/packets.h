@@ -133,6 +133,10 @@ enum e_GameOpcode : uint8_t
 	WIZ_BIFROST             = 0x7B,
 	WIZ_SERVER_KILL         = 0x7F,
 
+	/// Genie (auto-hunt): not in 1.298; later official versions use 0x97 for it.
+	/// \see e_GenieOpcode
+	WIZ_GENIE               = 0x97,
+
 	// NOTE(srmeier): testing this debug string functionality
 	WIZ_DEBUG_STRING_PACKET = 0xFE,
 
@@ -770,6 +774,21 @@ enum e_StoreBuyResult : uint8_t
 	STORE_BUY_INVALID     = 5,
 	/// The Knight Cash couldn't be reached
 	STORE_BUY_UNAVAILABLE = 6
+};
+
+/// \brief WIZ_GENIE sub-opcodes: the Genie handshake. The client sends WIZ_GENIE only after the
+/// server has announced that Genie is allowed, since a server that doesn't know the opcode
+/// disconnects the client. The hunting itself uses the client's ordinary packets.
+enum e_GenieOpcode : uint8_t
+{
+	/// Server: [uint8 allowed], once the player is in the game
+	GENIE_AVAILABLE = 1,
+
+	/// Client: [] -> Server: [uint8 ok]
+	GENIE_START     = 2,
+
+	/// Client: []
+	GENIE_STOP      = 3
 };
 
 enum e_RentalOpcode : uint8_t
