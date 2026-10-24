@@ -158,6 +158,9 @@ protected:
 	/// \brief Listen port for the Telnet server
 	uint16_t _telnetPort               = 2323;
 
+	/// \brief Address the game listeners (TCP, and Ebenezer's UDP) bind to; --listen-address
+	std::string _listenAddress         = "0.0.0.0";
+
 	/// \brief Application status used for health checks
 	AppStatus _appStatus               = AppStatus::INITIALIZING;
 

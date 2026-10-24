@@ -349,13 +349,13 @@ bool AIServerApp::ListenByServerZoneType()
 		return false;
 	}
 
-	if (!_serverSocketManager.Listen(port))
+	if (!_serverSocketManager.Listen(port, _listenAddress))
 	{
 		spdlog::error("AIServerApp::ListenByServerZoneType: failed to listen on port {}", port);
 		return false;
 	}
 
-	spdlog::info("AIServerApp::ListenByServerZoneType: Listening on 0.0.0.0:{}", port);
+	spdlog::info("AIServerApp::ListenByServerZoneType: Listening on {}:{}", _listenAddress, port);
 	return true;
 }
 

@@ -24,10 +24,17 @@ CUdpSocket::~CUdpSocket()
 	_recvUdpThread.shutdown();
 }
 
-bool CUdpSocket::CreateSocket()
+bool CUdpSocket::CreateSocket(const std::string& address)
 {
-	asio::ip::udp::endpoint endpoint(asio::ip::udp::v4(), _UDP_PORT);
 	asio::error_code ec;
+	asio::ip::address_v4 bindAddress = asio::ip::make_address_v4(address, ec);
+	if (ec)
+	{
+		spdlog::error("UdpSocket::CreateSocket: invalid address {}: {}", address, ec.message());
+		return false;
+	}
+
+	asio::ip::udp::endpoint endpoint(bindAddress, _UDP_PORT);
 
 	_socket.open(endpoint.protocol(), ec);
 	if (ec)

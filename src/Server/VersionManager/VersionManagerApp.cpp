@@ -80,7 +80,7 @@ bool VersionManagerApp::OnStart()
 		return false;
 	}
 
-	if (!_serverSocketManager.Listen(_LISTEN_PORT))
+	if (!_serverSocketManager.Listen(_LISTEN_PORT, _listenAddress))
 	{
 		spdlog::error("FAIL TO CREATE LISTEN STATE");
 		return false;
@@ -88,7 +88,7 @@ bool VersionManagerApp::OnStart()
 
 	_serverSocketManager.StartAccept();
 
-	spdlog::info("Listening on 0.0.0.0:{}", _LISTEN_PORT);
+	spdlog::info("Listening on {}:{}", _listenAddress, _LISTEN_PORT);
 
 	_dbPoolCheckThread->start();
 

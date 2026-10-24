@@ -281,13 +281,14 @@ bool EbenezerApp::OnStart()
 		return false;
 	}
 
-	if (!_serverSocketManager.Listen(pInfo->sPort))
+	if (!_serverSocketManager.Listen(pInfo->sPort, _listenAddress))
 	{
 		spdlog::error("FAIL TO CREATE LISTEN STATE");
 		return false;
 	}
 
-	spdlog::info("Listening on 0.0.0.0:{} - not accepting user connections yet", pInfo->sPort);
+	spdlog::info(
+		"Listening on {}:{} - not accepting user connections yet", _listenAddress, pInfo->sPort);
 
 	if (!InitializeMMF())
 	{
@@ -484,7 +485,7 @@ bool EbenezerApp::OnStart()
 	LoadNoticeData();
 
 	m_pUdpSocket = new CUdpSocket(this);
-	if (!m_pUdpSocket->CreateSocket())
+	if (!m_pUdpSocket->CreateSocket(_listenAddress))
 	{
 		spdlog::error("EbenezerApp::OnStart: failed to create UDP socket");
 		return false;

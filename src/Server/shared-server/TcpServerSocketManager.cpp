@@ -23,17 +23,25 @@ TcpServerSocketManager::~TcpServerSocketManager()
 	}
 }
 
-bool TcpServerSocketManager::Listen(int port)
+bool TcpServerSocketManager::Listen(int port, const std::string& address)
 {
 	try
 	{
 		asio::error_code ec;
 
+		asio::ip::address_v4 listenAddress = asio::ip::make_address_v4(address, ec);
+		if (ec)
+		{
+			spdlog::error("TcpServerSocketManager({})::Listen: invalid address {}. [error={}]",
+				_implName, address, ec.message());
+			return false;
+		}
+
 		// Attempt to setup the acceptor.
 		_acceptor = std::make_unique<asio::ip::tcp::acceptor>(_workerPool->get_executor());
 
-		// Setup the endpoint for TCPv4 0.0.0.0:port
-		asio::ip::tcp::endpoint endpoint(asio::ip::tcp::v4(), port);
+		// Setup the endpoint for TCPv4 address:port
+		asio::ip::tcp::endpoint endpoint(listenAddress, static_cast<asio::ip::port_type>(port));
 
 		// Attempt to open the socket.
 		_acceptor->open(endpoint.protocol(), ec);
@@ -62,9 +70,8 @@ bool TcpServerSocketManager::Listen(int port)
 		_acceptor->bind(endpoint, ec);
 		if (ec)
 		{
-			spdlog::error(
-				"TcpServerSocketManager({})::Listen: bind() failed on 0.0.0.0:{}. [error={}]",
-				_implName, port, ec.message());
+			spdlog::error("TcpServerSocketManager({})::Listen: bind() failed on {}:{}. [error={}]",
+				_implName, address, port, ec.message());
 			return false;
 		}
 

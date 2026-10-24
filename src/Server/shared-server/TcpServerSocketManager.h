@@ -6,6 +6,8 @@
 #include "TcpSocketManager.h"
 #include "TcpServerSocket.h"
 
+#include <string>
+
 class TcpServerSocketManager : public TcpSocketManager
 {
 public:
@@ -56,7 +58,7 @@ public:
 	TcpServerSocketManager(int recvBufferSize, int sendBufferSize,
 		std::string_view implName = "TcpServerSocketManager");
 	~TcpServerSocketManager() override;
-	bool Listen(int port);
+	bool Listen(int port, const std::string& address = "0.0.0.0");
 	void Shutdown();
 	void StartAccept();
 	void StopAccept();
