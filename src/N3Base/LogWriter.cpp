@@ -42,7 +42,7 @@ void CLogWriter::Open(const std::string& szFN)
 		file.Close();
 
 		std::error_code ec;
-		std::filesystem::remove(PathResolver::Resolve(s_szFileName), ec);
+		std::filesystem::remove(PathResolver::ResolveForWriting(s_szFileName), ec);
 
 		if (!file.Create(s_szFileName))
 			return;

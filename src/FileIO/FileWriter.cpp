@@ -23,7 +23,7 @@ bool FileWriter::OpenExisting(const std::filesystem::path& path)
 #if defined(_MSC_VER) || defined(__MINGW32__)
 	_wfopen_s(&fileHandle, path.native().c_str(), L"rb+");
 #else
-	fileHandle = fopen(PathResolver::Resolve(path).native().c_str(), "rb+");
+	fileHandle = fopen(PathResolver::ResolveForWriting(path).native().c_str(), "rb+");
 #endif
 	if (fileHandle == nullptr)
 		return false;
@@ -61,7 +61,7 @@ bool FileWriter::Create(const std::filesystem::path& path)
 #if defined(_MSC_VER) || defined(__MINGW32__)
 	_wfopen_s(&fileHandle, path.native().c_str(), L"wb");
 #else
-	fileHandle = fopen(PathResolver::Resolve(path).native().c_str(), "wb");
+	fileHandle = fopen(PathResolver::ResolveForWriting(path).native().c_str(), "wb");
 #endif
 
 	if (fileHandle == nullptr)

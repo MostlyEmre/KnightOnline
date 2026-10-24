@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <filesystem>
 #include <system_error>
 
@@ -51,7 +52,11 @@ FILE* OpenFile(const std::string& szPath, const char* szMode)
 #if defined(_WIN32)
 	return std::fopen(szPath.c_str(), szMode);
 #else
-	return std::fopen(PathResolver::Resolve(szPath).c_str(), szMode);
+	// Anything that may write ("w", "a", "r+") must not land in read-only game data.
+	bool bWrites = std::strpbrk(szMode, "wa+") != nullptr;
+	return std::fopen(
+		(bWrites ? PathResolver::ResolveForWriting(szPath) : PathResolver::Resolve(szPath)).c_str(),
+		szMode);
 #endif
 }
 

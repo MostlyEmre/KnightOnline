@@ -20,6 +20,15 @@ std::filesystem::path Resolve(const std::filesystem::path& path)
 	return path;
 }
 
+std::filesystem::path ResolveForWriting(const std::filesystem::path& path)
+{
+	return path;
+}
+
+void SetOverlay(const std::filesystem::path& /*userDir*/, const std::filesystem::path& /*dataDir*/)
+{
+}
+
 #else
 
 namespace
@@ -84,9 +93,22 @@ DirectoryCache& Cache()
 	return cache;
 }
 
+struct Overlay
+{
+	std::filesystem::path userDir;
+	std::string userDirLower; // with a trailing '/', for matching the game's lower-cased paths
+	std::filesystem::path dataDir;
+};
+
+Overlay& TheOverlay()
+{
+	static Overlay overlay;
+	return overlay;
+}
+
 } // namespace
 
-std::filesystem::path Resolve(const std::filesystem::path& path)
+std::filesystem::path ResolveForWriting(const std::filesystem::path& path)
 {
 	std::string spelt = path.native();
 	std::replace(spelt.begin(), spelt.end(), '\\', '/');
@@ -126,6 +148,40 @@ std::filesystem::path Resolve(const std::filesystem::path& path)
 	}
 
 	return resolved;
+}
+
+std::filesystem::path Resolve(const std::filesystem::path& path)
+{
+	std::filesystem::path resolved = ResolveForWriting(path);
+
+	const Overlay& overlay         = TheOverlay();
+	std::error_code ec;
+	if (overlay.dataDir.empty() || std::filesystem::exists(resolved, ec))
+		return resolved;
+
+	// Where the path points inside the user directory: all of it when relative.
+	std::string spelt = path.native();
+	std::replace(spelt.begin(), spelt.end(), '\\', '/');
+	std::string_view inside(spelt);
+	if (!inside.empty() && inside.front() == '/')
+	{
+		if (!ToLower(spelt).starts_with(overlay.userDirLower))
+			return resolved;
+		inside.remove_prefix(overlay.userDirLower.size());
+	}
+
+	std::filesystem::path inData = ResolveForWriting(overlay.dataDir / inside);
+	return std::filesystem::exists(inData, ec) ? inData : resolved;
+}
+
+void SetOverlay(const std::filesystem::path& userDir, const std::filesystem::path& dataDir)
+{
+	Overlay& overlay     = TheOverlay();
+	overlay.userDir      = userDir;
+	overlay.userDirLower = ToLower(userDir.native());
+	if (!overlay.userDirLower.ends_with('/'))
+		overlay.userDirLower += '/';
+	overlay.dataDir = dataDir;
 }
 
 #endif

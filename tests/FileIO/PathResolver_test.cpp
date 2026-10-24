@@ -107,4 +107,76 @@ TEST_F(PathResolverTest, MissingPathKeepsItsSpelling)
 	std::filesystem::path resolved = PathResolver::Resolve(_root.string() + "/Nope/Missing.dxt");
 	EXPECT_EQ(resolved, _root / "Nope" / "Missing.dxt");
 }
+
+// A writable User directory laid over a read-only Data directory.
+class PathResolverOverlayTest : public PathResolverTest
+{
+protected:
+	void SetUp() override
+	{
+		PathResolverTest::SetUp();
+		std::filesystem::create_directories(_root / "User");
+		std::filesystem::create_directories(_root / "Data" / "UI");
+		WriteFile(_root / "Data" / "UI" / "Login.uif");
+		WriteFile(_root / "Data" / "Option.ini");
+		WriteFile(_root / "User" / "Option.ini");
+		PathResolver::SetOverlay(_root / "User", _root / "Data");
+	}
+
+	void TearDown() override
+	{
+		PathResolver::SetOverlay({}, {});
+		PathResolverTest::TearDown();
+	}
+
+	static void WriteFile(const std::filesystem::path& path)
+	{
+		FileWriter file;
+		ASSERT_TRUE(file.Create(path));
+		ASSERT_TRUE(file.Write("x", 1));
+		file.Close();
+	}
+};
+
+TEST_F(PathResolverOverlayTest, DataMissingFromTheUserDirectoryIsReadFromTheDataDirectory)
+{
+	EXPECT_TRUE(
+		std::filesystem::equivalent(PathResolver::Resolve(GameSpelling("user\\ui\\login.uif")),
+			_root / "Data" / "UI" / "Login.uif"));
+}
+
+TEST_F(PathResolverOverlayTest, RelativePathsAreReadFromTheDataDirectoryToo)
+{
+	std::filesystem::path previous = std::filesystem::current_path();
+	std::filesystem::current_path(_root / "User");
+	std::filesystem::path resolved = PathResolver::Resolve("UI\\Login.uif");
+	std::filesystem::current_path(previous);
+
+	EXPECT_TRUE(std::filesystem::equivalent(resolved, _root / "Data" / "UI" / "Login.uif"));
+}
+
+TEST_F(PathResolverOverlayTest, UserFilesComeFirst)
+{
+	EXPECT_TRUE(std::filesystem::equivalent(
+		PathResolver::Resolve(_root / "User" / "Option.ini"), _root / "User" / "Option.ini"));
+}
+
+TEST_F(PathResolverOverlayTest, WritesStayInTheUserDirectory)
+{
+	EXPECT_EQ(PathResolver::ResolveForWriting(_root / "User" / "Option.ini"),
+		_root / "User" / "Option.ini");
+	EXPECT_EQ(PathResolver::ResolveForWriting(_root / "User" / "UI" / "Login.uif"),
+		_root / "User" / "UI" / "Login.uif");
+}
+
+TEST_F(PathResolverOverlayTest, FilesInNeitherDirectoryAreCreatedInTheUserDirectory)
+{
+	EXPECT_EQ(PathResolver::Resolve(_root / "User" / "Log.txt"), _root / "User" / "Log.txt");
+}
+
+TEST_F(PathResolverOverlayTest, PathsOutsideTheUserDirectoryAreLeftAlone)
+{
+	EXPECT_EQ(PathResolver::Resolve(_root / "Elsewhere" / "UI" / "Login.uif"),
+		_root / "Elsewhere" / "UI" / "Login.uif");
+}
 #endif
