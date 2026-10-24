@@ -37,6 +37,7 @@ CUIDroppedItemDlg::CUIDroppedItemDlg()
 	m_pBtnLootAll   = nullptr;
 	m_bLootingAll   = false;
 	m_bLootPending  = false;
+	m_bQuietLoot    = false;
 }
 
 CUIDroppedItemDlg::~CUIDroppedItemDlg()
@@ -176,7 +177,7 @@ __IconItemSkill* CUIDroppedItemDlg::GetHighlightIconItem(CN3UIIcon* pUIIcon)
 
 void CUIDroppedItemDlg::EnterDroppedState(int xpos, int ypos)
 {
-	if (!IsVisible())
+	if (!IsVisible() && !m_bQuietLoot)
 		SetVisible(true);
 
 	SetPos(xpos, ypos - 150);
@@ -210,10 +211,39 @@ void CUIDroppedItemDlg::LeaveDroppedState()
 	if (IsVisible())
 		SetVisible(false);
 
-	m_bLootingAll = false;
+	m_bLootingAll  = false;
+	m_bQuietLoot   = false;
+	m_fnQuietWants = nullptr;
 
 	for (int i = 0; i < MAX_ITEM_BUNDLE_DROP_PIECE; i++)
 		m_bSendedIconArray[i] = false;
+}
+
+void CUIDroppedItemDlg::BeginQuietLoot(int iBundleID, std::function<bool(const __IconItemSkill&)> fnWants)
+{
+	m_iItemBundleID = iBundleID;
+	m_bQuietLoot    = true;
+	m_fnQuietWants  = std::move(fnWants);
+}
+
+void CUIDroppedItemDlg::StartQuietLoot()
+{
+	if (!m_bQuietLoot)
+		return;
+
+	m_bLootingAll = true;
+	LootNext();
+}
+
+void CUIDroppedItemDlg::CancelQuietLoot()
+{
+	m_bQuietLoot   = false;
+	m_fnQuietWants = nullptr;
+}
+
+bool CUIDroppedItemDlg::IsQuietLooting() const
+{
+	return m_bQuietLoot;
 }
 
 uint32_t CUIDroppedItemDlg::MouseProc(uint32_t dwFlags, const POINT& ptCur, const POINT& ptOld)
@@ -460,6 +490,9 @@ bool CUIDroppedItemDlg::RequestItem(int iOrder)
 	if (spItem == nullptr || m_bSendedIconArray[iOrder])
 		return false;
 
+	if (m_bQuietLoot && m_fnQuietWants != nullptr && !m_fnQuietWants(*spItem))
+		return false;
+
 	// 아이템이 돈인지 검사..
 	__TABLE_ITEM_BASIC* pItem = CGameBase::s_pTbl_Items_Basic.Find(spItem->pItemBasic->dwID); // 열 데이터 얻기..
 	if (pItem == nullptr)
@@ -514,6 +547,10 @@ void CUIDroppedItemDlg::LootNext()
 	}
 
 	m_bLootingAll = false;
+
+	// Genie's looting is done: what it didn't want stays on the ground.
+	if (m_bQuietLoot)
+		LeaveDroppedState();
 }
 
 void CUIDroppedItemDlg::ContinueLootAll(uint8_t bResult)
@@ -526,9 +563,11 @@ void CUIDroppedItemDlg::ContinueLootAll(uint8_t bResult)
 		return;
 
 	// 0: couldn't, 6: too many or too heavy, 7: the inventory is full.
-	if (bResult == 0 || bResult == 6 || bResult == 7 || !IsVisible())
+	if (bResult == 0 || bResult == 6 || bResult == 7 || (!IsVisible() && !m_bQuietLoot))
 	{
 		m_bLootingAll = false;
+		if (m_bQuietLoot)
+			LeaveDroppedState();
 		return;
 	}
 

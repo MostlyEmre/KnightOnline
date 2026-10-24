@@ -9,10 +9,12 @@
 #include <N3Base/My_3DStruct.h>
 
 #include <map>
+#include <set>
 #include <string>
 
 class CGameProcMain;
 class CN3UIBase;
+class CPlayerBase;
 class CPlayerNPC;
 struct __TABLE_UPC_SKILL;
 
@@ -62,6 +64,12 @@ public:
 	void OnDied();
 	void OnZoneChanged();
 
+	/// \brief The bundle Genie asked for opened (its window stays hidden)
+	void OnBundleOpened();
+
+	/// \brief A pick-up result (WIZ_ITEM_GET): a full bag means going to town
+	void OnLootResult(uint8_t byResult);
+
 	Genie::Settings& Settings();
 	void LoadSettings();
 	void SaveSettings();
@@ -84,6 +92,12 @@ private:
 	bool IsSkillReady(int iSkillID) const;
 	int CountItem(int iItemID) const;
 	bool AnyAttackCastable() const;
+
+	/// \brief Loots what monsters dropped, from where the player stands; true when walking to a drop
+	bool Loot();
+	void SendBundleOpen(int iBundleID);
+	CPlayerBase* FindCorpse(int iID) const;
+	bool WantsItem(const struct __IconItemSkill& item) const;
 
 	/// \brief Fights the monster ChooseTarget() picks; false when there's none
 	bool Fight();
@@ -110,8 +124,19 @@ private:
 	std::map<int, float> m_Attackers;  // monster ID -> when it last attacked the player
 	std::map<int, float> m_HeldSkills; // skill ID -> until when it's held back after a refusal
 
+	// Looting: the bundle asked for, from which corpse, and the bundles done with.
+	int m_iLootBundle   = -1;
+	int m_iLootCorpse   = -1;
+	float m_fLootSentAt = 0.0f;
+	bool m_bLootOpened  = false;
+	bool m_bLootRetried = false;
+	std::set<int> m_DoneBundles;
+
+	/// \brief Why Genie has to go to town, once it can (a full bag, out of potions or arrows)
+	Genie::StopReason m_eTownReason = Genie::StopReason::None;
+
 	Genie::Settings m_Settings;
-	std::string m_szSettingsOwner;     // the character m_Settings belong to
+	std::string m_szSettingsOwner; // the character m_Settings belong to
 
 	CN3UIBase* m_pIndicator = nullptr;
 };

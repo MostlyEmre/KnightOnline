@@ -10,6 +10,8 @@
 #include "GameDef.h"
 #include "N3UIWndBase.h"
 
+#include <functional>
+
 class CUIArtButton;
 
 class CUIDroppedItemDlg : public CN3UIWndBase
@@ -27,6 +29,10 @@ protected:
 	CUIArtButton* m_pBtnLootAll; // not in the uif: added under the items
 	bool m_bLootingAll;          // picking the items up one after another
 	bool m_bLootPending;         // a pick-up request is waiting for its result
+
+	// Genie's looting: the window stays hidden and picks up only what fnWants accepts.
+	bool m_bQuietLoot;
+	std::function<bool(const __IconItemSkill&)> m_fnQuietWants;
 
 	int GetInventoryEmptyInviOrder(__IconItemSkill* spItem = nullptr);
 	int GetItemiOrder(__IconItemSkill* spItem);
@@ -48,6 +54,13 @@ public:
 
 	/// \brief After a pick-up result (and GetItemByIDToInventory): Loot All asks for the next item.
 	void ContinueLootAll(uint8_t bResult);
+
+	/// \brief Genie's looting: the next opened bundle (iBundleID) fills the window without showing it;
+	/// StartQuietLoot() then picks up what fnWants accepts, and the window leaves the dropped state.
+	void BeginQuietLoot(int iBundleID, std::function<bool(const __IconItemSkill&)> fnWants);
+	void StartQuietLoot();
+	void CancelQuietLoot();
+	bool IsQuietLooting() const;
 	void AddToItemTable(int iItemId, int iItemCount, int iOrder);
 	void AddToItemTableToInventory(int iItemId, int iItemCount, int iOrder);
 

@@ -6,7 +6,9 @@
 #include "MagicSkillMng.h"
 #include "PlayerMySelf.h"
 #include "PlayerOtherMgr.h"
+#include "SubProcPerTrade.h"
 #include "UIArt.h"
+#include "UIDroppedItemDlg.h"
 #include "UIManager.h"
 #include "UIInventory.h"
 #include "UISkillTreeDlg.h"
@@ -32,6 +34,7 @@ constexpr float ATTACKER_MEMORY   = 10.0f; // how long a monster that attacked c
 constexpr float SKILL_HOLD        = 3.0f;  // how long a refused skill is held back
 constexpr float ORIGIN_SLACK      = 3.0f;  // how close to its start spot Genie stands when idle
 constexpr float PROGRESS_STEP     = 0.5f;  // getting this much closer to the target counts as progress
+constexpr float LOOT_REPLY_WAIT   = 1.0f;  // a bundle that doesn't open in this long is in another region
 
 float DistanceXZ(const __Vector3& vA, const __Vector3& vB)
 {
@@ -121,6 +124,9 @@ void CGenie::OnStartResult(bool bOk)
 	m_Progress      = {};
 	m_Attackers.clear();
 	m_HeldSkills.clear();
+	m_iLootBundle = -1;
+	m_DoneBundles.clear();
+	m_eTownReason = Genie::StopReason::None;
 	m_pMain->MsgOutput("Genie started. Moving by hand stops it.", COLOR_STARTED);
 }
 
@@ -226,10 +232,145 @@ void CGenie::Decide()
 		return;
 	}
 
-	if (Survive() || Fight())
+	// A town reason (Task 8 takes the player there; until then, Genie stops).
+	if (m_eTownReason != Genie::StopReason::None)
+	{
+		Stop(m_eTownReason);
+		return;
+	}
+
+	if (Survive() || Loot() || Fight())
 		return;
 
 	ReturnToOrigin();
+}
+
+void CGenie::OnBundleOpened()
+{
+	if (m_iLootBundle >= 0)
+		m_bLootOpened = true;
+}
+
+void CGenie::OnLootResult(uint8_t byResult)
+{
+	if (!m_bRunning)
+		return;
+
+	const Genie::StopReason eReason = Genie::LootResultReason(byResult);
+	if (eReason != Genie::StopReason::None && m_Settings.town.bBagFull)
+		m_eTownReason = eReason;
+}
+
+CPlayerBase* CGenie::FindCorpse(int iID) const
+{
+	CPlayerBase* pCorpse = CGameProcedure::s_pOPMgr->CorpseGetByID(iID);
+	return pCorpse != nullptr ? pCorpse : CGameProcedure::s_pOPMgr->NPCGetByID(iID, false);
+}
+
+bool CGenie::WantsItem(const __IconItemSkill& item) const
+{
+	if (item.pItemBasic == nullptr || item.pItemExt == nullptr)
+		return false;
+
+	Genie::LootCandidate candidate;
+	candidate.bGold      = item.pItemBasic->dwID == dwGold;
+	candidate.eKind      = Genie::KindOfItemClass(item.pItemBasic->byClass);
+	candidate.eGrade     = Genie::GradeOfItemAttrib(item.pItemExt->byMagicOrRare);
+	candidate.iSellPrice = item.GetSellPrice();
+	return Genie::WantsLoot(m_Settings.loot, candidate);
+}
+
+void CGenie::SendBundleOpen(int iBundleID)
+{
+	// Genie's own request: the client's (MsgSend_RequestItemBundleOpen) refuses corpses out of
+	// reach, while the server only wants them in the player's region.
+	m_pMain->m_pUIDroppedItemDlg->BeginQuietLoot(iBundleID, [this](const __IconItemSkill& item) { return WantsItem(item); });
+
+	uint8_t byBuff[8];
+	int iOffset = 0;
+	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_BUNDLE_OPEN_REQ);
+	CAPISocket::MP_AddDword(byBuff, iOffset, static_cast<uint32_t>(iBundleID));
+	CGameProcedure::s_pSocket->Send(byBuff, iOffset);
+
+	m_fLootSentAt = m_fNow;
+	m_bLootOpened = false;
+}
+
+bool CGenie::Loot()
+{
+	CUIDroppedItemDlg* pDlg = m_pMain->m_pUIDroppedItemDlg;
+	if (m_iLootBundle >= 0)
+	{
+		if (m_bLootOpened)
+		{
+			// Picking up, one item after another; done once the window leaves the dropped state.
+			if (pDlg->IsQuietLooting())
+				return false;
+
+			m_DoneBundles.insert(m_iLootBundle);
+			m_iLootBundle = -1;
+		}
+		else if (m_fNow - m_fLootSentAt < LOOT_REPLY_WAIT)
+		{
+			return false;
+		}
+		else
+		{
+			// No answer: the drop is in another region. Walk to it and ask once more.
+			CPlayerBase* pCorpse = FindCorpse(m_iLootCorpse);
+			if (m_bLootRetried || pCorpse == nullptr)
+			{
+				pDlg->CancelQuietLoot();
+				m_DoneBundles.insert(m_iLootBundle);
+				m_iLootBundle = -1;
+				return false;
+			}
+
+			if (DistanceXZ(CGameProcedure::s_pPlayer->Position(), pCorpse->Position()) > ORIGIN_SLACK)
+			{
+				StandUp();
+				if (!CGameProcedure::s_pPlayer->m_bTargetOrPosMove)
+					m_pMain->CommandMove(MD_FORWARD, true);
+				CGameProcedure::s_pPlayer->SetMoveTargetPos(pCorpse->Position());
+				return true;
+			}
+
+			StopMoving();
+			m_bLootRetried = true;
+			SendBundleOpen(m_iLootBundle);
+			return true;
+		}
+	}
+
+	// The nearest drop not looted yet.
+	const __Vector3 vSelf = CGameProcedure::s_pPlayer->Position();
+	CPlayerNPC* pNearest  = nullptr;
+	float fNearest        = 0.0f;
+	auto consider         = [&](CPlayerNPC* pNPC)
+	{
+		if (pNPC == nullptr || pNPC->m_iDroppedItemID <= 0 || !pNPC->IsDead() || m_DoneBundles.contains(pNPC->m_iDroppedItemID))
+			return;
+
+		const float fDistance = DistanceXZ(vSelf, pNPC->Position());
+		if (pNearest == nullptr || fDistance < fNearest)
+		{
+			pNearest = pNPC;
+			fNearest = fDistance;
+		}
+	};
+	for (const auto& [iID, pCorpse] : CGameProcedure::s_pOPMgr->m_Corpses)
+		consider(pCorpse);
+	for (const auto& [iID, pNPC] : CGameProcedure::s_pOPMgr->m_NPCs)
+		consider(pNPC);
+
+	if (pNearest == nullptr)
+		return false;
+
+	m_iLootBundle  = pNearest->m_iDroppedItemID;
+	m_iLootCorpse  = pNearest->IDNumber();
+	m_bLootRetried = false;
+	SendBundleOpen(m_iLootBundle);
+	return false;
 }
 
 int CGenie::CountItem(int iItemID) const

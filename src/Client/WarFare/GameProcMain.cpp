@@ -1569,7 +1569,8 @@ bool CGameProcMain::MsgSend_RequestItemBundleOpen(CPlayerNPC* pCorpse)
 	if (fDistTmp >= (pCorpse->Radius() * 2.0f + 6.0f))
 		return false;
 
-	int iItemBundleID                    = pCorpse->m_iDroppedItemID;
+	int iItemBundleID = pCorpse->m_iDroppedItemID;
+	m_pUIDroppedItemDlg->CancelQuietLoot(); // opened by hand: the window shows
 	m_pUIDroppedItemDlg->m_iItemBundleID = pCorpse->m_iDroppedItemID;
 
 	s_pOPMgr->CorpseRemove(pCorpse, false); // 점점 투명하게 없앤다..
@@ -3540,6 +3541,13 @@ bool CGameProcMain::MsgRecv_ItemBundleOpen(Packet& pkt) // 아이템 상자를 �
 
 	m_pUIDroppedItemDlg->InitIconUpdate();
 
+	// Genie's looting: picked up without the window.
+	if (m_pUIDroppedItemDlg->IsQuietLooting())
+	{
+		m_pGenie->OnBundleOpened();
+		m_pUIDroppedItemDlg->StartQuietLoot();
+	}
+
 	return true;
 }
 
@@ -4932,6 +4940,8 @@ bool CGameProcMain::MsgRecv_ItemDroppedGetResult(Packet& pkt) // 땅에 떨어�
 		m_pUIDroppedItemDlg->GetItemByIDToInventory(bResult, iItemID, iGoldID, bPos, sItemCount, szString);
 		m_pUIDroppedItemDlg->ContinueLootAll(bResult);
 	}
+
+	m_pGenie->OnLootResult(bResult);
 	return true;
 }
 
