@@ -13954,6 +13954,14 @@ void CUser::ItemUpgrade(char* pBuf)
 		return;
 	}
 
+	// With the boost, an upgrade the game marks impossible (0%: the top level) is refused, rather
+	// than a certain failure that destroys the item.
+	if (m_pMain->m_bUpgradeBoost && matchedItemUpgradeModel->GenRate <= 0)
+	{
+		SendItemUpgradeFailed(ITEM_UPGRADE_RESULT_NO_MATCH);
+		return;
+	}
+
 	GoldLose(matchedItemUpgradeModel->RequiredCoins);
 
 	// The outer myrand call officially uses CRandomizer (a state-based randomizer).

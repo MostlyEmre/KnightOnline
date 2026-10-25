@@ -47,7 +47,8 @@ inline bool ScrollsFitItem(std::span<const int32_t> requiredItems, int itemGrade
 }
 
 /// \brief [UPGRADE] BOOST's odds: every upgrade that's possible succeeds. 0% means the upgrade isn't
-/// possible (past the highest level, or an accessory compound OpenKO-db leaves out), and stays 0.
+/// possible (past the highest level, or an accessory compound OpenKO-db leaves out), and stays 0;
+/// with the boost, the anvil refuses those instead of destroying the item (CUser::ItemUpgrade).
 inline int BoostedGenRate(int genRate)
 {
 	return genRate > 0 ? GEN_RATE_CERTAIN : 0;

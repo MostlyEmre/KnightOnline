@@ -91,6 +91,8 @@ protected:
 	static constexpr int DAGGER_2          = 110110002; // 50%
 	static constexpr int DAGGER_3          = 110110003; // 40%
 	static constexpr int DAGGER_4          = 110110004;
+	static constexpr int DAGGER_10         = 110110010; // the top level: its recipe is 0%
+	static constexpr int BLESSED_SCROLL    = 379021000; // Blessed Upgrade Scroll
 
 	std::unique_ptr<TestApp> _app;
 	TestMap* _map                   = nullptr;
@@ -111,6 +113,8 @@ protected:
 		ASSERT_TRUE(_app->AddItemEntry(scroll));
 		model::Item dagger = *_app->m_ItemTableMap.GetData(DAGGER_3);
 		dagger.ID          = DAGGER_4;
+		ASSERT_TRUE(_app->AddItemEntry(dagger));
+		dagger.ID = DAGGER_10;
 		ASSERT_TRUE(_app->AddItemEntry(dagger));
 
 		// The whole table, plus the High Class upgrade recipes copied for the Low (+5000) and
@@ -281,4 +285,25 @@ TEST_F(UpgradeScrollsTest, WithoutBoostOfficialOdds)
 
 	SetRoll(3999);
 	EXPECT_EQ(Upgrade(DAGGER_3, HIGH_SCROLL), ITEM_UPGRADE_RESULT_SUCCEEDED);
+}
+
+// An upgrade the game marks impossible (0%: Dagger (+10) is the top level) is refused: the item,
+// the scroll and the coins stay.
+TEST_F(UpgradeScrollsTest, BoostRefusesImpossibleUpgrade)
+{
+	_app->m_bUpgradeBoost = true;
+	SetRoll(0);
+	EXPECT_EQ(Upgrade(DAGGER_10, BLESSED_SCROLL), ITEM_UPGRADE_RESULT_NO_MATCH);
+	EXPECT_EQ(ItemInSlot0(), DAGGER_10);
+	EXPECT_EQ(_user->m_pUserData->m_sItemArray[SLOT_MAX + 1].nNum, BLESSED_SCROLL);
+	EXPECT_EQ(_user->m_pUserData->m_iGold, 100'000'000);
+}
+
+// Without the boost, as officially: a certain failure, and the item is gone.
+TEST_F(UpgradeScrollsTest, WithoutBoostImpossibleUpgradeBurns)
+{
+	_app->m_bUpgradeBoost = false;
+	SetRoll(0);
+	EXPECT_EQ(Upgrade(DAGGER_10, BLESSED_SCROLL), ITEM_UPGRADE_RESULT_FAILED);
+	EXPECT_EQ(ItemInSlot0(), 0);
 }

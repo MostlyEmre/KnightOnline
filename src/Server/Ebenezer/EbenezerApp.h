@@ -287,7 +287,8 @@ public:
 	/// from ITEM_GRADE, which the port adds; without it, Low and Middle Class scrolls take nothing.
 	std::unordered_map<int, uint8_t> m_ItemGradeMap;
 
-	/// \brief Better upgrade odds (ItemUpgradeRules::BoostedGenRate): [UPGRADE] BOOST, on by default
+	/// \brief Every possible upgrade succeeds, and impossible ones are refused instead of destroying
+	/// the item (ItemUpgradeRules::BoostedGenRate): [UPGRADE] BOOST, on by default
 	bool m_bUpgradeBoost = true;
 
 	/// \brief An item's class, 0 for none
