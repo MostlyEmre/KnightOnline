@@ -2,6 +2,8 @@
 # the servers use) so db-library, db-models and the servers build unchanged against it.
 add_library(nanodbc STATIC
   include/nanodbc/nanodbc.h
+  ApplyScript.cpp
+  ApplyScript.h
   Backend.cpp
   Backend.h
   Collation.cpp

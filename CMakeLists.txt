@@ -273,6 +273,14 @@ if(OPENKO_BUILD_TESTS)
 
     if(OPENKO_DB_BACKEND STREQUAL "SQLITE")
       add_subdirectory(src/db-library/sqlite/tests)
+
+      # The port's game data script (port/db/port_game_data.py), when Python is around.
+      find_package(Python3 COMPONENTS Interpreter QUIET)
+      if(Python3_Interpreter_FOUND)
+        add_test(NAME PortGameDataTests
+          COMMAND "${Python3_EXECUTABLE}" -m unittest test_port_game_data
+          WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/port/db")
+      endif()
     endif()
   endif() 
 endif()

@@ -1,9 +1,13 @@
 ﻿// openko-sqlite-load <database> <script.sql> [--check]
+// openko-sqlite-load --apply <database> <script.sql>
 //
 // Creates <database> (replacing any existing file) from a SQL script with the SQLite backend's
 // collations registered, then runs an integrity check. The seed database is built this way
-// because its indexes are ordered by KO_CI, which plain sqlite3 doesn't know.
+// because its indexes are ordered by KO_CI, which plain sqlite3 doesn't know. --apply runs the
+// script on an existing database instead (all of it or none), as ko-servers does with the port's
+// game data (port/db/port_game_data.py).
 
+#include "ApplyScript.h"
 #include "Collation.h"
 
 #include <cstdio>
@@ -92,18 +96,43 @@ int Run(const std::filesystem::path& databasePath, const std::filesystem::path& 
 
 } // namespace
 
+int Apply(const std::filesystem::path& databasePath, const std::filesystem::path& scriptPath)
+{
+	std::ifstream script(scriptPath, std::ios::binary);
+	if (!script)
+	{
+		std::cerr << "openko-sqlite-load: cannot read " << scriptPath << '\n';
+		return 1;
+	}
+	std::stringstream buffer;
+	buffer << script.rdbuf();
+
+	std::string error;
+	if (!db::sqlite::ApplyScript(databasePath, buffer.str(), error))
+	{
+		std::cerr << "openko-sqlite-load: " << databasePath.string() << ": " << error << '\n';
+		return 1;
+	}
+
+	std::cout << "openko-sqlite-load: applied " << scriptPath.string() << " to "
+			  << databasePath.string() << '\n';
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
 	std::span<char*> args(argv, static_cast<size_t>(argc));
-	if (args.size() < 3)
+	const bool bApply = args.size() >= 2 && std::string(args[1]) == "--apply";
+	if (args.size() < (bApply ? 4u : 3u))
 	{
-		std::cerr << "usage: openko-sqlite-load <database> <script.sql>\n";
+		std::cerr << "usage: openko-sqlite-load <database> <script.sql>\n"
+					 "       openko-sqlite-load --apply <database> <script.sql>\n";
 		return 2;
 	}
 
 	try
 	{
-		return Run(args[1], args[2]);
+		return bApply ? Apply(args[2], args[3]) : Run(args[1], args[2]);
 	}
 	catch (const std::exception& ex)
 	{

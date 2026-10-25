@@ -9,6 +9,7 @@
 #include "SubProcPerTrade.h"
 #include "UIArt.h"
 #include "UIDroppedItemDlg.h"
+#include "UIHotKeyDlg.h"
 #include "UIManager.h"
 #include "UIInventory.h"
 #include "UITransactionDlg.h"
@@ -38,7 +39,6 @@ constexpr float SKILL_HOLD        = 3.0f;   // how long a refused skill is held 
 constexpr float ORIGIN_SLACK      = 3.0f;   // how close to its start spot Genie stands when idle
 constexpr float PROGRESS_STEP     = 0.5f;   // getting this much closer to the target counts as progress
 constexpr float LOOT_REPLY_WAIT   = 1.0f;   // a bundle that doesn't open in this long is in another region
-constexpr float UPKEEP_REPLY_WAIT = 5.0f;   // a repair or buy not answered in this long is given up on
 constexpr int BOW_ATTACK_SKILL    = 102003; // the bow's basic attack, which uses up arrows
 
 float DistanceXZ(const __Vector3& vA, const __Vector3& vB)
@@ -132,9 +132,7 @@ void CGenie::OnStartResult(bool bOk)
 	m_iLootBundle = -1;
 	m_DoneBundles.clear();
 	m_eTownReason    = Genie::StopReason::None;
-	m_iRepairSlot    = -1;
 	m_bRepairRefused = false;
-	m_PendingBuy     = {};
 	m_HpRestock = m_MpRestock = m_ArrowRestock = {};
 	m_pMain->MsgOutput("Genie started. Moving by hand stops it.", COLOR_STARTED);
 }
@@ -170,6 +168,8 @@ void CGenie::HaltActions()
 void CGenie::Tick(float fNow)
 {
 	m_fNow = fNow;
+	m_RepairRequest.Tick(fNow);
+	m_BuyRequest.Tick(fNow);
 
 	if (m_bWaitingStart && Genie::StartTimedOut(m_fStartSentAt, fNow))
 	{
@@ -216,9 +216,11 @@ void CGenie::OnZoneChanged()
 
 bool CGenie::IsMonster(const CPlayerNPC* pNPC)
 {
-	// Monsters have no nation; town NPCs and guards have one. Objects (gates, levers) have a shape.
-	return pNPC != nullptr && pNPC->IsAlive() && pNPC->m_fTimeAfterDeath <= 0.0f && pNPC->m_InfoBase.eNation == NATION_NOTSELECTED
-		   && pNPC->m_pShapeExtraRef == nullptr && pNPC->m_InfoBase.iAuthority != AUTHORITY_MANAGER;
+	// By the NPC type the server sends; monsters also have no nation (war NPCs do), and objects
+	// (gates, levers) have a shape.
+	return pNPC != nullptr && pNPC->IsAlive() && pNPC->m_fTimeAfterDeath <= 0.0f && Genie::IsMonsterType(pNPC->m_byNpcType)
+		   && pNPC->m_InfoBase.eNation == NATION_NOTSELECTED && pNPC->m_pShapeExtraRef == nullptr
+		   && pNPC->m_InfoBase.iAuthority != AUTHORITY_MANAGER;
 }
 
 bool CGenie::IsAttackedRecently() const
@@ -275,7 +277,12 @@ void CGenie::OnLootResult(uint8_t byResult)
 CPlayerBase* CGenie::FindCorpse(int iID) const
 {
 	CPlayerBase* pCorpse = CGameProcedure::s_pOPMgr->CorpseGetByID(iID);
-	return pCorpse != nullptr ? pCorpse : CGameProcedure::s_pOPMgr->NPCGetByID(iID, false);
+	if (pCorpse != nullptr)
+		return pCorpse;
+
+	// Not a monster that came back with the same ID.
+	CPlayerNPC* pNPC = CGameProcedure::s_pOPMgr->NPCGetByID(iID, false);
+	return pNPC != nullptr && pNPC->IsDead() ? pNPC : nullptr;
 }
 
 bool CGenie::WantsItem(const __IconItemSkill& item) const
@@ -449,13 +456,22 @@ bool CGenie::CastOnSelf(int iSkillID)
 	return true;
 }
 
-bool CGenie::AnyAttackCastable() const
+bool CGenie::AnyAttackAffordable() const
 {
 	if (m_Settings.bBasicAttack)
 		return true;
 
-	return std::any_of(
-		m_Settings.attackSkills.begin(), m_Settings.attackSkills.end(), [this](int iSkillID) { return IsSkillReady(iSkillID); });
+	// Paid for, cooling down or not: a skill that's only cooling down is no reason to sit.
+	std::vector<Genie::SkillChoice> skills;
+	for (int iSkillID : m_Settings.attackSkills)
+	{
+		__TABLE_UPC_SKILL* pSkill = iSkillID > 0 ? CGameBase::s_pTbl_Skill.Find(iSkillID) : nullptr;
+		if (pSkill != nullptr)
+			skills.push_back({ .iID = iSkillID,
+				.bUsable = m_pMain->m_pUISkillTreeDlg->HasIDSkill(iSkillID) && m_pMain->m_pMagicSkillMng->CheckValidSkillMagic(pSkill) });
+	}
+
+	return Genie::AnyAffordable(skills);
 }
 
 bool CGenie::Survive()
@@ -489,7 +505,7 @@ bool CGenie::Survive()
 	}
 
 	// Nothing to attack with until MP comes back: sit for it, unless something is attacking.
-	if (Genie::ShouldSitToRecover(IsAttackedRecently(), AnyAttackCastable(), iMp, iMpMax, pPlayer->m_bSitDown))
+	if (Genie::ShouldSitToRecover(IsAttackedRecently(), AnyAttackAffordable(), iMp, iMpMax, pPlayer->m_bSitDown))
 	{
 		if (!pPlayer->m_bSitDown)
 		{
@@ -614,12 +630,8 @@ void CGenie::Repair()
 	if (!m_Settings.bRepair || m_bRepairRefused)
 		return;
 
-	if (m_iRepairSlot >= 0)
-	{
-		if (m_fNow - m_fRepairSentAt < UPKEEP_REPLY_WAIT)
-			return;
-		m_iRepairSlot = -1;
-	}
+	if (m_RepairRequest.IsWaiting())
+		return;
 
 	// One equipped item at a time, below the durability percentage. The server repairs without a
 	// blacksmith nearby, for the usual coins.
@@ -641,15 +653,17 @@ void CGenie::Repair()
 		CAPISocket::MP_AddDword(byBuff, iOffset, static_cast<uint32_t>(pItem->GetItemID()));
 		CGameProcedure::s_pSocket->Send(byBuff, iOffset);
 
-		m_iRepairSlot   = i;
-		m_fRepairSentAt = m_fNow;
+		m_iRepairSlot = i;
+		m_RepairRequest.Send(m_fNow);
 		return;
 	}
 }
 
 bool CGenie::OnRepairResult(uint8_t byResult, int iGold)
 {
-	if (m_iRepairSlot < 0)
+	// A late result of Genie's is still its own, unless the player is repairing by hand now.
+	if (m_iRepairSlot < 0
+		|| m_RepairRequest.Claim(m_pMain->m_pUIInventory->GetInvState() == INV_STATE_REPAIR) == Genie::ResultOwner::Player)
 		return false;
 
 	const int iSlot        = m_iRepairSlot;
@@ -665,14 +679,19 @@ bool CGenie::OnRepairResult(uint8_t byResult, int iGold)
 	}
 
 	pItem->iDurability = pItem->pItemBasic->siMaxDurability + pItem->pItemExt->siMaxDurability;
+	if (pItem->pUIIcon != nullptr)
+		pItem->pUIIcon->SetStyle(pItem->pUIIcon->GetStyle() & ~UISTYLE_DURABILITY_EXHAUST); // as CItemRepairMgr does
 	CGameProcedure::s_pPlayer->DurabilitySet(static_cast<e_ItemSlot>(iSlot), pItem->iDurability);
 	CGameProcedure::s_pPlayer->m_InfoExt.iGold = iGold;
 	m_pMain->m_pUIInventory->GoldUpdate();
 	return true;
 }
 
-void CGenie::OnShopOpened(int iNpcID, int iTradeID)
+void CGenie::OnShopOpened(int iNpcID, int iTradeID, const std::string& szName)
 {
+	if (!m_bAvailable)
+		return;
+
 	// What the shop sells, found as CUITransactionDlg::EnterTransactionState finds it.
 	const int iOrg  = iTradeID / 1000;
 	const int iExt  = iTradeID % 1000;
@@ -696,28 +715,36 @@ void CGenie::OnShopOpened(int iNpcID, int iTradeID)
 	if (!bPotions && !bArrows)
 		return;
 
+	// Visiting a shop tries buying from it again after a refusal; a new merchant is saved, and said.
 	LoadSettings();
+	const Genie::Merchant seen { .iNpcID = iNpcID, .iTradeID = iTradeID, .szName = szName };
+	const bool bNewPotions = bPotions && Genie::ShouldRememberMerchant(m_bAvailable, m_Settings.potionMerchant, seen);
+	const bool bNewArrows  = bArrows && Genie::ShouldRememberMerchant(m_bAvailable, m_Settings.arrowMerchant, seen);
 	if (bPotions)
-		m_Settings.potionMerchant = { .iNpcID = iNpcID, .iTradeID = iTradeID };
+		m_HpRestock = m_MpRestock = {};
 	if (bArrows)
-		m_Settings.arrowMerchant = { .iNpcID = iNpcID, .iTradeID = iTradeID };
-	m_HpRestock = m_MpRestock = m_ArrowRestock = {};
+		m_ArrowRestock = {};
+	if (!bNewPotions && !bNewArrows)
+		return;
+
+	if (bNewPotions)
+		m_Settings.potionMerchant = seen;
+	if (bNewArrows)
+		m_Settings.arrowMerchant = seen;
 	SaveSettings();
 
-	m_pMain->MsgOutput(bPotions && bArrows ? "Genie will buy potions and arrows from this merchant."
-					   : bPotions          ? "Genie will buy potions from this merchant."
-										   : "Genie will buy arrows from this merchant.",
+	m_pMain->MsgOutput(fmt::format("Genie will buy {} from {}.",
+						   bNewPotions && bNewArrows ? "potions and arrows"
+						   : bNewPotions             ? "potions"
+													 : "arrows",
+						   szName.empty() ? "this merchant" : szName),
 		COLOR_STARTED);
 }
 
 void CGenie::Restock()
 {
-	if (m_PendingBuy.iItemID != 0)
-	{
-		if (m_fNow - m_fBuySentAt < UPKEEP_REPLY_WAIT)
-			return;
-		m_PendingBuy = {};
-	}
+	if (m_BuyRequest.IsWaiting())
+		return;
 
 	if (Buy(m_Settings.iHpPotionID, m_Settings.potionMerchant, m_Settings.bBuyPotions, m_Settings.iKeepHpPotions, m_HpRestock)
 		|| Buy(m_Settings.iMpPotionID, m_Settings.potionMerchant, m_Settings.bBuyPotions, m_Settings.iKeepMpPotions, m_MpRestock))
@@ -819,15 +846,16 @@ bool CGenie::Buy(int iItemID, const Genie::Merchant& merchant, bool bOn, int iKe
 	CGameProcedure::s_pSocket->Send(byBuff, iOffset);
 
 	m_PendingBuy = { .iItemID = iItemID, .iPos = iPos, .iCount = iCount, .pState = &state };
-	m_fBuySentAt = m_fNow;
+	m_BuyRequest.Send(m_fNow);
 	return true;
 }
 
 bool CGenie::OnTradeResult(uint8_t byResult, uint8_t /*byType*/, int iMoney)
 {
 	// Genie doesn't buy while a shop is open, and results come in order: a result while its buy is
-	// waiting is its own, even if a shop has opened since.
-	if (m_PendingBuy.iItemID == 0)
+	// waiting is its own, even if a shop has opened since. A late one is too, unless a shop is open.
+	const bool bShopOpen = m_pMain->m_pUITransactionDlg != nullptr && m_pMain->m_pUITransactionDlg->IsVisible();
+	if (m_PendingBuy.iItemID == 0 || m_BuyRequest.Claim(bShopOpen) == Genie::ResultOwner::Player)
 		return false;
 
 	const PendingBuy buy      = m_PendingBuy;
@@ -853,6 +881,12 @@ bool CGenie::OnTradeResult(uint8_t byResult, uint8_t /*byType*/, int iMoney)
 	else if (pStack == nullptr)
 		m_pMain->m_pUIDroppedItemDlg->AddToItemTableToInventory(buy.iItemID, buy.iCount, buy.iPos);
 	pInv->GoldUpdate();
+
+	// As the shop window does: a potion bought from none lights its hotkey up again.
+	if (m_pMain->m_pUISkillTreeDlg != nullptr)
+		m_pMain->m_pUISkillTreeDlg->UpdateDisableCheck();
+	if (m_pMain->m_pUIHotKeyDlg != nullptr)
+		m_pMain->m_pUIHotKeyDlg->UpdateDisableCheck();
 
 	m_pMain->MsgOutput(fmt::format("Genie bought {} {}.", buy.iCount, szName), COLOR_STARTED);
 	return true;
@@ -1070,6 +1104,10 @@ void CGenie::OnLeaveGame()
 	m_bRunning      = false;
 	m_bWaitingStart = false;
 	m_bAvailable    = false;
+	m_iRepairSlot   = -1;
+	m_PendingBuy    = {};
+	m_RepairRequest.Cancel();
+	m_BuyRequest.Cancel();
 	m_szSettingsOwner.clear();
 }
 

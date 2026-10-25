@@ -331,6 +331,13 @@ bool EbenezerApp::OnStart()
 		return false;
 	}
 
+	spdlog::info("EbenezerApp::OnStart: loading ITEM_GRADE table");
+	if (!LoadItemGradeTable())
+	{
+		spdlog::error("EbenezerApp::OnStart: failed to cache ITEM_GRADE table, closing");
+		return false;
+	}
+
 	spdlog::info("EbenezerApp::OnStart: loading MAGIC table");
 	if (!LoadMagicTable())
 	{
@@ -1250,6 +1257,7 @@ bool EbenezerApp::LoadConfig(CIni& iniFile)
 	m_nCastleCapture = iniFile.GetInt("CASTLE", "NATION", 1);
 	m_nServerNo      = iniFile.GetInt("ZONE_INFO", "MY_INFO", 1);
 	m_bGenieEnabled  = iniFile.GetBool("GENIE", "ENABLED", true);
+	m_bUpgradeBoost  = iniFile.GetBool("UPGRADE", "BOOST", true);
 	m_nServerGroup   = static_cast<e_ServerGroupType>(iniFile.GetInt("ZONE_INFO", "SERVER_NUM", 0));
 	serverCount      = iniFile.GetInt("ZONE_INFO", "SERVER_COUNT", 1);
 	if (serverCount < 1)
@@ -2806,6 +2814,54 @@ bool TableExists(PoolConnection& conn, const std::string& table)
 }
 
 } // namespace
+
+bool EbenezerApp::LoadItemGradeTable()
+{
+	m_ItemGradeMap.clear();
+
+	try
+	{
+		auto conn = ConnectionManager::CreatePoolConnection(modelUtil::DbType::GAME);
+		if (conn == nullptr)
+		{
+			throw db::ApplicationError(
+				"EbenezerApp::LoadItemGradeTable: failed to allocate pool connection");
+		}
+
+		// The port's game data adds it (port/db/port_game_data.py); a database without it only
+		// loses the Low and Middle Class scrolls.
+		if (!TableExists(*conn, "ITEM_GRADE"))
+		{
+			spdlog::info("EbenezerApp::LoadItemGradeTable: no ITEM_GRADE table: Low and Middle "
+						 "Class scrolls won't upgrade anything");
+			return true;
+		}
+
+		nanodbc::statement stmt = conn->CreateStatement("SELECT Num, Grade FROM ITEM_GRADE");
+		nanodbc::result result  = stmt.execute();
+		while (result.next())
+			m_ItemGradeMap[result.get<int>(0)] = static_cast<uint8_t>(result.get<int>(1));
+	}
+	catch (const nanodbc::database_error& dbErr)
+	{
+		db::utils::LogDatabaseError(dbErr, "EbenezerApp::LoadItemGradeTable()");
+		return false;
+	}
+	catch (const std::exception& ex)
+	{
+		spdlog::error("EbenezerApp::LoadItemGradeTable: {}", ex.what());
+		return false;
+	}
+
+	spdlog::info("EbenezerApp::LoadItemGradeTable: {} items with a class", m_ItemGradeMap.size());
+	return true;
+}
+
+int EbenezerApp::ItemGrade(int itemId) const
+{
+	auto itr = m_ItemGradeMap.find(itemId);
+	return itr != m_ItemGradeMap.end() ? itr->second : 0;
+}
 
 bool EbenezerApp::LoadShoppingMallTable()
 {

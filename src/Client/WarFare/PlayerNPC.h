@@ -21,6 +21,8 @@ public:
 
 	CPlayerNPC();
 	~CPlayerNPC() override;
+
+	uint8_t m_byNpcType = 0xff; // e_NpcType, as the server sends it; 0xff until it has
 };
 
-#endif // !defined(AFX_PLAYERNPC_H__8A79604A_EFA6_408E_A0EB_4B7BF4FDDAB4__INCLUDED_)
+#endif                          // !defined(AFX_PLAYERNPC_H__8A79604A_EFA6_408E_A0EB_4B7BF4FDDAB4__INCLUDED_)

@@ -196,6 +196,7 @@
     <ClInclude Include="EXEC.h" />
     <ClInclude Include="GameDefine.h" />
     <ClInclude Include="GameEvent.h" />
+    <ClInclude Include="ItemUpgradeRules.h" />
     <ClInclude Include="Knights.h" />
     <ClInclude Include="KnightsManager.h" />
     <ClInclude Include="KnightsSiegeWar.h" />

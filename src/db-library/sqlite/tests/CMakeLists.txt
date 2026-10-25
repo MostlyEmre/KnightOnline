@@ -1,4 +1,5 @@
 add_executable(DbSqlite.Tests
+  ApplyScript_test.cpp
   SqliteBackend_test.cpp
 )
 

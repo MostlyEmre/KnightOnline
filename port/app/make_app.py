@@ -16,7 +16,8 @@ Layout:
   Contents/Frameworks/               libjpeg, OpenAL Soft
   Contents/Resources/Client/         the client's game data (read-only; the game writes to
                                      ~/Library/Application Support/KnightOnline)
-  Contents/Resources/Server/         MAP, QUESTS, KN_online.sqlite (the seed)
+  Contents/Resources/Server/         MAP, QUESTS, KN_online.sqlite (the seed), port-game-data.sql
+                                     (port/db/port_game_data.py; ko-servers adds it to the database)
   Contents/Resources/Cursors/        the client's cursors
 """
 
@@ -127,6 +128,8 @@ def main():
     for sub in ("MAP", "QUESTS"):
         clone_tree(os.path.join(opts.assets, "Server", sub), os.path.join(resources, "Server", sub))
     shutil.copy2(opts.seed, os.path.join(resources, "Server", "KN_online.sqlite"))
+    run(sys.executable, os.path.join(repo, "port", "db", "port_game_data.py"), os.path.join(opts.assets, "Client", "Data"),
+        os.path.join(resources, "Server", "port-game-data.sql"))
     shutil.copytree(os.path.join(bindir, "Cursors"), os.path.join(resources, "Cursors"))
     make_icon(os.path.join(repo, "src", "Client", "WarFare", "WarFare_1298.ico"), os.path.join(resources, "AppIcon.icns"))
 

@@ -5,6 +5,8 @@
 //
 // - Waits for an earlier ko-servers that is still stopping its servers (a lock in the user dir).
 // - On first run, copies the seed database to <user-dir>/Server/KN_online.sqlite.
+// - On every run, adds the port's game data (<data-dir>/port-game-data.sql, from
+//   port/db/port_game_data.py) to that database, so new games and existing saves both have it.
 // - Starts AIServer, Ebenezer, Aujard, VersionManager and ItemManager in that order, each in
 //   <user-dir>/Server, listening on 127.0.0.1 only, and waits for each to log that it's ready.
 //   Their output goes to <user-dir>/Logs/<name>.log.
@@ -28,6 +30,10 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#if defined(KO_SERVERS_GAME_DATA)
+#include <ApplyScript.h>
+#endif
 
 #include <fcntl.h>
 #include <spawn.h>
@@ -264,6 +270,23 @@ int Run(int argc, char** argv)
 		}
 		Log("created " + database.string() + " from the seed");
 	}
+
+	// The port's game data. It only adds what's missing, all or nothing; without it the game still
+	// runs, only without what it adds (the Low and Middle Class scrolls).
+#if defined(KO_SERVERS_GAME_DATA)
+	const fs::path gameData = dataDir / "port-game-data.sql";
+	if (fs::exists(gameData, ec))
+	{
+		std::ifstream file(gameData, std::ios::binary);
+		const std::string script(
+			(std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+		std::string error;
+		if (db::sqlite::ApplyScript(database, script, error))
+			Log("applied " + gameData.filename().string());
+		else
+			Log("couldn't apply " + gameData.filename().string() + ": " + error);
+	}
+#endif
 
 	// The servers read and write their config (and logs) in the current directory.
 	fs::current_path(serverDir, ec);

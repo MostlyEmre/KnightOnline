@@ -163,6 +163,14 @@ inline bool WantsLoot(const LootFilter& filter, const LootCandidate& item)
 	return item.iSellPrice >= filter.iMinSellPrice;
 }
 
+/// \brief A monster by the NPC type the server sends (e_NpcType): monsters, event monsters, bosses,
+/// dungeon monsters and the like (types under 10), not traps or the general type. Guards,
+/// merchants, objects and camps are 10 and up.
+inline bool IsMonsterType(uint8_t byNpcType)
+{
+	return byNpcType < 10 && byNpcType != 1 && byNpcType != 5;
+}
+
 struct Monster
 {
 	int iID           = -1;
@@ -252,6 +260,12 @@ inline bool ShouldApproach(std::span<const SkillChoice> skills)
 	}
 
 	return bAnyUsable && !bAnyInRange;
+}
+
+/// \brief Whether any attack skill can be paid for (MP, HP, weapon, items), cooling down or not
+inline bool AnyAffordable(std::span<const SkillChoice> skills)
+{
+	return std::any_of(skills.begin(), skills.end(), [](const SkillChoice& skill) { return skill.bUsable; });
 }
 
 inline bool BelowPercent(int iValue, int iMax, int iPercent)
@@ -398,27 +412,37 @@ inline bool PlayerHandlesItems(const ItemWindows& windows)
 }
 
 /// \brief Watches the current target for progress (getting closer, or hurting it). A target with
-/// none for 10 s is given up and left alone for 30 s.
+/// none for 10 s is given up and left alone for 30 s. The time adds up over its turns as the
+/// target, so two targets taking turns don't keep each other from being given up.
 class TargetProgress
 {
 public:
 	static constexpr float STALL_TIME = 10.0f;
 	static constexpr float SKIP_TIME  = 30.0f;
 
+	/// \brief iTargetID is the target from now on
 	void Reset(int iTargetID, float fNow)
 	{
-		m_iTargetID     = iTargetID;
-		m_fLastProgress = fNow;
+		if (m_iTargetID >= 0)
+			m_Stalled[m_iTargetID] += fNow - m_fSince;
+
+		m_iTargetID = iTargetID;
+		m_fSince    = fNow;
 	}
 
 	void OnProgress(float fNow)
 	{
-		m_fLastProgress = fNow;
+		m_Stalled.erase(m_iTargetID);
+		m_fSince = fNow;
 	}
 
 	bool ShouldSkip(float fNow) const
 	{
-		return m_iTargetID >= 0 && fNow - m_fLastProgress >= STALL_TIME;
+		if (m_iTargetID < 0)
+			return false;
+
+		auto it = m_Stalled.find(m_iTargetID);
+		return (it != m_Stalled.end() ? it->second : 0.0f) + (fNow - m_fSince) >= STALL_TIME;
 	}
 
 	int TargetID() const
@@ -429,6 +453,7 @@ public:
 	void Skip(int iTargetID, float fNow)
 	{
 		m_SkippedUntil[iTargetID] = fNow + SKIP_TIME;
+		m_Stalled.erase(iTargetID);
 		if (iTargetID == m_iTargetID)
 			m_iTargetID = -1;
 	}
@@ -440,9 +465,77 @@ public:
 	}
 
 private:
-	int m_iTargetID       = -1;
-	float m_fLastProgress = 0.0f;
+	int m_iTargetID = -1;
+	float m_fSince  = 0.0f;         // when the current target's run without progress started
+	std::map<int, float> m_Stalled; // target -> time without progress in its earlier turns
 	std::map<int, float> m_SkippedUntil;
+};
+
+/// \brief Whose a repair or buy result is
+enum class ResultOwner : uint8_t
+{
+	Player,  // the game's own window handles it
+	Genie,   // Genie's request, in time
+	Dropped, // Genie's request that ran out of time: nobody expects it any more
+};
+
+/// \brief A repair or buy of Genie's, waiting for its result for up to 5 s
+class PendingRequest
+{
+public:
+	static constexpr float REPLY_WAIT = 5.0f;
+
+	void Send(float fNow)
+	{
+		m_bWaiting = true;
+		m_bLate    = false;
+		m_fSentAt  = fNow;
+	}
+
+	/// \brief Gives up on the result after REPLY_WAIT; a result that still comes is dropped
+	void Tick(float fNow)
+	{
+		if (m_bWaiting && fNow - m_fSentAt >= REPLY_WAIT)
+		{
+			m_bWaiting = false;
+			m_bLate    = true;
+		}
+	}
+
+	/// \brief Leaving the game: nothing waits any more
+	void Cancel()
+	{
+		m_bWaiting = m_bLate = false;
+	}
+
+	bool IsWaiting() const
+	{
+		return m_bWaiting;
+	}
+
+	/// \brief Who a result that just came is for. bPlayerWindowOpen: the player has the window open
+	/// that would handle one of their own.
+	ResultOwner Claim(bool bPlayerWindowOpen)
+	{
+		if (m_bWaiting)
+		{
+			m_bWaiting = false;
+			return ResultOwner::Genie;
+		}
+
+		if (m_bLate && !bPlayerWindowOpen)
+		{
+			m_bLate = false;
+			return ResultOwner::Dropped;
+		}
+
+		return ResultOwner::Player;
+	}
+
+private:
+	bool m_bWaiting = false;
+	bool m_bLate    = false;
+	float m_fSentAt = 0.0f;
 };
 
 /// \brief The server didn't answer GENIE_START in 5 s

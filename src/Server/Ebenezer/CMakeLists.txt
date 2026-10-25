@@ -26,6 +26,7 @@ add_library(Ebenezer.Core
   GameDefine.h
   GameEvent.cpp
   GameEvent.h
+  ItemUpgradeRules.h
   Knights.cpp
   Knights.h
   KnightsManager.cpp

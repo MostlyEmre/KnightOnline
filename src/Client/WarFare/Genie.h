@@ -71,7 +71,7 @@ public:
 	void OnLootResult(uint8_t byResult);
 
 	/// \brief A merchant's shop opened (WIZ_TRADE_NPC): remembered if it sells potions or arrows
-	void OnShopOpened(int iNpcID, int iTradeID);
+	void OnShopOpened(int iNpcID, int iTradeID, const std::string& szName);
 
 	/// \brief A buy result (WIZ_ITEM_TRADE); true when it was Genie's buy
 	bool OnTradeResult(uint8_t byResult, uint8_t byType, int iMoney);
@@ -100,7 +100,7 @@ private:
 	bool CastOnSelf(int iSkillID);
 	bool IsSkillReady(int iSkillID) const;
 	int CountItem(int iItemID) const;
-	bool AnyAttackCastable() const;
+	bool AnyAttackAffordable() const;
 
 	/// \brief Repairs worn gear and restocks potions and arrows, from where the player stands
 	void Upkeep();
@@ -170,8 +170,8 @@ private:
 
 	// Upkeep: the repair and the buy waiting for their results, and what can't be bought.
 	int m_iRepairSlot               = -1;
-	float m_fRepairSentAt           = 0.0f;
-	bool m_bRepairRefused           = false;
+	Genie::PendingRequest m_RepairRequest;
+	bool m_bRepairRefused = false;
 	struct PendingBuy
 	{
 		int iItemID                 = 0;
@@ -179,7 +179,7 @@ private:
 		int iCount                  = 0;
 		Genie::RestockState* pState = nullptr;
 	} m_PendingBuy;
-	float m_fBuySentAt = 0.0f;
+	Genie::PendingRequest m_BuyRequest;
 	Genie::RestockState m_HpRestock, m_MpRestock, m_ArrowRestock;
 
 	Genie::Settings m_Settings;

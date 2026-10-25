@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <sstream>
 #include <string>
@@ -223,6 +224,16 @@ bool Run(const Command& command)
 		s.buttonFrames = 2;
 		s.waitFrames   = 3; // let the game see the press and the release
 		s.waitUntil    = Clock::now() + 3 * Tick60;
+		return false;
+	}
+
+	if (command.verb == "down" || command.verb == "up")
+	{
+		const bool down = command.verb == "down";
+		s.buttons       = down ? 0x1 : 0;
+		s.buttonFrames  = down ? std::numeric_limits<int>::max() : 0;
+		s.waitFrames    = 3;
+		s.waitUntil     = Clock::now() + 3 * Tick60;
 		return false;
 	}
 

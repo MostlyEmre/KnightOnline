@@ -6,6 +6,7 @@ add_executable(Ebenezer.Tests
   ItemUpgrade_test.cpp
   RankStipendReward_test.cpp
   ShoppingMall_test.cpp
+  UpgradeScrolls_test.cpp
 )
 
 target_link_libraries(Ebenezer.Tests PRIVATE

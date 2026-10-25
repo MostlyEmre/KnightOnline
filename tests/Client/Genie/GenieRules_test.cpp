@@ -359,3 +359,69 @@ TEST(GenieRules, LeavesItemsAloneWhileThePlayerHandlesThem)
 	EXPECT_TRUE(PlayerHandlesItems({ .bRepair = true }));
 	EXPECT_TRUE(PlayerHandlesItems({ .bWaiting = true }));
 }
+
+// With basic attack off, Genie sits for MP only when no attack skill can be paid for, not while
+// they're only cooling down.
+TEST(GenieRules, SkillsCoolingDownDontMakeGenieSit)
+{
+	EXPECT_TRUE(
+		AnyAffordable(std::array { SkillChoice { .iID = 1, .bReady = false, .bUsable = true } }));
+	EXPECT_FALSE(
+		AnyAffordable(std::array { SkillChoice { .iID = 1, .bReady = true, .bUsable = false } }));
+	EXPECT_FALSE(AnyAffordable(std::span<const SkillChoice> {}));
+}
+
+// Two unreachable targets taking turns as the nearest: each one's time without progress adds up,
+// so both get given up.
+TEST(GenieRules, StalledTargetsTakingTurnsAreSkipped)
+{
+	TargetProgress progress;
+	for (int i = 0; i < 40; i++)
+		progress.Reset(i % 2 == 0 ? 1 : 2, static_cast<float>(i) * 0.5f);
+
+	progress.Reset(1, 20.0f); // target 1's turns so far: 20 x 0.5 s
+	EXPECT_TRUE(progress.ShouldSkip(20.0f));
+
+	// Progress on it starts its count over.
+	progress.OnProgress(20.0f);
+	EXPECT_FALSE(progress.ShouldSkip(29.9f));
+}
+
+// A repair or buy waits 5 s for its result. A result after that is Genie's late one and is
+// dropped, unless the player has the window open that expects one.
+TEST(GenieRules, LateUpkeepResultsAreDropped)
+{
+	PendingRequest request;
+	EXPECT_EQ(request.Claim(false), ResultOwner::Player); // nothing sent
+
+	request.Send(10.0f);
+	request.Tick(14.0f);
+	EXPECT_TRUE(request.IsWaiting());
+	EXPECT_EQ(request.Claim(true), ResultOwner::Genie); // in time, even with a window open
+	EXPECT_FALSE(request.IsWaiting());
+
+	request.Send(20.0f);
+	request.Tick(25.0f);
+	EXPECT_FALSE(request.IsWaiting());
+	EXPECT_EQ(request.Claim(false), ResultOwner::Dropped); // late
+	EXPECT_EQ(request.Claim(false), ResultOwner::Player);  // only the one
+
+	request.Send(30.0f);
+	request.Tick(35.0f);
+	EXPECT_EQ(request.Claim(true), ResultOwner::Player); // the player's window expects it
+
+	request.Send(40.0f);
+	request.Cancel();                                    // leaving the game
+	EXPECT_EQ(request.Claim(false), ResultOwner::Player);
+}
+
+// Monsters by the NPC type the server sends: not traps, guards, merchants or objects (camp spawns
+// in zone 30 are type 64 with no nation).
+TEST(GenieRules, MonstersByNpcType)
+{
+	for (int iType : { 0, 2, 3, 4, 6, 9 })
+		EXPECT_TRUE(IsMonsterType(static_cast<uint8_t>(iType))) << iType;
+
+	for (int iType : { 1, 5, 11, 21, 24, 64, 255 })
+		EXPECT_FALSE(IsMonsterType(static_cast<uint8_t>(iType))) << iType;
+}

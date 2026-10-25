@@ -79,8 +79,8 @@ TEST(GenieSettings, RoundTrip)
 	saved.iArrowID       = 391010000;
 	saved.iKeepArrows    = 2000;
 	saved.iCoinFloor     = 1'500'000'000;
-	saved.potionMerchant = { .iNpcID = 10432, .iTradeID = 255000 };
-	saved.arrowMerchant  = { .iNpcID = 10433, .iTradeID = 253000 };
+	saved.potionMerchant = { .iNpcID = 10432, .iTradeID = 255000, .szName = "Pabian" };
+	saved.arrowMerchant  = { .iNpcID = 10433, .iTradeID = 253000, .szName = "Charon" };
 	saved.town           = {
 				  .bBagFull = false, .bNoHpPotions = true, .bNoMpPotions = false, .bNoArrows = true
 	};
@@ -117,6 +117,21 @@ TEST(GenieSettings, StayPutDefaultsByWeapon)
 	chosen.SetInt("Genie", "StayPut", 0);
 	Load(chosen, settings, true);
 	EXPECT_FALSE(settings.bStayPut);
+}
+
+// A shop visit saves its merchant only when the server allows Genie, and only a new one (then
+// Genie says so).
+TEST(GenieSettings, RemembersNewMerchantsOnly)
+{
+	const Merchant pabian { .iNpcID = 14061, .iTradeID = 253000, .szName = "Pabian" };
+	EXPECT_TRUE(ShouldRememberMerchant(true, {}, pabian));
+	EXPECT_FALSE(ShouldRememberMerchant(true, pabian, pabian));
+	EXPECT_FALSE(ShouldRememberMerchant(false, {}, pabian));
+	EXPECT_TRUE(ShouldRememberMerchant(
+		true, pabian, { .iNpcID = 14062, .iTradeID = 253000, .szName = "Pabian" }));
+
+	// A merchant saved before names were kept gets its name.
+	EXPECT_TRUE(ShouldRememberMerchant(true, { .iNpcID = 14061, .iTradeID = 253000 }, pabian));
 }
 
 // Values edited by hand out of range are pulled back in.

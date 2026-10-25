@@ -191,6 +191,7 @@ public:
 	bool LoadMagicTable();
 	bool LoadItemTable();
 	bool LoadItemUpgradeTable();
+	bool LoadItemGradeTable();
 	bool MapFileLoad();
 	void UserAcceptThread();
 	// sungyong 2001.11.06
@@ -281,6 +282,16 @@ public:
 
 	/// \brief Whether players may run Genie (auto-hunt): [GENIE] ENABLED in the config, on by default
 	bool m_bGenieEnabled = true;
+
+	/// \brief Each upgradeable item's class (the client's "Item Grade": 1 low, 2 middle, 3 high),
+	/// from ITEM_GRADE, which the port adds; without it, Low and Middle Class scrolls take nothing.
+	std::unordered_map<int, uint8_t> m_ItemGradeMap;
+
+	/// \brief Better upgrade odds (ItemUpgradeRules::BoostedGenRate): [UPGRADE] BOOST, on by default
+	bool m_bUpgradeBoost = true;
+
+	/// \brief An item's class, 0 for none
+	int ItemGrade(int itemId) const;
 
 	/// \brief User Knights Ranking cache. Officially this is split into two caches
 	/// that track stipend claims in-memory, which means stipends reset on a server crash/restart.

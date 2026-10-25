@@ -2811,7 +2811,7 @@ bool CGameProcMain::MsgRecv_NPCIn(Packet& pkt)
 {
 	int iID      = pkt.read<int16_t>();        // Server에서 관리하는 고유 ID
 	int iIDResrc = pkt.read<int16_t>();        // 리소스 ID
-	/*int iType       =*/pkt.read<uint8_t>();  // NPC Type - 0x05 : 상인
+	int iType    = pkt.read<uint8_t>();        // NPC Type - 0x05 : 상인
 	/*int iItemTrdeID =*/pkt.read<uint32_t>(); // 아이템 거래할 그룹 ID 서버에 요청할 ID
 	int iScale   = pkt.read<int16_t>();        // 스케일 100 은 1.0
 	int iItemID0 = pkt.read<uint32_t>();       // 리소스 ID
@@ -2855,6 +2855,7 @@ bool CGameProcMain::MsgRecv_NPCIn(Packet& pkt)
 		//TRACE("NPC In - Duplicated ID ({}, {}) Pos({:.2f},{:.2f},{:.2f})", iID, szName, fXPos, fYPos, fZPos);
 		pNPC->Action(PSA_BASIC, true, nullptr, true); // 강제로 살리고..
 		pNPC->m_fTimeAfterDeath = 0;
+		pNPC->m_byNpcType       = static_cast<uint8_t>(iType);
 		pNPC->PositionSet(__Vector3(fXPos, fYPos, fZPos), true);
 		return false;
 	}
@@ -2864,6 +2865,7 @@ bool CGameProcMain::MsgRecv_NPCIn(Packet& pkt)
 	pNPC          = new CPlayerNPC();
 	pNPC->IDSet(iID, szName, crID);              // 초기화.. 및 ID 세팅.
 	pNPC->m_InfoBase.eNation    = eNation;
+	pNPC->m_byNpcType           = static_cast<uint8_t>(iType);
 	pNPC->m_InfoBase.eRace      = RACE_NPC;      // NPC 라는 걸 알린다.
 	pNPC->m_InfoBase.iLevel     = iLevel;
 	pNPC->m_InfoBase.iAuthority = AUTHORITY_NPC; // 권한 NPC는 권한이 없고..
@@ -3181,7 +3183,7 @@ bool CGameProcMain::MsgRecv_Attack(Packet& pkt)
 	bool bIAmAttacker = (iIDAttacker == s_pPlayer->IDNumber()) ? true : false;
 
 	// Genie fights back against what attacks the player, and counts the player's hits.
-	if (bIAmTarget && iIDAttacker > 10000)
+	if (bIAmTarget && iIDAttacker >= 10000)
 		m_pGenie->OnAttackedBy(iIDAttacker);
 	else if (bIAmAttacker && iResult != 0)
 		m_pGenie->OnHit(iIDTarget);
@@ -3193,7 +3195,7 @@ bool CGameProcMain::MsgRecv_Attack(Packet& pkt)
 		pAttacker = s_pOPMgr->CharacterGetByID(iIDAttacker, true);
 	if (nullptr == pAttacker)                         // 어라 공격하는 넘이 없네??
 	{
-		if (iIDAttacker > 10000)                      // NPC 는 1000 이상이다.
+		if (iIDAttacker >= 10000)                     // NPC 는 1000 이상이다.
 			this->MsgSend_NPCInRequest(iIDAttacker);  // NPC 정보가 없을 경우 요청한다..
 		else if (iIDAttacker < 3000)
 			this->MsgSend_UserInRequest(iIDAttacker); // NPC 정보가 없을 경우 요청한다..
@@ -4366,7 +4368,7 @@ bool CGameProcMain::MsgRecv_ItemTradeStart(Packet& pkt) // 아이템 상거래..
 	CPlayerNPC* pNPC = s_pOPMgr->NPCGetByID(s_pPlayer->m_iIDTarget, true);
 	if (!pNPC)
 		return true;
-	m_pGenie->OnShopOpened(pNPC->IDNumber(), iTradeID);
+	m_pGenie->OnShopOpened(pNPC->IDNumber(), iTradeID, pNPC->IDString());
 	m_pUINpcEvent->Open(NPC_EVENT_ITEM_TRADE, iTradeID, pNPC->GetNPCOriginID());
 
 	return true;

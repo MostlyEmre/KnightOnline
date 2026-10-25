@@ -13,6 +13,8 @@
 //   wait <ticks>              do nothing for that long
 //   move <x> <y>              put the cursor at client coordinates
 //   click <x> <y> [right]     move there and click (button down for 2 frames, then up)
+//   down / up                 press the left button and keep it down / let it go (a drag is
+//                             move, down, wait, move, wait, up)
 //   key <name>                press a key for 2 ticks (DirectInput names: RETURN, ESCAPE, W, F1...)
 //   hold <name> <ticks>       hold a key down
 //   text <characters>         type into the focused edit box

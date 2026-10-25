@@ -518,10 +518,19 @@ void CUIGenie::Refresh()
 		m_MonsterRemove[i]->SetVisible(bUsed && m_iPage == PAGE_ATTACK && !m_bPicking);
 	}
 
-	m_pPotionMerchant->SetString(Settings().potionMerchant.IsSet() ? "Potions are bought from the potion merchant you saved."
-																   : "No potion merchant yet: open a shop that sells potions once.");
-	m_pArrowMerchant->SetString(Settings().arrowMerchant.IsSet() ? "Arrows are bought from the arrow merchant you saved."
-																 : "No arrow merchant yet: open a shop that sells arrows once.");
+	// "Potions are bought from Pabian."
+	auto merchantLine = [](const Genie::Merchant& merchant, const char* szThings, const char* szThing, const char* szSentence)
+	{
+		if (!merchant.IsSet())
+			return fmt::format("No {} merchant yet: open a shop that sells {} once.", szThing, szThings);
+
+		const std::string szFrom = merchant.szName.empty() ? fmt::format("the {} merchant you saved", szThing) : merchant.szName;
+		return fmt::format("{} are bought from {}.", szSentence, szFrom);
+	};
+	std::string szPotions = merchantLine(Settings().potionMerchant, "potions", "potion", "Potions");
+	std::string szArrows  = merchantLine(Settings().arrowMerchant, "arrows", "arrow", "Arrows");
+	m_pPotionMerchant->SetString(szPotions);
+	m_pArrowMerchant->SetString(szArrows);
 }
 
 void CUIGenie::Step(const Row& row, int iStep)

@@ -1724,7 +1724,7 @@ void CMagicSkillMng::MsgRecv_Casting(Packet& pkt)
 		return;
 
 	// A monster casting at the player: Genie fights back.
-	if (iTargetID == s_pPlayer->IDNumber() && iSourceID > 10000)
+	if (iTargetID == s_pPlayer->IDNumber() && iSourceID >= 10000)
 		m_pGameProcMain->m_pGenie->OnAttackedBy(iSourceID);
 	//
 	////common.....//////////////////////////////////////////////////////////////

@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "EbenezerApp.h"
+#include "ItemUpgradeRules.h"
 #include "Map.h"
 #include "OperationMessage.h"
 #include "User.h"
@@ -13932,6 +13933,11 @@ void CUser::ItemUpgrade(char* pBuf)
 		if (!matchedRequiredItems)
 			continue;
 
+		// Low and Middle Class scrolls only take items of their class.
+		if (!ItemUpgradeRules::ScrollsFitItem(
+				itemUpgradeModel->RequiredItem, m_pMain->ItemGrade(originItemId)))
+			continue;
+
 		if (itemUpgradeModel->RequiredCoins > m_pUserData->m_iGold)
 		{
 			SendItemUpgradeFailed(ITEM_UPGRADE_RESULT_NEED_COINS);
@@ -13955,7 +13961,11 @@ void CUser::ItemUpgrade(char* pBuf)
 	// far more frequently than the standard random number generator (which isn't really
 	// a good thing at all).
 	rand           = myrand(0, myrand(9000, 10000));
-	upgradeSuccess = (matchedItemUpgradeModel->GenRate > rand);
+	upgradeSuccess = ItemUpgradeRules::RollSucceeds(
+		m_pMain->m_bUpgradeBoost
+			? ItemUpgradeRules::BoostedGenRate(matchedItemUpgradeModel->GenRate)
+			: matchedItemUpgradeModel->GenRate,
+		rand);
 
 	if (upgradeSuccess)
 	{

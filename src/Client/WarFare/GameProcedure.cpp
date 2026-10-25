@@ -16,6 +16,7 @@
 #include "GameProcCharacterCreate.h"
 #include "GameProcCharacterSelect.h"
 #include "GameProcMain.h"
+#include "Genie.h"
 #include "UILoading.h"
 #include "UIMessageBox.h"
 #include "UIMessageBoxManager.h"
@@ -729,6 +730,10 @@ void CGameProcedure::MsgRecv_ServerChange(Packet& pkt)
 	s_pPlayer->m_InfoExt.iZoneCur  = pkt.read<uint8_t>();
 	int iVictoryNation             = pkt.read<uint8_t>();
 	CGameProcedure::LoadingUIChange(iVictoryNation);
+
+	// The next server says for itself whether it allows Genie.
+	if (s_pProcMain != nullptr && s_pProcMain->m_pGenie != nullptr)
+		s_pProcMain->m_pGenie->OnAvailable(false);
 
 	s_bNeedReportConnectionClosed = false; // 서버접속이 끊어진걸 보고해야 하는지..
 	s_pSocket->Disconnect();               // 끊고...

@@ -106,6 +106,9 @@
     <ClInclude Include="GameEvent.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ItemUpgradeRules.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Knights.h">
       <Filter>Header Files</Filter>
     </ClInclude>

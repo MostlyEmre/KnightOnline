@@ -33,6 +33,7 @@ struct Merchant
 {
 	int iNpcID   = -1;
 	int iTradeID = 0;
+	std::string szName; // what the window calls it
 
 	bool IsSet() const
 	{
@@ -41,6 +42,13 @@ struct Merchant
 
 	bool operator==(const Merchant&) const = default;
 };
+
+/// \brief Whether a shop the player opened becomes the saved merchant: only when the server allows
+/// Genie, and only a new merchant (or the saved one without its name yet)
+inline bool ShouldRememberMerchant(bool bGenieAllowed, const Merchant& saved, const Merchant& seen)
+{
+	return bGenieAllowed && (saved.iNpcID != seen.iNpcID || saved.iTradeID != seen.iTradeID || saved.szName != seen.szName);
+}
 
 struct Settings
 {
@@ -167,6 +175,8 @@ inline void Load(CIni& ini, Settings& out, bool bStayPutDefault = false)
 	out.potionMerchant.iTradeID = ini.GetInt(SECTION, "PotionMerchantTrade", 0);
 	out.arrowMerchant.iNpcID    = ini.GetInt(SECTION, "ArrowMerchantNpc", -1);
 	out.arrowMerchant.iTradeID  = ini.GetInt(SECTION, "ArrowMerchantTrade", 0);
+	out.potionMerchant.szName   = ini.GetString(SECTION, "PotionMerchantName", "");
+	out.arrowMerchant.szName    = ini.GetString(SECTION, "ArrowMerchantName", "");
 
 	out.town.bBagFull           = ini.GetBool(SECTION, "TownBagFull", true);
 	out.town.bNoHpPotions       = ini.GetBool(SECTION, "TownNoHpPotions", true);
@@ -220,6 +230,8 @@ inline void Save(CIni& ini, const Settings& in)
 	ini.SetInt(SECTION, "PotionMerchantTrade", in.potionMerchant.iTradeID);
 	ini.SetInt(SECTION, "ArrowMerchantNpc", in.arrowMerchant.iNpcID);
 	ini.SetInt(SECTION, "ArrowMerchantTrade", in.arrowMerchant.iTradeID);
+	ini.SetString(SECTION, "PotionMerchantName", in.potionMerchant.szName);
+	ini.SetString(SECTION, "ArrowMerchantName", in.arrowMerchant.szName);
 
 	ini.SetInt(SECTION, "TownBagFull", in.town.bBagFull);
 	ini.SetInt(SECTION, "TownNoHpPotions", in.town.bNoHpPotions);
