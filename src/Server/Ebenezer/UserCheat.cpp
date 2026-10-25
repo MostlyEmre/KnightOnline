@@ -517,8 +517,11 @@ void CUser::SendCheatResult(uint8_t opcode, uint8_t result)
 
 void CUser::ExpGain(int base)
 {
-	ExpChange(
-		static_cast<int>(Cheats::ScaleGain(base, m_pMain->CheatPct(&Cheats::Settings::sExpPct))));
+	// Capped where m_iExp would overflow: wrapping would turn a huge gain into a loss.
+	const int64_t gain = std::min(
+		Cheats::ScaleGain(base, m_pMain->CheatPct(&Cheats::Settings::sExpPct)),
+		static_cast<int64_t>(INT32_MAX) - m_pUserData->m_iExp);
+	ExpChange(static_cast<int>(gain));
 
 	// ExpChange levels up once per call.
 	while (m_pUserData->m_iExp >= m_iMaxExp && m_pUserData->m_bLevel < MAX_LEVEL)

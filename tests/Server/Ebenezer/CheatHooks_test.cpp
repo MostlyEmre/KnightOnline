@@ -2,6 +2,8 @@
 #include "TestApp.h"
 #include "TestUser.h"
 
+#include <Ebenezer/AISocket.h>
+
 #include <shared/CheatSettings.h>
 #include <shared-server/utilities.h>
 
@@ -114,6 +116,44 @@ TEST_F(CheatHooksTest, ExpMultiplierLevelsUpSeveralTimes)
 
 	EXPECT_EQ(_user->m_pUserData->m_bLevel, 6);
 	EXPECT_EQ(_user->m_pUserData->m_iExp, 0);
+}
+
+// A kill worth more than an int16 arrives whole from AIServer (a Harpy: 323,800).
+TEST_F(CheatHooksTest, KillExpAboveInt16Arrives)
+{
+	for (auto* levelUp : _app->m_LevelUpTableArray)
+		levelUp->RequiredExp = 1'000'000'000;
+	_user->m_iMaxExp = 1'000'000'000;
+
+	char buffer[16] {};
+	int index = 0;
+	SetShort(buffer, _user->GetSocketID(), index);
+	SetDWORD(buffer, 323'800, index);
+	SetDWORD(buffer, 0, index);
+
+	CAISocket::HandleUserExp(_app.get(), buffer);
+
+	EXPECT_EQ(_user->m_pUserData->m_iExp, 323'800);
+}
+
+// The biggest monster's EXP at x100 is capped where it would overflow, instead of wrapping into a
+// loss.
+TEST_F(CheatHooksTest, HugeExpGainDoesNotWrap)
+{
+	for (auto* levelUp : _app->m_LevelUpTableArray)
+		levelUp->RequiredExp = 2'000'000'000;
+	_user->m_iMaxExp           = 2'000'000'000;
+	_user->m_pUserData->m_iExp = 1'000'000'000;
+
+	Cheats::Settings settings  = On();
+	settings.sExpPct           = 10000;
+	SetCheats(settings);
+
+	_user->ExpGain(39'438'375);
+
+	EXPECT_EQ(_user->m_pUserData->m_bLevel, 2);
+	EXPECT_GT(_user->m_pUserData->m_iExp, 0);
+	EXPECT_LT(_user->m_pUserData->m_iExp, 2'000'000'000);
 }
 
 // With cheats off, a gain is just the gain.

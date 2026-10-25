@@ -453,8 +453,9 @@ void CUser::SendExp(int iExp, int iLoyalty, int /*tType*/)
 
 	SetByte(buff, AG_USER_EXP, sendIndex);
 	SetShort(buff, m_iUserId, sendIndex);
-	SetShort(buff, iExp, sendIndex);
-	SetShort(buff, iLoyalty, sendIndex);
+	// OpenKO: full-size, so a monster worth more than 32767 EXP isn't wrapped.
+	SetDWORD(buff, iExp, sendIndex);
+	SetDWORD(buff, iLoyalty, sendIndex);
 
 	//TRACE(_T("$$ User - SendExp : %hs, exp=%d, loyalty=%d $$\n"), m_strUserID, iExp, iLoyalty);
 

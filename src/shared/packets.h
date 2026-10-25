@@ -978,7 +978,7 @@ enum e_AIOpcode : uint8_t
 	AG_USER_SET_HP         = 105, // User의 HP
 	AG_USER_LOG_OUT        = 106, // User의 LogOut
 	AG_USER_REGENE         = 107, // User의 Regene
-	AG_USER_EXP            = 108, // User의 경험치
+	AG_USER_EXP            = 108, // User의 경험치: [i16 user][i32 exp][i32 NP]
 	AG_USER_UPDATE         = 109, // User의 Update Info
 	AG_USER_FAIL           = 110, // 잘못된 유저 처리...
 	AG_USER_PARTY          = 111, // 파티처리 담당

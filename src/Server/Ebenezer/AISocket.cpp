@@ -1110,12 +1110,19 @@ void CAISocket::RecvUserHP(char* pBuf)
 
 void CAISocket::RecvUserExp(char* pBuf)
 {
+	HandleUserExp(_main, pBuf);
+}
+
+void CAISocket::HandleUserExp(EbenezerApp* main, char* pBuf)
+{
+	// OpenKO: EXP and NP are full-size; as int16s, a monster worth more than 32767 EXP (from about
+	// level 30) arrived wrapped and was refused.
 	int index        = 0;
 	int userId       = GetShort(pBuf, index);
-	int16_t sExp     = GetShort(pBuf, index);
-	int16_t sLoyalty = GetShort(pBuf, index);
+	int32_t sExp     = static_cast<int32_t>(GetDWORD(pBuf, index));
+	int32_t sLoyalty = static_cast<int32_t>(GetDWORD(pBuf, index));
 
-	auto pUser       = _main->GetUserPtr(userId);
+	auto pUser       = main->GetUserPtr(userId);
 	if (pUser == nullptr)
 	{
 		spdlog::error(
