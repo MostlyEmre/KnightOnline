@@ -161,10 +161,26 @@ void CUIArtWindow::Open()
 	SetVisible(true);
 }
 
+CUIArtEdit* CUIArtEdit::Create(CN3UIBase* pParent, const RECT& rc, size_t iMaxLength)
+{
+	auto* pEdit = new CUIArtEdit();
+	pEdit->Init(pParent);
+	pEdit->SetRegion(rc);
+	pEdit->SetMaxString(iMaxLength);
+	pEdit->m_pBuffOutRef = UIArt::AddString(pEdit, UIArt::MakeRect(rc.left + 8, rc.top, rc.right - 8, rc.bottom), "", 11, true, 0xffffffff,
+		UISTYLE_STRING_ALIGNLEFT | UISTYLE_STRING_ALIGNVCENTER);
+	return pEdit;
+}
+
 void CUIArtWindow::Close()
 {
 	if (!IsVisible())
 		return;
+
+	// One of the window's own text fields lets go of the keyboard; hiding the window doesn't,
+	// and no game key works while a text field has it.
+	if (CN3UIEdit* pFocused = CN3UIBase::GetFocusedEdit(); pFocused != nullptr && pFocused->GetParent() == this)
+		pFocused->KillFocus();
 
 	SetVisible(false);
 	m_bHoldInput = true;
@@ -181,7 +197,10 @@ void CUIArtWindow::TakeInput(CLocalInput* pInput)
 	{
 		MouseProc(static_cast<uint32_t>(pInput->MouseGetFlag()), pInput->MouseGetPos(), pInput->MouseGetPosOld());
 		Tick();
-		if (IsVisible() && (pInput->IsKeyPress(DIK_ESCAPE) || (m_iToggleKey != 0 && pInput->IsKeyPress(m_iToggleKey))))
+		// The window's letter is typed, not obeyed, while one of its text fields has the keyboard.
+		const CN3UIEdit* pFocused = CN3UIBase::GetFocusedEdit();
+		const bool bTyping        = pFocused != nullptr && pFocused->GetParent() == this;
+		if (IsVisible() && (pInput->IsKeyPress(DIK_ESCAPE) || (m_iToggleKey != 0 && !bTyping && pInput->IsKeyPress(m_iToggleKey))))
 			Close();
 	}
 	else if (m_bHoldInput)

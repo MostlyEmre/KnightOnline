@@ -16,6 +16,7 @@
 
 #include "UIManager.h"
 #include "UIMessageBoxManager.h"
+#include "UICheats.h"
 #include "UIPowerUpStore.h"
 
 #include <N3Base/DFont.h>
@@ -268,10 +269,15 @@ static bool OnCloseRequested()
 
 static void OnMouseWheel(short delta)
 {
-	// Under a modal window only the Power-up Store scrolls (its pages).
+	// Under a modal window only the Power-up Store and the cheats menu scroll (their pages).
 	if (CGameProcedure::IsModalWindowOpen())
 	{
-		if (!CGameProcedure::IsOptionsOpen())
+		if (CGameProcedure::IsOptionsOpen())
+			return;
+
+		if (CGameProcedure::s_pUICheats != nullptr && CGameProcedure::s_pUICheats->IsVisible())
+			CGameProcedure::s_pUICheats->OnMouseWheelEvent(delta);
+		else if (CGameProcedure::s_pUIPowerUpStore != nullptr && CGameProcedure::s_pUIPowerUpStore->IsVisible())
 			CGameProcedure::s_pUIPowerUpStore->OnMouseWheelEvent(delta);
 		return;
 	}
@@ -330,6 +336,11 @@ static Platform::EventHandlers CreateEventHandlers()
 	{
 		if (CGameProcedure::s_pProcMain != nullptr && CGameProcedure::s_pProcActive == CGameProcedure::s_pProcMain)
 			CGameProcedure::s_pProcMain->CommandToggleUIGenie();
+	};
+	handlers.OnShowCheats = []
+	{
+		if (CGameProcedure::s_pProcMain != nullptr && CGameProcedure::s_pProcActive == CGameProcedure::s_pProcMain)
+			CGameProcedure::s_pProcMain->CommandToggleUICheats();
 	};
 	return handlers;
 }

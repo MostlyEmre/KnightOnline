@@ -24,6 +24,7 @@
 #include "UIManager.h"
 #include "UIOptions.h"
 #include "UIPowerUpStore.h"
+#include "UICheats.h"
 #include "UIGenie.h"
 #include "UINotice.h"
 #include "UIHelp.h"
@@ -69,6 +70,7 @@ CUIMessageBoxManager* CGameProcedure::s_pMsgBoxMgr               = nullptr; // M
 CUIOptions* CGameProcedure::s_pUIOptions                         = nullptr;
 CUIPowerUpStore* CGameProcedure::s_pUIPowerUpStore               = nullptr;
 CUIGenie* CGameProcedure::s_pUIGenie                             = nullptr;
+CUICheats* CGameProcedure::s_pUICheats                           = nullptr;
 //bool				CGameProcedure::s_bUseSpeedHack = false;
 
 CGameProcedure* CGameProcedure::s_pProcPrev                      = nullptr;
@@ -293,6 +295,8 @@ void CGameProcedure::StaticMemberRelease()
 	s_pUIPowerUpStore = nullptr;
 	delete s_pUIGenie;
 	s_pUIGenie = nullptr;
+	delete s_pUICheats;
+	s_pUICheats = nullptr;
 
 	delete s_pMsgBoxMgr;
 	s_pMsgBoxMgr = nullptr;
@@ -330,6 +334,8 @@ void CGameProcedure::Tick()
 		s_pUIPowerUpStore->TakeInput(s_pLocalInput);
 	if (s_pUIGenie != nullptr)
 		s_pUIGenie->TakeInput(s_pLocalInput);
+	if (s_pUICheats != nullptr)
+		s_pUICheats->TakeInput(s_pLocalInput);
 
 	ProcessUIKeyInput();
 
@@ -504,7 +510,7 @@ bool CGameProcedure::IsOptionsOpen()
 bool CGameProcedure::IsModalWindowOpen()
 {
 	return IsOptionsOpen() || (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
-		   || (s_pUIGenie != nullptr && s_pUIGenie->IsVisible());
+		   || (s_pUIGenie != nullptr && s_pUIGenie->IsVisible()) || (s_pUICheats != nullptr && s_pUICheats->IsVisible());
 }
 
 void CGameProcedure::RenderModalWindows()
@@ -516,6 +522,8 @@ void CGameProcedure::RenderModalWindows()
 	CUIManager::RenderStateSet();
 	if (s_pUIGenie != nullptr && s_pUIGenie->IsVisible())
 		s_pUIGenie->Render();
+	if (s_pUICheats != nullptr && s_pUICheats->IsVisible())
+		s_pUICheats->Render();
 	if (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
 		s_pUIPowerUpStore->Render();
 	if (IsOptionsOpen())

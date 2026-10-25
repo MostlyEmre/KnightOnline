@@ -224,6 +224,9 @@ public:
 
 	/// \brief Opens or closes Genie's window (G)
 	bool CommandToggleUIGenie();
+
+	/// \brief Opens or closes the cheats menu (J); refuses on a server that doesn't allow cheats.
+	bool CommandToggleUICheats();
 	bool OnMouseMove(POINT ptCur, POINT ptPrev);
 	bool OnMouseLbtnDown(POINT ptCur, POINT ptPrev);
 	bool OnMouseLBtnPressd(POINT ptCur, POINT ptPrev);

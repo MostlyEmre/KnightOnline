@@ -7,6 +7,7 @@
 // box art (ui_message_us.dxt, which the in-game message box and the help window use).
 
 #include <N3Base/N3UIButton.h>
+#include <N3Base/N3UIEdit.h>
 
 #include <string>
 #include <vector>
@@ -96,6 +97,14 @@ private:
 
 /// \brief A window made in code: the frame, a title and a close button. It's modal: while it's open
 /// it takes the input and hides it from the rest of the game.
+// A text field made in code. A CN3UIEdit shows its text in a string child that a .uif file would
+// otherwise provide; this one makes it. The caller draws the box behind it.
+class CUIArtEdit : public CN3UIEdit
+{
+public:
+	static CUIArtEdit* Create(CN3UIBase* pParent, const RECT& rc, size_t iMaxLength);
+};
+
 class CUIArtWindow : public CN3UIBase
 {
 public:

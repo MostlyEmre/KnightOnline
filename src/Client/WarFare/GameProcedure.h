@@ -65,6 +65,7 @@ public:
 	static class CUIOptions* s_pUIOptions;           // the Options window, where there's no Option.exe
 	static class CUIPowerUpStore* s_pUIPowerUpStore; // the Power-up Store (the P button)
 	static class CUIGenie* s_pUIGenie;               // Genie's window (G)
+	static class CUICheats* s_pUICheats;             // the cheats menu (J)
 
 	static class CGameProcLogIn* s_pProcLogIn;
 	static class CGameProcNationSelect* s_pProcNationSelect;

@@ -58,6 +58,7 @@
 #include "UIPowerUpStore.h"
 #include "Cheats.h"
 #include "Genie.h"
+#include "UICheats.h"
 #include "UIGenie.h"
 
 #include "SubProcPerTrade.h"
@@ -218,6 +219,8 @@ void CGameProcMain::Release()
 	// The window first: closing saves its settings, which needs the character Genie still knows.
 	if (s_pUIGenie != nullptr)
 		s_pUIGenie->Close();
+	if (s_pUICheats != nullptr)
+		s_pUICheats->Close();
 	if (m_pGenie != nullptr)
 		m_pGenie->OnLeaveGame();
 	if (m_pCheats != nullptr)
@@ -1314,6 +1317,9 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_GENIE))
 			CommandToggleUIGenie();
+
+		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_CHEATS))
+			CommandToggleUICheats();
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_STATE))
 			CommandToggleUIState();
@@ -8174,6 +8180,27 @@ void CGameProcMain::MsgRecv_Genie(Packet& pkt)
 		default:
 			break;
 	}
+}
+
+bool CGameProcMain::CommandToggleUICheats()
+{
+	if (s_pUICheats != nullptr && s_pUICheats->IsVisible())
+	{
+		s_pUICheats->Close();
+		return false;
+	}
+
+	if (!m_pCheats->IsAvailable())
+	{
+		MsgOutput("This server doesn't allow cheats.", 0xffff3b3b);
+		return false;
+	}
+
+	if (s_pUICheats == nullptr)
+		s_pUICheats = new CUICheats();
+
+	s_pUICheats->Open();
+	return s_pUICheats->IsVisible();
 }
 
 bool CGameProcMain::CommandToggleUIGenie()

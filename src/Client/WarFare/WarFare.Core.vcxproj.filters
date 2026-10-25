@@ -311,6 +311,9 @@
     <ClCompile Include="UIOptions.cpp">
       <Filter>Scene\Ingame\UI</Filter>
     </ClCompile>
+    <ClCompile Include="UICheats.cpp">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClCompile>
     <ClCompile Include="UIGenie.cpp">
       <Filter>Scene\Ingame\UI</Filter>
     </ClCompile>
@@ -488,6 +491,9 @@
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
     <ClInclude Include="UIOptions.h">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UICheats.h">
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
     <ClInclude Include="UIGenie.h">

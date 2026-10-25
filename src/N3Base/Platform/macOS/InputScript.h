@@ -21,6 +21,8 @@
 //   snapshot <file.png>       save the next frame
 //   quit                      end the program like PostQuitMessage(0)
 //   options                   open the game's Options window (as the app menu's Settings... does)
+//   genie                     open or close Genie's window (as G does)
+//   cheats                    open or close the cheats menu (as J does)
 //   handoff                   stop the script and give the window and real input to the user
 namespace Platform::macOS::InputScript
 {

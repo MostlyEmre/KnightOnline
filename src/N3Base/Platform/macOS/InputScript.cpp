@@ -293,6 +293,14 @@ bool Run(const Command& command)
 		return true;
 	}
 
+	if (command.verb == "cheats")
+	{
+		// The cheats menu, as J opens it in the game.
+		if (Handlers().OnShowCheats)
+			Handlers().OnShowCheats();
+		return true;
+	}
+
 	if (command.verb == "handoff")
 	{
 		// Real input from here on, for whoever is at the Mac.

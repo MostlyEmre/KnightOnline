@@ -88,6 +88,8 @@ set(WARFARE_SCENE_INGAME_UI_SOURCES
   UIEndingDisplay.h
   UIExitMenu.cpp
   UIExitMenu.h
+  UICheats.cpp
+  UICheats.h
   UIGenie.cpp
   UIGenie.h
   UIHelp.cpp

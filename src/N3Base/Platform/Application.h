@@ -47,6 +47,10 @@ struct EventHandlers
 	/// does in the game. A script's keys don't reach the game without the window focused.
 	std::function<void()> OnShowGenie;
 
+	/// \brief Scripted runs (InputScript's "cheats" command): open or close the cheats menu, as J
+	/// does in the game.
+	std::function<void()> OnShowCheats;
+
 	/// \brief The text in the text input field (TextInput.h) changed.
 	std::function<void()> OnTextInputChanged;
 

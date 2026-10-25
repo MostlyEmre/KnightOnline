@@ -87,7 +87,8 @@ enum eKeyMap : uint8_t
 	KM_SKILL_PAGE_6          = DIK_F6,
 	KM_SKILL_PAGE_7          = DIK_F7,
 	KM_SKILL_PAGE_8          = DIK_F8,
-	KM_TOGGLE_GENIE          = DIK_G
+	KM_TOGGLE_GENIE          = DIK_G,
+	KM_TOGGLE_CHEATS         = DIK_J
 };
 
 enum e_PlayerType : uint8_t
