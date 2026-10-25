@@ -490,8 +490,20 @@ public:
 		_frameSemaphore             = dispatch_semaphore_create(FramesInFlight);
 
 		MTLCompileOptions* options  = [MTLCompileOptions new];
-		options.mathMode            = MTLMathModeSafe;
-		NSError* error              = nil;
+		if (@available(macOS 15.0, *))
+		{
+			options.mathMode = MTLMathModeSafe;
+		}
+		else
+		{
+			// mathMode's predecessor, deprecated from macOS 15
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+			options.fastMathEnabled = NO;
+#pragma clang diagnostic pop
+		}
+
+		NSError* error = nil;
 		_library = [_device newLibraryWithSource:@(kShaderSource) options:options error:&error];
 		if (_library == nil)
 		{
