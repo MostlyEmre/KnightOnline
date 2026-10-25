@@ -58,6 +58,14 @@ public:
 	void RecvUserFail(char* pBuf);
 	void Send_UserError(int16_t uid, int16_t tid = 10000);
 	void RecvBattleEvent(char* pBuf);
+
+	/// \brief AG_CHEAT_SETTINGS: the cheats menu's settings
+	/// \param len the payload's length, without the opcode
+	void RecvCheatSettings(char* pBuf, int len);
+
+	/// \brief AG_CHEAT_KILL_AROUND: kill the monsters around a player, as the player's kills
+	/// \param len the payload's length, without the opcode
+	void RecvCheatKillAround(char* pBuf, int len);
 };
 
 } // namespace AIServer

@@ -10,6 +10,8 @@
 
 #include <shared-server/My_3DStruct.h>
 
+#include <atomic>
+
 namespace AIServer
 {
 
@@ -603,6 +605,15 @@ public:
 	bool SetUid(float x, float z, int id);
 
 	void Dead(int iDeadType = 0);
+
+	/// \brief The player the cheats menu's kill-around asked to kill this monster for, or -1. Set
+	/// by the socket thread, claimed by the monster's own thread (CheatKill).
+	std::atomic<int> m_iCheatKillBy { -1 };
+
+	/// \brief Kills the monster as the player's kill (EXP, drops, NP as usual) if the cheats menu
+	/// asked for it.
+	void CheatKill();
+
 	bool FindEnemy();
 	bool CheckFindEnemy();
 	int FindEnemyRegion();

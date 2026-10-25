@@ -195,6 +195,9 @@ uint8_t CMagicProcess::ExecuteType1(
 													  // 	if(damage <= 0)	damage = 1;
 	//TRACE(_T("magictype1 ,, magicid=%d, damage=%d\n"), magicid, damage);
 
+	// OpenKO: the cheats menu's damage dealt.
+	damage     = m_pMain->ScaleDealt(damage);
+
 	//	if (damage > 0) {
 	CNpc* pNpc = m_pMain->_npcMap.GetData(tid - NPC_BAND);
 	if (pNpc != nullptr && pNpc->m_NpcState != NPC_DEAD && pNpc->m_iHP > 0)
@@ -238,6 +241,9 @@ uint8_t CMagicProcess::ExecuteType2(int magicid, int tid, int data1, int /*data2
 	damage = m_pSrcUser->GetDamage(tid, magicid); // Get damage points of enemy.
 												  //	if(damage <= 0)	damage = 1;
 	//TRACE(_T("magictype2 ,, magicid=%d, damage=%d\n"), magicid, damage);
+
+	// OpenKO: the cheats menu's damage dealt.
+	damage = m_pMain->ScaleDealt(damage);
 
 	if (damage > 0)
 	{
@@ -330,7 +336,8 @@ void CMagicProcess::ExecuteType3(int magicid, int tid, int data1, int data2, int
 			}
 			else
 			{
-				damage = abs(damage);
+				// OpenKO: the cheats menu\'s damage dealt.
+				damage = m_pMain->ScaleDealt(abs(damage));
 
 				// 기절시키는 마법이라면.....
 				if (pType->Attribute == 3)
@@ -368,7 +375,8 @@ void CMagicProcess::ExecuteType3(int magicid, int tid, int data1, int data2, int
 		}
 		else
 		{
-			damage = abs(damage);
+			// OpenKO: the cheats menu\'s damage dealt.
+			damage = m_pMain->ScaleDealt(abs(damage));
 
 			// 기절시키는 마법이라면.....
 			if (pType->Attribute == 3)
@@ -511,7 +519,8 @@ void CMagicProcess::ExecuteType7(int magicid, int tid, int data1, int data2, int
 	if (pType == nullptr)
 		return;
 
-	damage = pType->Damage;
+	// OpenKO: the cheats menu's damage dealt.
+	damage = m_pMain->ScaleDealt(pType->Damage);
 	// attacking ex: binding
 	if (damage > 0)
 	{
@@ -896,7 +905,8 @@ void CMagicProcess::AreaAttackDamage(int magictype, int rx, int rz, int magicid,
 			}
 			else
 			{
-				damage = abs(damage);
+				// OpenKO: the cheats menu\'s damage dealt.
+				damage = m_pMain->ScaleDealt(abs(damage));
 				if (pType3->Attribute == 3)
 					attack_type = 3; // 기절시키는 마법이라면.....
 				else
@@ -993,7 +1003,8 @@ void CMagicProcess::AreaAttackDamage(int magictype, int rx, int rz, int magicid,
 		}
 		else if (magictype == 7)
 		{
-			damage      = target_damage;
+			// OpenKO: the cheats menu's damage dealt.
+			damage      = m_pMain->ScaleDealt(target_damage);
 			attack_type = magicid;
 			if (!pNpc->SetDamage(attack_type, damage, m_pSrcUser->m_strUserID,
 					m_pSrcUser->m_iUserId + USER_BAND))

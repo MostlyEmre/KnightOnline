@@ -157,6 +157,9 @@ void CUser::Attack(int /*sid*/, int tid)
 	// 명중이면 //Damage 처리 ----------------------------------------------------------------//
 	int nFinalDamage = GetDamage(tid);
 
+	// OpenKO: the cheats menu's damage dealt (a GM's override still wins).
+	nFinalDamage     = m_pMain->ScaleDealt(nFinalDamage);
+
 	if (m_byIsOP == AUTHORITY_MANAGER)
 		nFinalDamage = USER_DAMAGE_OVERRIDE_GM;
 	else if (m_byIsOP == AUTHORITY_LIMITED_MANAGER)

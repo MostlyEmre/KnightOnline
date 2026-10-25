@@ -1117,6 +1117,33 @@ void AIServerApp::AllNpcInfo()
 }
 // ~sungyong 2002.05.23
 
+bool AIServerApp::ApplyCheatSettings(uint32_t seq, const Cheats::Settings& settings)
+{
+	if (!Cheats::IsNewer(seq, _cheatSeq.load(std::memory_order_relaxed)))
+		return false;
+
+	_cheatSeq.store(seq, std::memory_order_relaxed);
+	_cheatDamageDealtPct.store(
+		Cheats::Effective(settings, &Cheats::Settings::sDamageDealtPct), std::memory_order_relaxed);
+	_cheatDamageTakenPct.store(
+		Cheats::Effective(settings, &Cheats::Settings::sDamageTakenPct), std::memory_order_relaxed);
+	_cheatDropPct.store(
+		Cheats::Effective(settings, &Cheats::Settings::sDropPct), std::memory_order_relaxed);
+	_cheatRespawnPct.store(
+		Cheats::Effective(settings, &Cheats::Settings::sRespawnPct), std::memory_order_relaxed);
+	return true;
+}
+
+int AIServerApp::ScaleDealt(int damage) const
+{
+	return Cheats::ScaleDamage(damage, _cheatDamageDealtPct.load(std::memory_order_relaxed));
+}
+
+int AIServerApp::ScaleTaken(int damage) const
+{
+	return Cheats::ScaleDamage(damage, _cheatDamageTakenPct.load(std::memory_order_relaxed));
+}
+
 CUser* AIServerApp::GetUserPtr(int nid)
 {
 	CUser* pUser = nullptr;
