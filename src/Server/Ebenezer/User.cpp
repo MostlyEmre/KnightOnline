@@ -2918,7 +2918,7 @@ void CUser::SetDetailData()
 	m_iMaxWeight = (m_pUserData->m_bStr + m_sItemStr) * 50;
 	// OpenKO: the cheats menu's "no weight limit".
 	if (m_pMain->CheatFlag(&Cheats::Settings::bNoWeightLimit))
-		m_iMaxWeight = SHRT_MAX;
+		m_iMaxWeight = Cheats::NO_WEIGHT_LIMIT;
 
 	m_iZoneIndex = m_pMain->GetZoneIndex(m_pUserData->m_bZone);
 
@@ -4224,7 +4224,7 @@ void CUser::SetUserAbility()
 	m_iMaxWeight = (m_pUserData->m_bStr + m_sItemStr) * 50;
 	// OpenKO: the cheats menu's "no weight limit".
 	if (m_pMain->CheatFlag(&Cheats::Settings::bNoWeightLimit))
-		m_iMaxWeight = SHRT_MAX;
+		m_iMaxWeight = Cheats::NO_WEIGHT_LIMIT;
 	/*
 	궁수 공격력 = 0.005 * 활 공격력 * (Dex + 40) + 직업계수 * 활 공격력 * 화살공격력 * 레벨 * Dex
 	전사 공격력 = 0.005 * 무기 공격력 * (Str + 40) + 직업계수 * 활 공격력 * 화살공격력 * 레벨 * Dex

@@ -3016,6 +3016,11 @@ void EbenezerApp::LoadCheatSettings()
 		}
 	}
 
+	// A server that doesn't allow cheats keeps the saved settings but applies none of them: the
+	// player could neither see nor change them.
+	if (!m_bCheatsAllowed)
+		settings.bOn = false;
+
 	std::lock_guard<std::mutex> lock(_cheatMutex);
 	_cheatSettings = settings;
 }

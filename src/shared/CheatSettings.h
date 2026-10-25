@@ -48,6 +48,10 @@ inline constexpr int RESPAWN_FLOOR_MS     = 5000;
 
 inline constexpr int8_t HOUR_NORMAL       = -1;
 
+/// The max weight while there's no weight limit: far above anything a bag can hold. (The client is
+/// shown at most 32767.)
+inline constexpr int NO_WEIGHT_LIMIT      = 1'000'000'000;
+
 /// The largest single hit both servers can carry (an int16 on the wire).
 inline constexpr int MAX_DAMAGE           = 32767;
 

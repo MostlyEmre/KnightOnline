@@ -149,6 +149,22 @@ TEST_F(CheatHandshakeTest, AnnouncesLoadedSettings)
 	EXPECT_EQ(_user->GetPacketsSent(), 2u);
 }
 
+// A server that doesn't allow cheats doesn't apply saved ones either: the player couldn't see or
+// change them.
+TEST_F(CheatHandshakeTest, SavedCheatsIgnoredWhenNotAllowed)
+{
+	{
+		std::ofstream file(_path);
+		file << "[CHEATS]\nON=1\nEXP=1000\n";
+	}
+
+	_app->m_bCheatsAllowed = false;
+	_app->LoadCheatSettings();
+
+	EXPECT_FALSE(_app->CheatSettings().bOn);
+	EXPECT_EQ(_app->CheatPct(&Cheats::Settings::sExpPct), 100);
+}
+
 // Valid settings are kept and echoed to the players in the game.
 TEST_F(CheatHandshakeTest, SetsAndEchoesSettings)
 {
@@ -211,6 +227,7 @@ TEST_F(CheatHandshakeTest, SettingsFileRoundTrip)
 
 	TestApp restarted;
 	restarted._cheatSettingsPath = _path;
+	restarted.m_bCheatsAllowed   = true;
 	restarted.LoadCheatSettings();
 	EXPECT_EQ(restarted.CheatSettings(), Sample());
 

@@ -542,7 +542,7 @@ void CUITransactionDlg::ItemCountOK()
 					iWeight = spItem->pItemBasic->siWeight;
 
 					// 무게 체크..
-					if ((pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
+					if (!CCheats::IsOnNow(&Cheats::Settings::bNoWeightLimit) && (pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
 					{
 						std::string szMsg = fmt::format_text_resource(IDS_ITEM_WEIGHT_OVERFLOW);
 						CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);
@@ -578,7 +578,7 @@ void CUITransactionDlg::ItemCountOK()
 
 					iWeight = iGold * spItem->pItemBasic->siWeight;
 
-					if ((pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
+					if (!CCheats::IsOnNow(&Cheats::Settings::bNoWeightLimit) && (pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
 					{
 						std::string szMsg = fmt::format_text_resource(IDS_ITEM_WEIGHT_OVERFLOW);
 						CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);
@@ -616,7 +616,7 @@ void CUITransactionDlg::ItemCountOK()
 					iWeight = iGold * spItem->pItemBasic->siWeight;
 
 					// 무게 체크..
-					if ((pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
+					if (!CCheats::IsOnNow(&Cheats::Settings::bNoWeightLimit) && (pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
 					{
 						std::string szMsg = fmt::format_text_resource(IDS_ITEM_WEIGHT_OVERFLOW);
 						CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);
@@ -1024,7 +1024,8 @@ bool CUITransactionDlg::ReceiveIconDrop(__IconItemSkill* spItem, POINT ptCur)
 				}
 
 				// 무게 체크..
-				if ((pInfoExt->iWeight + s_sRecoveryJobInfo.pItemSource->pItemBasic->siWeight) > pInfoExt->iWeightMax)
+				if (!CCheats::IsOnNow(&Cheats::Settings::bNoWeightLimit)
+					&& (pInfoExt->iWeight + s_sRecoveryJobInfo.pItemSource->pItemBasic->siWeight) > pInfoExt->iWeightMax)
 				{
 					std::string szMsg = fmt::format_text_resource(IDS_ITEM_WEIGHT_OVERFLOW);
 					CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);

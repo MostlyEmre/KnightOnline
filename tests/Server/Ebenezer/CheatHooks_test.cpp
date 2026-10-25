@@ -21,6 +21,7 @@ protected:
 	static constexpr int ITEM_SCROLL   = 379021000;
 	static constexpr int ITEM_ARROW    = 391010000;
 	static constexpr int ITEM_BOW      = 156210005;
+	static constexpr int ITEM_POTION   = 389010000;
 	static constexpr int NPC_ID        = 10001;
 	static constexpr int SELLING_GROUP = 254;
 
@@ -44,6 +45,8 @@ protected:
 			{ .ID = ITEM_SCROLL, .Weight = 1, .Durability = 1, .BuyPrice = 1000, .Countable = 1 }));
 		ASSERT_TRUE(_app->AddItemEntry(
 			{ .ID = ITEM_ARROW, .Weight = 0, .Durability = 1, .BuyPrice = 10, .Countable = 1 }));
+		ASSERT_TRUE(_app->AddItemEntry(
+			{ .ID = ITEM_POTION, .Weight = 100, .Durability = 1, .BuyPrice = 50, .Countable = 1 }));
 		ASSERT_TRUE(_app->AddItemEntry({ .ID = ITEM_BOW,
 			.Kind                            = 70,
 			.Slot                            = 1,
@@ -58,6 +61,7 @@ protected:
 		_user->m_pUserData->m_sClass = CLASS_ID;
 		_user->m_pUserData->m_bLevel = 1;
 		_user->m_pUserData->m_bStr   = 60;
+		_user->m_pUserData->m_bSta   = 60;
 		_user->m_pUserData->m_sHp    = 100;
 		_user->m_iMaxHp              = 100;
 		_user->m_iMaxExp             = 100;
@@ -229,7 +233,7 @@ TEST_F(CheatHooksTest, WeightLimitRaisedAndReturnsWhenOff)
 	Cheats::Settings settings                         = On();
 	settings.bNoWeightLimit                           = true;
 	SetCheats(settings);
-	EXPECT_EQ(_user->m_iMaxWeight, SHRT_MAX);
+	EXPECT_GT(_user->m_iMaxWeight, 1'000'000);
 
 	_user->RecordSends();
 	settings.bOn = false;
@@ -238,6 +242,26 @@ TEST_F(CheatHooksTest, WeightLimitRaisedAndReturnsWhenOff)
 	EXPECT_EQ(_user->m_iMaxWeight, (_user->m_pUserData->m_bStr + _user->m_sItemStr) * 50);
 	EXPECT_EQ(_user->m_pUserData->m_sItemArray[SLOT_MAX].sCount, 500);
 	EXPECT_EQ(_user->SentWith(WIZ_ITEM_MOVE).size(), 1u);
+}
+
+// No weight limit means none: a stack far heavier than the 32767 the client can show still fits.
+TEST_F(CheatHooksTest, NoWeightLimitTakesHeavyStacks)
+{
+	CNpc* npc = _app->CreateNPC(NPC_ID);
+	ASSERT_NE(npc, nullptr);
+	npc->m_iSellingGroup      = SELLING_GROUP;
+	_app->m_bPointCheckFlag   = true;
+
+	Cheats::Settings settings = On();
+	settings.bNoWeightLimit   = true;
+	settings.bFreeShops       = true;
+	SetCheats(settings);
+
+	// 500 x 100 = 50,000
+	Buy(ITEM_POTION, 0, 500);
+	EXPECT_EQ(_user->m_pUserData->m_sItemArray[SLOT_MAX].nNum, ITEM_POTION);
+	EXPECT_EQ(_user->m_pUserData->m_sItemArray[SLOT_MAX].sCount, 500);
+	EXPECT_EQ(_user->GetMaxWeightForClient(), SHRT_MAX);
 }
 
 // Infinite MP: a skill needs and costs no MP. Off: it needs and costs its MP.

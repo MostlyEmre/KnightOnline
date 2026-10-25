@@ -4,6 +4,7 @@
 
 #include "StdAfx.h"
 #include "UIWareHouseDlg.h"
+#include "Cheats.h"
 #include "PacketDef.h"
 #include "LocalInput.h"
 #include "APISocket.h"
@@ -799,7 +800,8 @@ bool CUIWareHouseDlg::ReceiveIconDrop(__IconItemSkill* spItem, POINT ptCur)
 
 					// 무게 체크..
 					__InfoPlayerMySelf* pInfoExt             = &CGameBase::s_pPlayer->m_InfoExt;
-					if ((pInfoExt->iWeight + s_sRecoveryJobInfo.pItemSource->pItemBasic->siWeight) > pInfoExt->iWeightMax)
+					if (!CCheats::IsOnNow(&Cheats::Settings::bNoWeightLimit)
+						&& (pInfoExt->iWeight + s_sRecoveryJobInfo.pItemSource->pItemBasic->siWeight) > pInfoExt->iWeightMax)
 					{
 						std::string szMsg = fmt::format_text_resource(IDS_ITEM_WEIGHT_OVERFLOW);
 						CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);
@@ -1460,7 +1462,7 @@ void CUIWareHouseDlg::ItemCountOK()
 					iWeight = spItem->pItemBasic->siWeight;
 
 					// 무게 체크..
-					if ((pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
+					if (!CCheats::IsOnNow(&Cheats::Settings::bNoWeightLimit) && (pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
 					{
 						std::string szMsg = fmt::format_text_resource(IDS_ITEM_WEIGHT_OVERFLOW);
 						CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);
@@ -1493,7 +1495,7 @@ void CUIWareHouseDlg::ItemCountOK()
 
 					// 무게 체크..
 					iWeight = iGold * spItem->pItemBasic->siWeight;
-					if ((pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
+					if (!CCheats::IsOnNow(&Cheats::Settings::bNoWeightLimit) && (pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
 					{
 						std::string szMsg = fmt::format_text_resource(IDS_ITEM_WEIGHT_OVERFLOW);
 						CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);
@@ -1526,7 +1528,7 @@ void CUIWareHouseDlg::ItemCountOK()
 
 					// 무게 체크..
 					iWeight = iGold * spItem->pItemBasic->siWeight;
-					if ((pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
+					if (!CCheats::IsOnNow(&Cheats::Settings::bNoWeightLimit) && (pInfoExt->iWeight + iWeight) > pInfoExt->iWeightMax)
 					{
 						std::string szMsg = fmt::format_text_resource(IDS_ITEM_WEIGHT_OVERFLOW);
 						CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);
