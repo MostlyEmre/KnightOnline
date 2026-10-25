@@ -126,6 +126,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ByteBuffer.h" />
+    <ClInclude Include="CheatSettings.h" />
     <ClInclude Include="CircularBuffer.h" />
     <ClInclude Include="crc32.h" />
     <ClInclude Include="DateTime.h" />

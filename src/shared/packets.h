@@ -137,6 +137,10 @@ enum e_GameOpcode : uint8_t
 	/// \see e_GenieOpcode
 	WIZ_GENIE               = 0x97,
 
+	/// The cheats menu: private to this fork; the client sends it only after the server announced it.
+	/// \see e_CheatOpcode
+	WIZ_CHEAT               = 0xF1,
+
 	// NOTE(srmeier): testing this debug string functionality
 	WIZ_DEBUG_STRING_PACKET = 0xFE,
 
@@ -791,6 +795,85 @@ enum e_GenieOpcode : uint8_t
 	GENIE_STOP      = 3
 };
 
+/// \brief WIZ_CHEAT sub-opcodes: the cheats menu. The client sends WIZ_CHEAT only after the
+/// server has announced that cheats are allowed. Settings travel as Cheats::Settings
+/// (shared/CheatSettings.h, SETTINGS_SIZE bytes). Requests are answered with CHEAT_RESULT unless a
+/// reply is listed.
+enum e_CheatOpcode : uint8_t
+{
+	/// Server: [uint8 allowed], once the player is in the game; when allowed, CHEAT_SETTINGS follows
+	CHEAT_AVAILABLE     = 1,
+
+	/// Server: [settings]. Client: [settings] -> Server: CHEAT_SETTINGS to every player in the game
+	CHEAT_SETTINGS      = 2,
+
+	/// Server: [uint8 request opcode][uint8 e_CheatResult]
+	CHEAT_RESULT        = 3,
+
+	/// Client: [uint8 level]
+	CHEAT_SET_LEVEL     = 10,
+
+	/// Client: [uint8 kind: 0 stat points, 1 skill points]
+	CHEAT_ADD_POINTS    = 11,
+
+	/// Client: [uint8 kind: 0 stats, 1 skills]
+	CHEAT_RESET_POINTS  = 12,
+
+	/// Client: []
+	CHEAT_REFILL        = 13,
+
+	/// Client: [uint8 kind: 0 coins, 1 National Points, 2 Knight Cash][uint32 value]
+	CHEAT_SET_CURRENCY  = 14,
+
+	/// Client: [uint32 base item ID] -> Server: [uint32 base item ID][125 bytes: bit e set when
+	/// base + e exists]
+	CHEAT_ITEM_VARIANTS = 20,
+
+	/// Client: [uint32 item ID][uint16 count]
+	CHEAT_GIVE_ITEM     = 21,
+
+	/// Client: [uint8 equipped slot][uint8 +level] -> Server: [uint8 slot][uint32 new item ID]
+	/// [int16 durability], then CHEAT_RESULT
+	CHEAT_SET_PLUS      = 22,
+
+	/// Client: [] -> Server: [], then CHEAT_RESULT
+	CHEAT_REPAIR_ALL    = 23,
+
+	/// Client: [int16 zone]
+	CHEAT_TELEPORT_ZONE = 31,
+
+	/// Client: [uint8 length][query] -> Server: [uint8 count] count x [int16 NPC ID][int16 zone]
+	/// [uint8 length][name]
+	CHEAT_FIND_NPC      = 32,
+
+	/// Client: [int16 NPC ID]
+	CHEAT_TELEPORT_NPC  = 33,
+
+	/// Client: []
+	CHEAT_KILL_AROUND   = 34
+};
+
+enum e_CheatResult : uint8_t
+{
+	CHEAT_OK           = 0,
+	/// The server doesn't allow cheats
+	CHEAT_NOT_ALLOWED  = 1,
+	/// The master switch is off
+	CHEAT_OFF          = 2,
+	CHEAT_BAD_VALUE    = 3,
+	CHEAT_DEAD         = 4,
+	CHEAT_BAG_FULL     = 5,
+	CHEAT_NO_SUCH_ITEM = 6,
+	/// The item has no such +level
+	CHEAT_NO_PLUS      = 7,
+	CHEAT_EMPTY_SLOT   = 8,
+	/// Warping, trading or changing zone
+	CHEAT_BUSY         = 9,
+	CHEAT_NOT_FOUND    = 10,
+	/// AIServer isn't connected
+	CHEAT_NO_AI        = 11
+};
+
 enum e_RentalOpcode : uint8_t
 {
 	RENTAL_PREMIUM = 1,
@@ -901,6 +984,8 @@ enum e_AIOpcode : uint8_t
 	AG_USER_PARTY          = 111, // 파티처리 담당
 	AG_USER_VISIBILITY     = 112, // updates invisibility status
 	AG_NPC_HP_CHANGE       = 113, // updates an NPC's HP
+	AG_CHEAT_SETTINGS      = 114, // cheats menu settings: [u32 seq][Cheats::Settings]
+	AG_CHEAT_KILL_AROUND   = 115, // cheats menu: kill the monsters around a player: [i16 user ID]
 };
 
 #endif                            // SHARED_PACKETS_H

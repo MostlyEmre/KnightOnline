@@ -11,6 +11,7 @@
     <ClCompile Include="ItemUpgrade_test.cpp" />
     <ClCompile Include="RankStipendReward_test.cpp" />
     <ClCompile Include="ShoppingMall_test.cpp" />
+    <ClCompile Include="CheatSettings_test.cpp" />
     <ClCompile Include="UpgradeScrolls_test.cpp" />
     <ClCompile Include="data\ItemUpgrade_test_data.h">
       <Filter>data</Filter>
