@@ -152,6 +152,9 @@
     <ClCompile Include="GameProcMain.cpp">
       <Filter>Scene\Ingame</Filter>
     </ClCompile>
+    <ClCompile Include="Cheats.cpp">
+      <Filter>Scene\Ingame</Filter>
+    </ClCompile>
     <ClCompile Include="Genie.cpp">
       <Filter>Scene\Ingame</Filter>
     </ClCompile>
@@ -710,6 +713,12 @@
       <Filter>Scene\Nation selection</Filter>
     </ClInclude>
     <ClInclude Include="GameProcMain.h">
+      <Filter>Scene\Ingame</Filter>
+    </ClInclude>
+    <ClInclude Include="CheatRules.h">
+      <Filter>Scene\Ingame</Filter>
+    </ClInclude>
+    <ClInclude Include="Cheats.h">
       <Filter>Scene\Ingame</Filter>
     </ClInclude>
     <ClInclude Include="Genie.h">

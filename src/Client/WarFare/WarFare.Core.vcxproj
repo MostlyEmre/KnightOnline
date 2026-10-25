@@ -132,6 +132,7 @@
     <ClCompile Include="GameProcLogIn_1098.cpp" />
     <ClCompile Include="GameProcMain.cpp" />
     <ClCompile Include="GameProcNationSelect.cpp" />
+    <ClCompile Include="Cheats.cpp" />
     <ClCompile Include="Genie.cpp" />
     <ClCompile Include="IconItemSkill.cpp" />
     <ClCompile Include="ItemRepairMgr.cpp" />
@@ -247,6 +248,8 @@
     <ClInclude Include="GameProcLogIn_1098.h" />
     <ClInclude Include="GameProcMain.h" />
     <ClInclude Include="GameProcNationSelect.h" />
+    <ClInclude Include="CheatRules.h" />
+    <ClInclude Include="Cheats.h" />
     <ClInclude Include="Genie.h" />
     <ClInclude Include="GenieRules.h" />
     <ClInclude Include="GenieSettings.h" />

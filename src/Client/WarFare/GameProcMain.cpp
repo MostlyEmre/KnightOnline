@@ -56,6 +56,7 @@
 #include "UILevelGuide.h"
 #include "UIMsgBoxOkCancel.h"
 #include "UIPowerUpStore.h"
+#include "Cheats.h"
 #include "Genie.h"
 #include "UIGenie.h"
 
@@ -152,6 +153,7 @@ CGameProcMain::CGameProcMain()     // r기본 생성자.. 각 변수의 역활�
 	m_pSubProcPerTrade      = new CSubProcPerTrade();
 	m_pMagicSkillMng        = new CMagicSkillMng(this);
 	m_pGenie                = new CGenie(this);
+	m_pCheats               = new CCheats(this);
 	m_pTargetSymbol         = new CN3Shape(); // 플레이어가 타겟으로 잡은 캐릭터의 위치위에 그리면 된다..
 	m_pWarMessage           = new CWarMessage;
 
@@ -204,6 +206,7 @@ CGameProcMain::~CGameProcMain()
 	delete m_pSubProcPerTrade;
 	delete m_pMagicSkillMng;
 	delete m_pGenie;
+	delete m_pCheats;
 	delete m_pWarMessage;
 	delete m_pTargetSymbol; // 플레이어가 타겟으로 잡은 캐릭터의 위치위에 그리면 된다..
 
@@ -217,6 +220,8 @@ void CGameProcMain::Release()
 		s_pUIGenie->Close();
 	if (m_pGenie != nullptr)
 		m_pGenie->OnLeaveGame();
+	if (m_pCheats != nullptr)
+		m_pCheats->OnLeaveGame();
 
 	this->ReleaseSound();
 	this->ReleaseUIs();
@@ -644,6 +649,7 @@ void CGameProcMain::Render()
 
 	CGameProcedure::Render();      // UI 나 그밖의 기본적인 것들 렌더링..
 	m_pGenie->RenderIndicator();
+	m_pCheats->RenderIndicator();
 	if (m_pWarMessage)
 		m_pWarMessage->RenderMessage();
 	if (s_pGameCursor)
@@ -1038,6 +1044,10 @@ bool CGameProcMain::ProcessPacket(Packet& pkt)
 
 		case WIZ_GENIE:
 			MsgRecv_Genie(pkt);
+			return true;
+
+		case WIZ_CHEAT:
+			m_pCheats->Receive(pkt);
 			return true;
 
 		default:

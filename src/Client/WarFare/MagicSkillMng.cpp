@@ -4,6 +4,7 @@
 
 #include "StdAfx.h"
 #include "MagicSkillMng.h"
+#include "Cheats.h"
 #include "Genie.h"
 #include "GameProcMain.h"
 #include "APISocket.h"
@@ -198,6 +199,10 @@ bool CMagicSkillMng::HasRequiredWeaponEquipped(const __TABLE_UPC_SKILL* pSkill) 
 
 bool CMagicSkillMng::HasRequiredMana(const __TABLE_UPC_SKILL* pSkill) const
 {
+	// The cheats menu's infinite MP: the server doesn't charge it either.
+	if (CCheats::IsOnNow(&Cheats::Settings::bInfiniteMp))
+		return true;
+
 	return s_pPlayer->m_InfoExt.iMSP >= pSkill->iExhaustMSP;
 }
 

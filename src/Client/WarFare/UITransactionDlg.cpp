@@ -5,6 +5,7 @@
 #include "StdAfx.h"
 #include "UITransactionDlg.h"
 #include "PacketDef.h"
+#include "Cheats.h"
 #include "LocalInput.h"
 #include "APISocket.h"
 #include "GameProcMain.h"
@@ -566,7 +567,9 @@ void CUITransactionDlg::ItemCountOK()
 						return;
 					}
 
-					if ((iGold * spItem->pItemBasic->iPrice) > pInfoExt->iGold)
+					// The cheats menu's free shops: the server charges nothing.
+					if (!CCheats::IsOnNow(&Cheats::Settings::bFreeShops)
+						&& static_cast<int64_t>(iGold) * spItem->pItemBasic->iPrice > pInfoExt->iGold)
 					{
 						std::string szMsg = fmt::format_text_resource(IDS_COUNTABLE_ITEM_BUY_NOT_ENOUGH_MONEY);
 						CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);
@@ -601,7 +604,9 @@ void CUITransactionDlg::ItemCountOK()
 						return;
 					}
 
-					if ((iGold * spItem->pItemBasic->iPrice) > pInfoExt->iGold)
+					// The cheats menu's free shops: the server charges nothing.
+					if (!CCheats::IsOnNow(&Cheats::Settings::bFreeShops)
+						&& static_cast<int64_t>(iGold) * spItem->pItemBasic->iPrice > pInfoExt->iGold)
 					{
 						std::string szMsg = fmt::format_text_resource(IDS_COUNTABLE_ITEM_BUY_NOT_ENOUGH_MONEY);
 						CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);
@@ -1005,7 +1010,8 @@ bool CUITransactionDlg::ReceiveIconDrop(__IconItemSkill* spItem, POINT ptCur)
 				__InfoPlayerMySelf* pInfoExt = &(CGameBase::s_pPlayer->m_InfoExt);
 
 				// 매수가 X 갯수가 내가 가진 돈보다 많으면.. 그냥 리턴..
-				if ((s_sRecoveryJobInfo.pItemSource->pItemBasic->iPrice) > pInfoExt->iGold)
+				if (!CCheats::IsOnNow(&Cheats::Settings::bFreeShops)
+					&& s_sRecoveryJobInfo.pItemSource->pItemBasic->iPrice > pInfoExt->iGold)
 				{
 					std::string szMsg = fmt::format_text_resource(IDS_COUNTABLE_ITEM_BUY_NOT_ENOUGH_MONEY);
 					CGameProcedure::s_pProcMain->MsgOutput(szMsg, 0xffff3b3b);

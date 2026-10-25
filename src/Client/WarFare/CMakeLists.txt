@@ -50,6 +50,9 @@ set(WARFARE_SCENE_CHARACTER_CREATION_SOURCES
 )
 
 set(WARFARE_SCENE_INGAME_SOURCES
+  CheatRules.h
+  Cheats.cpp
+  Cheats.h
   GameProcMain.cpp
   GameProcMain.h
   Genie.cpp

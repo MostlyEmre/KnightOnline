@@ -99,6 +99,10 @@ protected:
 
 	// Operations
 public:
+	/// \brief Shows an equipped item that changed in place (OpenKO's cheats menu): its model on
+	/// the character and its durability.
+	void SlotItemChanged(e_ItemSlot eSlot);
+
 	//this_ui_add_start
 	int GetIndexItemCount(uint32_t dwIndex);
 	void SetVisibleWithNoSound(bool bVisible, bool bWork = false, bool bReFocus = false) override;

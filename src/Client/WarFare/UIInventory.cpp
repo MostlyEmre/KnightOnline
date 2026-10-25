@@ -2300,6 +2300,14 @@ bool CUIInventory::IsValidPosFromArmToArmInverse(int iOrder)
 	return false;
 }
 
+void CUIInventory::SlotItemChanged(e_ItemSlot eSlot)
+{
+	if (eSlot < 0 || eSlot >= ITEM_SLOT_COUNT || m_pMySlot[eSlot] == nullptr)
+		return;
+
+	ItemAdd(m_pMySlot[eSlot]->pItemBasic, m_pMySlot[eSlot]->pItemExt, eSlot);
+}
+
 void CUIInventory::ItemAdd(__TABLE_ITEM_BASIC* pItem, __TABLE_ITEM_EXT* pItemExt, e_ItemSlot eSlot)
 {
 	std::string szFN;

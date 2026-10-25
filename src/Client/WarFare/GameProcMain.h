@@ -72,6 +72,7 @@ public:
 	class CN3SndObj *m_pSnd_Town, *m_pSnd_Battle; //마을음악, 전투음악 포인터..
 	class CMagicSkillMng* m_pMagicSkillMng;
 	class CGenie* m_pGenie;                       // Genie (auto-hunt)
+	class CCheats* m_pCheats;                     // The cheats menu
 
 	class CUINPCChangeEvent* m_pUINpcChange;
 	class CUIWarp* m_pUIWarp;
