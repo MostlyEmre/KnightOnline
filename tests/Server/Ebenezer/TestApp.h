@@ -21,6 +21,15 @@ public:
 		InitSocketManager(Ebenezer::MAX_USER);
 	}
 
+	/// \brief Snapshots of the cheat settings handed to AIServer (there's no AIServer to see them).
+	int _cheatSnapshotsSent = 0;
+
+	void SendCheatSettingsToAI() override
+	{
+		++_cheatSnapshotsSent;
+		EbenezerApp::SendCheatSettingsToAI();
+	}
+
 	void InitSocketManager(int serverSocketCount)
 	{
 		_serverSocketManager.InitSockets(serverSocketCount);

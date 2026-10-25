@@ -704,6 +704,10 @@ void CUser::Parsing(int len, char* pData)
 			Genie(pData + index);
 			break;
 
+		case WIZ_CHEAT:
+			Cheat(pData + index, len - index);
+			break;
+
 		case WIZ_REPORT_BUG:
 			ReportBug(pData + index);
 			break;
@@ -14705,6 +14709,9 @@ void CUser::GameStart(char* pBuf)
 
 		// OpenKO: whether the client may offer Genie (auto-hunt).
 		SendGenieAvailable();
+
+		// OpenKO: whether the client may offer the cheats menu, and its settings.
+		SendCheatAvailable();
 	}
 }
 

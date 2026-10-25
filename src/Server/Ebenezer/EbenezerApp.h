@@ -15,6 +15,7 @@
 #include "EVENT.h"
 #include "UdpSocket.h"
 
+#include <shared/CheatSettings.h>
 #include <shared/Ini.h>
 #include <shared-server/AppThread.h>
 #include <shared-server/SharedMemoryBlock.h>
@@ -294,6 +295,49 @@ public:
 	/// \brief An item's class, 0 for none
 	int ItemGrade(int itemId) const;
 
+	/// \brief Whether players may use the cheats menu: [CHEATS] ALLOWED in the config. Off by
+	/// default, so a server hosted for others doesn't hand out cheats; --allow-cheats makes on the
+	/// default (the app's own server).
+	bool m_bCheatsAllowed                    = false;
+
+	/// \brief Where the cheat settings are kept, next to the config
+	std::filesystem::path _cheatSettingsPath = "cheats.ini";
+
+	/// \returns a copy of the cheat settings
+	Cheats::Settings CheatSettings() const;
+
+	/// \returns a multiplier in effect: 100 while cheats are off
+	uint16_t CheatPct(uint16_t Cheats::Settings::* pct) const;
+
+	/// \returns whether a cheat toggle is in effect: never while cheats are off
+	bool CheatFlag(bool Cheats::Settings::* flag) const;
+
+	/// \brief Replaces the cheat settings: saves them, hands AIServer a snapshot, tells every player
+	/// in the game, and applies what changed (OnCheatSettingsChanged).
+	/// \returns false, changing nothing, when a value isn't allowed
+	bool SetCheatSettings(const Cheats::Settings& settings);
+
+	/// \brief Loads the saved cheat settings; a missing file or a value that isn't allowed gives the
+	/// defaults.
+	void LoadCheatSettings();
+
+	/// \brief Appends cheat settings to a packet (Cheats::SETTINGS_SIZE bytes).
+	static void WriteCheatSettings(char* buf, const Cheats::Settings& settings, int& index);
+
+	/// \brief Reads cheat settings from a packet of `len` bytes.
+	/// \returns nullopt when it's too short or a value isn't allowed
+	static std::optional<Cheats::Settings> ReadCheatSettings(const char* buf, int len, int& index);
+
+	/// \brief Builds AIServer's snapshot: [AG_CHEAT_SETTINGS][u32 seq][settings].
+	/// \returns its length
+	int BuildCheatSettingsAI(char* buf) const;
+
+	/// \brief Sends AIServer the current snapshot.
+	virtual void SendCheatSettingsToAI();
+
+	/// \brief Applies a change of cheat settings to the game (weight limits, weather and time).
+	void OnCheatSettingsChanged(const Cheats::Settings& before, const Cheats::Settings& after);
+
 	/// \brief User Knights Ranking cache. Officially this is split into two caches
 	/// that track stipend claims in-memory, which means stipends reset on a server crash/restart.
 	/// \originalName m_UserKnightsRankKarus, m_UserKnightsRankElmorad
@@ -421,6 +465,15 @@ private:
 	std::unique_ptr<ReadQueueThread> _readQueueThread;
 
 	std::mutex _serialMutex;
+
+	mutable std::mutex _cheatMutex;
+	Cheats::Settings _cheatSettings;
+
+	/// AIServer applies a snapshot only when it's newer than the last; seeded from the clock so it
+	/// keeps rising across restarts.
+	uint32_t _cheatSeq;
+
+	bool _allowCheatsByDefault = false;
 
 	std::filesystem::path _mapDir;
 	std::string _overrideMapDir;

@@ -53,6 +53,9 @@
     <ClCompile Include="User.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="UserCheat.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="EbenezerResourceFormatter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

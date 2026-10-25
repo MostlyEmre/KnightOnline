@@ -180,6 +180,7 @@
     </ClCompile>
     <ClCompile Include="UdpSocket.cpp" />
     <ClCompile Include="User.cpp" />
+    <ClCompile Include="UserCheat.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\shared\_USER_DATA.h" />

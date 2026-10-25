@@ -25,6 +25,7 @@
 
 #include <Ebenezer/binder/EbenezerBinder.h>
 
+#include <ctime>
 #include <fstream>
 #include <ranges>
 
@@ -53,6 +54,8 @@ EbenezerApp::EbenezerApp(EbenezerLogger& logger) :
 	// default _enableTelnet to on.
 	_enableTelnet     = true;
 	_telnetPort       = 2324;
+
+	_cheatSeq         = static_cast<uint32_t>(std::time(nullptr));
 
 	m_nYear           = 0;
 	m_nMonth          = 0;
@@ -1164,6 +1167,11 @@ void EbenezerApp::SetupCommandLineArgParser(argparse::ArgumentParser& parser)
 	parser.add_argument("--quests-dir")
 		.help("location of directory containing the Ebenezer server specific quest scripts (.EVTs)")
 		.store_into(_overrideQuestsDir);
+
+	parser.add_argument("--allow-cheats")
+		.help("allows the cheats menu unless the config's [CHEATS] ALLOWED says otherwise")
+		.flag()
+		.store_into(_allowCheatsByDefault);
 }
 
 bool EbenezerApp::ProcessCommandLineArgs(const argparse::ArgumentParser& parser)
@@ -1258,6 +1266,7 @@ bool EbenezerApp::LoadConfig(CIni& iniFile)
 	m_nServerNo      = iniFile.GetInt("ZONE_INFO", "MY_INFO", 1);
 	m_bGenieEnabled  = iniFile.GetBool("GENIE", "ENABLED", true);
 	m_bUpgradeBoost  = iniFile.GetBool("UPGRADE", "BOOST", true);
+	m_bCheatsAllowed = iniFile.GetBool("CHEATS", "ALLOWED", _allowCheatsByDefault);
 	m_nServerGroup   = static_cast<e_ServerGroupType>(iniFile.GetInt("ZONE_INFO", "SERVER_NUM", 0));
 	serverCount      = iniFile.GetInt("ZONE_INFO", "SERVER_COUNT", 1);
 	if (serverCount < 1)
@@ -1307,6 +1316,9 @@ bool EbenezerApp::LoadConfig(CIni& iniFile)
 			m_ServerGroupArray.PutData(pInfo->sServerNo, pInfo);
 		}
 	}
+
+	// OpenKO: the cheats menu's settings, kept beside the config.
+	LoadCheatSettings();
 
 	return true;
 }
@@ -2158,6 +2170,9 @@ void EbenezerApp::SendAllUserInfo()
 	SetByte(sendBuffer, SERVER_INFO_END, sendIndex);
 	Send_AIServer(1000, sendBuffer, sendIndex);
 
+	// OpenKO: the cheats menu's settings, after a first connection or a reconnection.
+	SendCheatSettingsToAI();
+
 	spdlog::trace("EbenezerApp::SendAllUserInfo: completed");
 }
 
@@ -2861,6 +2876,176 @@ int EbenezerApp::ItemGrade(int itemId) const
 {
 	auto itr = m_ItemGradeMap.find(itemId);
 	return itr != m_ItemGradeMap.end() ? itr->second : 0;
+}
+
+Cheats::Settings EbenezerApp::CheatSettings() const
+{
+	std::lock_guard<std::mutex> lock(_cheatMutex);
+	return _cheatSettings;
+}
+
+uint16_t EbenezerApp::CheatPct(uint16_t Cheats::Settings::* pct) const
+{
+	return Cheats::Effective(CheatSettings(), pct);
+}
+
+bool EbenezerApp::CheatFlag(bool Cheats::Settings::* flag) const
+{
+	return Cheats::EffectiveFlag(CheatSettings(), flag);
+}
+
+namespace
+{
+
+// cheats.ini keys, in Cheats::Settings order
+constexpr std::string_view CHEATS_SECTION = "CHEATS";
+
+struct CheatPctKey
+{
+	std::string_view key;
+	uint16_t Cheats::Settings::* pct;
+};
+
+constexpr std::array<CheatPctKey, 7> CHEAT_PCT_KEYS { {
+	{ "EXP", &Cheats::Settings::sExpPct },
+	{ "DAMAGE_DEALT", &Cheats::Settings::sDamageDealtPct },
+	{ "DAMAGE_TAKEN", &Cheats::Settings::sDamageTakenPct },
+	{ "COINS", &Cheats::Settings::sCoinPct },
+	{ "DROPS", &Cheats::Settings::sDropPct },
+	{ "NP", &Cheats::Settings::sLoyaltyPct },
+	{ "RESPAWN", &Cheats::Settings::sRespawnPct },
+} };
+
+struct CheatFlagKey
+{
+	std::string_view key;
+	bool Cheats::Settings::* flag;
+};
+
+constexpr std::array<CheatFlagKey, 6> CHEAT_FLAG_KEYS { {
+	{ "ON", &Cheats::Settings::bOn },
+	{ "INFINITE_MP", &Cheats::Settings::bInfiniteMp },
+	{ "NO_DURABILITY_LOSS", &Cheats::Settings::bNoDurabilityLoss },
+	{ "KEEP_CONSUMABLES", &Cheats::Settings::bKeepConsumables },
+	{ "NO_WEIGHT_LIMIT", &Cheats::Settings::bNoWeightLimit },
+	{ "FREE_SHOPS", &Cheats::Settings::bFreeShops },
+} };
+
+} // namespace
+
+bool EbenezerApp::SetCheatSettings(const Cheats::Settings& settings)
+{
+	if (!Cheats::IsValid(settings))
+		return false;
+
+	Cheats::Settings before;
+	{
+		std::lock_guard<std::mutex> lock(_cheatMutex);
+		before         = _cheatSettings;
+		_cheatSettings = settings;
+		++_cheatSeq;
+
+		CIni iniFile;
+		for (const auto& [key, pct] : CHEAT_PCT_KEYS)
+			iniFile.SetInt(CHEATS_SECTION, key, settings.*pct);
+
+		for (const auto& [key, flag] : CHEAT_FLAG_KEYS)
+			iniFile.SetInt(CHEATS_SECTION, key, settings.*flag ? 1 : 0);
+
+		iniFile.SetInt(CHEATS_SECTION, "WEATHER", static_cast<int>(settings.eWeather));
+		iniFile.SetInt(CHEATS_SECTION, "HOUR", settings.cHour);
+		iniFile.Save(_cheatSettingsPath);
+	}
+
+	SendCheatSettingsToAI();
+
+	char sendBuffer[32] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_CHEAT, sendIndex);
+	SetByte(sendBuffer, CHEAT_SETTINGS, sendIndex);
+	WriteCheatSettings(sendBuffer, settings, sendIndex);
+	Send_All(sendBuffer, sendIndex);
+
+	OnCheatSettingsChanged(before, settings);
+	return true;
+}
+
+void EbenezerApp::LoadCheatSettings()
+{
+	Cheats::Settings settings;
+
+	std::error_code ec;
+	if (std::filesystem::exists(_cheatSettingsPath, ec))
+	{
+		CIni iniFile;
+		iniFile.Load(_cheatSettingsPath);
+
+		for (const auto& [key, pct] : CHEAT_PCT_KEYS)
+			settings
+				.*pct = static_cast<uint16_t>(iniFile.GetInt(CHEATS_SECTION, key, settings.*pct));
+
+		for (const auto& [key, flag] : CHEAT_FLAG_KEYS)
+			settings.*flag = iniFile.GetBool(CHEATS_SECTION, key, settings.*flag);
+
+		settings.eWeather = static_cast<Cheats::Weather>(
+			iniFile.GetInt(CHEATS_SECTION, "WEATHER", static_cast<int>(settings.eWeather)));
+		settings.cHour = static_cast<int8_t>(
+			iniFile.GetInt(CHEATS_SECTION, "HOUR", settings.cHour));
+
+		if (!Cheats::IsValid(settings))
+		{
+			spdlog::warn("EbenezerApp::LoadCheatSettings: {} has a value that isn't allowed; "
+						 "using the defaults",
+				_cheatSettingsPath.string());
+			settings = {};
+		}
+	}
+
+	std::lock_guard<std::mutex> lock(_cheatMutex);
+	_cheatSettings = settings;
+}
+
+void EbenezerApp::WriteCheatSettings(char* buf, const Cheats::Settings& settings, int& index)
+{
+	std::array<uint8_t, Cheats::SETTINGS_SIZE> bytes {};
+	Cheats::Write(settings, bytes);
+	for (uint8_t byte : bytes)
+		SetByte(buf, byte, index);
+}
+
+std::optional<Cheats::Settings> EbenezerApp::ReadCheatSettings(const char* buf, int len, int& index)
+{
+	if (len - index < static_cast<int>(Cheats::SETTINGS_SIZE))
+		return std::nullopt;
+
+	std::array<uint8_t, Cheats::SETTINGS_SIZE> bytes {};
+	for (uint8_t& byte : bytes)
+		byte = GetByte(buf, index);
+
+	return Cheats::Read(bytes);
+}
+
+int EbenezerApp::BuildCheatSettingsAI(char* buf) const
+{
+	std::lock_guard<std::mutex> lock(_cheatMutex);
+
+	int sendIndex = 0;
+	SetByte(buf, AG_CHEAT_SETTINGS, sendIndex);
+	SetDWORD(buf, _cheatSeq, sendIndex);
+	WriteCheatSettings(buf, _cheatSettings, sendIndex);
+	return sendIndex;
+}
+
+void EbenezerApp::SendCheatSettingsToAI()
+{
+	char sendBuffer[32] {};
+	int sendIndex = BuildCheatSettingsAI(sendBuffer);
+	Send_AIServer(1000, sendBuffer, sendIndex);
+}
+
+void EbenezerApp::OnCheatSettingsChanged(
+	const Cheats::Settings& /*before*/, const Cheats::Settings& /*after*/)
+{
 }
 
 bool EbenezerApp::LoadShoppingMallTable()

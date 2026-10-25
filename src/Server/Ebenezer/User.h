@@ -332,6 +332,18 @@ public:
 	/// \brief Tells the client whether Genie is allowed (GENIE_AVAILABLE)
 	void SendGenieAvailable();
 
+	/// \brief Handles WIZ_CHEAT: the cheats menu's settings and requests
+	/// \param len the payload's length, without the opcode
+	/// \see e_CheatOpcode
+	void Cheat(char* pBuf, int len);
+
+	/// \brief Tells the client whether cheats are allowed (CHEAT_AVAILABLE) and, when they are, the
+	/// current settings
+	void SendCheatAvailable();
+
+	/// \brief Answers a cheat request: [CHEAT_RESULT][request][e_CheatResult]
+	void SendCheatResult(uint8_t opcode, uint8_t result);
+
 	/// \brief Whether a Power-up Store item fits in the inventory
 	/// \return STORE_BUY_SUCCESS if it does, otherwise STORE_BUY_NO_ROOM or STORE_BUY_TOO_HEAVY
 	uint8_t CheckShoppingMallItemRoom(const model::Item* pTable, int16_t count) const;

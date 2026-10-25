@@ -304,7 +304,7 @@ int Run(int argc, char** argv)
 		{ "AIServer", "Listening on",
 			{ "--map-dir", mapDir, "--event-dir", mapDir, "--npc-info-interval", "2" } },
 		{ "Ebenezer", "initialized port=15001",
-			{ "--map-dir", mapDir, "--quests-dir", questsDir } },
+			{ "--map-dir", mapDir, "--quests-dir", questsDir, "--allow-cheats" } },
 		{ "Aujard", "server started", {} },
 		{ "VersionManager", "Listening on", {} },
 		{ "ItemManager", "server started", {} },

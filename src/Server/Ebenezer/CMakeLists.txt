@@ -55,6 +55,7 @@ add_library(Ebenezer.Core
   UdpSocket.h
   User.cpp
   User.h
+  UserCheat.cpp
 )
 
 add_executable(Ebenezer
