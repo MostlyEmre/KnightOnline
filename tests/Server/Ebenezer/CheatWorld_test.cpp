@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <string_view>
 
 using namespace Ebenezer;
 
@@ -92,7 +93,7 @@ protected:
 		if (npc == nullptr)
 			return nullptr;
 
-		strncpy(npc->m_strName, name, sizeof(npc->m_strName) - 1);
+		std::string_view(name).copy(npc->m_strName, sizeof(npc->m_strName) - 1);
 		npc->m_tNpcType = type;
 		npc->m_sCurZone = zone;
 		npc->m_fCurX    = x;
