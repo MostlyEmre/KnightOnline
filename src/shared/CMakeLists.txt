@@ -20,6 +20,7 @@ add_library(shared STATIC
   Packet.h
   packets.h
   pch.h
+  SpellDamage.h
   StringUtils.cpp
   StringUtils.h
   Thread.cpp

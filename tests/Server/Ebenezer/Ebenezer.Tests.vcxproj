@@ -34,6 +34,7 @@
     <ClCompile Include="CheatItems_test.cpp" />
     <ClCompile Include="CheatSettings_test.cpp" />
     <ClCompile Include="CheatWorld_test.cpp" />
+    <ClCompile Include="SpellDamage_test.cpp" />
     <ClCompile Include="UpgradeScrolls_test.cpp" />
     <ClCompile Include="data\UserKnightsRank_test_data.h" />
     <ClCompile Include="data\UserPersonalRank_test_data.h" />

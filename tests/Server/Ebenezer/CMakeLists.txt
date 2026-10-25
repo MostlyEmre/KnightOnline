@@ -12,6 +12,7 @@ add_executable(Ebenezer.Tests
   ItemUpgrade_test.cpp
   RankStipendReward_test.cpp
   ShoppingMall_test.cpp
+  SpellDamage_test.cpp
   UpgradeScrolls_test.cpp
 )
 

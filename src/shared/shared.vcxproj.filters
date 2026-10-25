@@ -88,6 +88,9 @@
     <ClInclude Include="lzf.h">
       <Filter>LZF</Filter>
     </ClInclude>
+    <ClInclude Include="SpellDamage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="StringUtils.h">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -138,6 +138,7 @@
     <ClInclude Include="Packet.h" />
     <ClInclude Include="packets.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="SpellDamage.h" />
     <ClInclude Include="StringUtils.h" />
     <ClInclude Include="Thread.h" />
     <ClInclude Include="TimerThread.h" />

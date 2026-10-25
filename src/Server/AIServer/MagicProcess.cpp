@@ -6,6 +6,7 @@
 #include "AIServerApp.h"
 #include "User.h"
 
+#include <shared/SpellDamage.h>
 #include <spdlog/spdlog.h>
 
 namespace AIServer
@@ -589,9 +590,8 @@ int16_t CMagicProcess::GetMagicDamage(
 	int tid, int total_hit, int attribute, int dexpoint, int righthand_damage)
 {
 	int16_t damage = 0;
-	int random = 0, total_r = 0;
+	int total_r    = 0;
 	uint8_t result = 0;
-	bool bSign     = true; // false이면 -, true이면 +
 
 	// Check if target id is valid.
 	if (tid < NPC_BAND || tid > INVALID_BAND)
@@ -646,28 +646,13 @@ int16_t CMagicProcess::GetMagicDamage(
 				break;
 		}
 
-		total_hit = (total_hit * (dexpoint + 20)) / 170;
-
-		if (total_hit < 0)
-		{
-			total_hit = abs(total_hit);
-			bSign     = false;
-		}
-
-		damage = static_cast<int16_t>(total_hit - (0.7f * total_hit * total_r / 200));
-		random = myrand(0, damage);
-		damage = static_cast<int16_t>(
-			(0.7f * (total_hit - (0.9f * total_hit * total_r / 200))) + 0.2f * random);
-		//		damage = damage + (3 * righthand_damage);
-		damage = damage + righthand_damage;
+		// OpenKO: the formula, with the monster's resistance capped, is in shared/SpellDamage.h.
+		damage = SpellDamage::ToMonster(total_hit, total_r, dexpoint, righthand_damage, myrand);
 	}
 	else
 	{
 		damage = 0;
 	}
-
-	if (!bSign && damage != 0)
-		damage = -damage;
 
 	//return 1;
 	return damage;
