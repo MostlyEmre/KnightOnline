@@ -3,7 +3,10 @@
 data and the seed database, ad-hoc signed.
 
 usage: make_app.py --build <cmake build dir> --assets <repo>/assets --seed <KN_online.sqlite>
-                   --out <output dir> [--config Release]
+                   --out <output dir> [--config Release] [--zip]
+
+The app's version comes from port/app/VERSION; release tags are v<VERSION>. --zip also writes the
+release download, KnightOnline-<VERSION>-macOS-arm64.zip, next to the app.
 
 The build dir is a macOS build with the client and servers (OPENKO_BUILD_MACOS_CLIENT=ON,
 OPENKO_BUILD_SERVERS=ON, OPENKO_DB_BACKEND=SQLITE). The seed database comes from
@@ -95,9 +98,12 @@ def main():
     ap.add_argument("--seed", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--config", default="Release")
+    ap.add_argument("--zip", action="store_true")
     opts = ap.parse_args()
 
     repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    with open(os.path.join(repo, "port", "app", "VERSION")) as f:
+        version = f.read().strip()
     bindir = os.path.join(opts.build, "bin", opts.config)
     app = os.path.join(opts.out, "KnightOnline.app")
     contents = os.path.join(app, "Contents")
@@ -144,8 +150,8 @@ def main():
                 "CFBundleInfoDictionaryVersion": "6.0",
                 "CFBundleName": "Knight Online",
                 "CFBundlePackageType": "APPL",
-                "CFBundleShortVersionString": "1.298",
-                "CFBundleVersion": "1298",
+                "CFBundleShortVersionString": version,
+                "CFBundleVersion": version,
                 "LSApplicationCategoryType": "public.app-category.role-playing-games",
                 "LSSupportsGameMode": True,
                 "LSMinimumSystemVersion": min_os(client),
@@ -167,6 +173,15 @@ def main():
 
     size = output("du", "-sh", app).split()[0]
     print(f"{app} ({size})")
+
+    if opts.zip:
+        # ditto keeps the bundle's symlinks, permissions and signature intact
+        archive = os.path.join(opts.out, f"KnightOnline-{version}-macOS-arm64.zip")
+        if os.path.exists(archive):
+            os.remove(archive)
+        run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", app, archive)
+        size = output("du", "-sh", archive).split()[0]
+        print(f"{archive} ({size})")
 
 
 if __name__ == "__main__":
