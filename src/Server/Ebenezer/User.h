@@ -416,6 +416,27 @@ public:
 	/// \brief Cheats menu: repairs every item, and tells the client (CHEAT_REPAIR_ALL)
 	uint8_t CheatRepairAll();
 
+	/// \brief Moves the user to another zone, without ZoneChange's nation, level and war rules
+	void ZoneChangeUnchecked(int zone, float x, float z);
+
+	/// \brief Cheats menu: teleports to a zone on Cheats::ZONES, at its start position for the
+	/// user's nation, ignoring the zone rules
+	uint8_t CheatTeleportZone(int zone);
+
+	/// \brief Cheats menu: tells the client the NPCs (not monsters) whose names contain the query,
+	/// up to 9 (CHEAT_FIND_NPC)
+	void SendCheatNpcSearch(std::string_view query);
+
+	/// \brief Cheats menu: teleports next to an NPC found by SendCheatNpcSearch
+	uint8_t CheatTeleportNpc(int npcId);
+
+	/// \brief Cheats menu: asks AIServer to kill the monsters around the user
+	uint8_t CheatKillAround();
+
+	/// \brief Builds the request: [AG_CHEAT_KILL_AROUND][i16 user ID].
+	/// \returns its length
+	int BuildKillAroundAI(char* buf) const;
+
 	/// \brief Uses up a skill's arrows, potion or scroll, unless the cheats menu keeps consumables;
 	/// either way they must be there.
 	/// \returns false when there aren't enough

@@ -2591,10 +2591,8 @@ void CUser::Regene(char* pBuf, int magicid)
 
 void CUser::ZoneChange(int zone, float x, float z)
 {
-	int sendIndex = 0, zoneindex = 0;
-	char sendBuffer[128] {};
-	C3DMap* pMap            = nullptr;
-	_ZONE_SERVERINFO* pInfo = nullptr;
+	int zoneindex = 0;
+	C3DMap* pMap  = nullptr;
 
 	if (g_serverdown_flag)
 		return;
@@ -2711,6 +2709,20 @@ void CUser::ZoneChange(int zone, float x, float z)
 				return;
 		}
 	}
+
+	ZoneChangeUnchecked(zone, x, z);
+}
+
+void CUser::ZoneChangeUnchecked(int zone, float x, float z)
+{
+	int sendIndex = 0;
+	char sendBuffer[128] {};
+	_ZONE_SERVERINFO* pInfo = nullptr;
+
+	const int zoneindex     = m_pMain->GetZoneIndex(zone);
+	C3DMap* pMap            = m_pMain->GetMapByIndex(zoneindex);
+	if (pMap == nullptr)
+		return;
 
 	m_bZoneChangeFlag = true;
 	m_bWarp           = 0x01;
@@ -2880,23 +2892,11 @@ void CUser::Warp(float x, float z)
 
 void CUser::SendTimeStatus()
 {
-	int sendIndex = 0;
 	char sendBuffer[256] {};
 
-	SetByte(sendBuffer, WIZ_TIME, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nYear, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nMonth, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nDate, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nHour, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nMin, sendIndex);
-	Send(sendBuffer, sendIndex);
-
-	sendIndex = 0;
-	memset(sendBuffer, 0, sizeof(sendBuffer));
-	SetByte(sendBuffer, WIZ_WEATHER, sendIndex);
-	SetByte(sendBuffer, (uint8_t) m_pMain->m_nWeather, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nAmount, sendIndex);
-	Send(sendBuffer, sendIndex);
+	// OpenKO: either can be the cheats menu's.
+	Send(sendBuffer, m_pMain->BuildTimePacket(sendBuffer));
+	Send(sendBuffer, m_pMain->BuildWeatherPacket(sendBuffer));
 }
 
 void CUser::SetDetailData()

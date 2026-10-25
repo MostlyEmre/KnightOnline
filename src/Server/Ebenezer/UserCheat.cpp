@@ -8,7 +8,10 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 // OpenKO: the cheats menu (WIZ_CHEAT). The settings live in EbenezerApp; this file handles the
 // client's requests.
@@ -31,6 +34,29 @@ bool CheatsOn(const EbenezerApp* main)
 {
 	return main->CheatSettings().bOn;
 }
+
+// Whether the user is in the middle of something a teleport would break.
+bool IsBusy(const CUser* user)
+{
+	return user->m_bWarp != 0 || user->m_bZoneChangeFlag || user->m_sExchangeUser != -1;
+}
+
+std::string Lowercase(std::string_view text)
+{
+	std::string lower(text);
+	std::ranges::transform(
+		lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	return lower;
+}
+
+// An NPC the player may teleport to: alive, in a teleport zone, and not a monster or an object.
+bool IsTeleportNpc(const CNpc* npc)
+{
+	return npc != nullptr && npc->m_NpcState != NPC_DEAD
+		   && Cheats::IsTeleportNpcType(npc->m_tNpcType) && Cheats::IsTeleportZone(npc->m_sCurZone);
+}
+
+constexpr size_t MAX_NPC_HITS = 9;
 
 // Whether an item is on a +level line: the +0 or an upgrade.
 bool OnPlusLine(const model::Item* item)
@@ -568,6 +594,127 @@ bool CUser::UseConsumable(int itemId, int count)
 	return ItemCountChange(itemId, 1, count) >= 2;
 }
 
+uint8_t CUser::CheatTeleportZone(int zone)
+{
+	if (!CheatsOn(m_pMain))
+		return CHEAT_OFF;
+
+	if (!Cheats::IsTeleportZone(zone))
+		return CHEAT_BAD_VALUE;
+
+	if (m_bResHpType == USER_DEAD)
+		return CHEAT_DEAD;
+
+	if (IsBusy(this))
+		return CHEAT_BUSY;
+
+	int16_t x = 0, z = 0;
+	if (m_pMain->GetMapByID(zone) == nullptr || !GetStartPosition(&x, &z, zone))
+		return CHEAT_NOT_FOUND;
+
+	if (zone == m_pUserData->m_bZone)
+		Warp(x, z);
+	else
+		ZoneChangeUnchecked(zone, x, z);
+
+	return CHEAT_OK;
+}
+
+void CUser::SendCheatNpcSearch(std::string_view query)
+{
+	struct Hit
+	{
+		int16_t sId   = 0;
+		int16_t sZone = 0;
+		std::string name;
+	};
+
+	std::vector<Hit> hits;
+	const std::string needle = Lowercase(query);
+	if (needle.find_first_not_of(' ') != std::string::npos)
+	{
+		for (const auto& [npcId, pNpc] : m_pMain->m_NpcMap.m_UserTypeMap)
+		{
+			if (!IsTeleportNpc(pNpc))
+				continue;
+
+			std::string name(pNpc->m_strName);
+			if (Lowercase(name).find(needle) != std::string::npos)
+				hits.push_back({ pNpc->m_sNid, pNpc->m_sCurZone, std::move(name) });
+		}
+	}
+
+	std::ranges::sort(hits, [](const Hit& a, const Hit& b)
+		{ return a.name != b.name ? a.name < b.name : a.sId < b.sId; });
+	if (hits.size() > MAX_NPC_HITS)
+		hits.resize(MAX_NPC_HITS);
+
+	char sendBuffer[512] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_CHEAT, sendIndex);
+	SetByte(sendBuffer, CHEAT_FIND_NPC, sendIndex);
+	SetByte(sendBuffer, static_cast<uint8_t>(hits.size()), sendIndex);
+	for (const Hit& hit : hits)
+	{
+		SetShort(sendBuffer, hit.sId, sendIndex);
+		SetShort(sendBuffer, hit.sZone, sendIndex);
+		SetString1(sendBuffer, hit.name, sendIndex);
+	}
+
+	Send(sendBuffer, sendIndex);
+}
+
+uint8_t CUser::CheatTeleportNpc(int npcId)
+{
+	if (!CheatsOn(m_pMain))
+		return CHEAT_OFF;
+
+	if (m_bResHpType == USER_DEAD)
+		return CHEAT_DEAD;
+
+	if (IsBusy(this))
+		return CHEAT_BUSY;
+
+	const CNpc* pNpc = m_pMain->m_NpcMap.GetData(npcId);
+	if (!IsTeleportNpc(pNpc))
+		return CHEAT_NOT_FOUND;
+
+	// Beside the NPC, not on top of it.
+	const float x = pNpc->m_fCurX + 2.0f;
+	const float z = pNpc->m_fCurZ;
+	if (pNpc->m_sCurZone == m_pUserData->m_bZone)
+		Warp(x, z);
+	else
+		ZoneChangeUnchecked(pNpc->m_sCurZone, x, z);
+
+	return CHEAT_OK;
+}
+
+int CUser::BuildKillAroundAI(char* buf) const
+{
+	int sendIndex = 0;
+	SetByte(buf, AG_CHEAT_KILL_AROUND, sendIndex);
+	SetShort(buf, _socketId, sendIndex);
+	return sendIndex;
+}
+
+uint8_t CUser::CheatKillAround()
+{
+	if (!CheatsOn(m_pMain))
+		return CHEAT_OFF;
+
+	if (m_bResHpType == USER_DEAD)
+		return CHEAT_DEAD;
+
+	if (!m_pMain->IsAIServerConnected())
+		return CHEAT_NO_AI;
+
+	char sendBuffer[8] {};
+	const int sendIndex = BuildKillAroundAI(sendBuffer);
+	m_pMain->Send_AIServer(m_pUserData->m_bZone, sendBuffer, sendIndex);
+	return CHEAT_OK;
+}
+
 void CUser::Cheat(char* pBuf, int len)
 {
 	if (GetState() != CONNECTION_STATE_GAMESTART || len < 1)
@@ -665,6 +812,35 @@ void CUser::Cheat(char* pBuf, int len)
 
 		case CHEAT_REPAIR_ALL:
 			SendCheatResult(opcode, CheatRepairAll());
+			break;
+
+		case CHEAT_TELEPORT_ZONE:
+			SendCheatResult(
+				opcode, has(2) ? CheatTeleportZone(GetShort(pBuf, index)) : CHEAT_BAD_VALUE);
+			break;
+
+		case CHEAT_FIND_NPC:
+		{
+			const int queryLen = has(1) ? GetByte(pBuf, index) : -1;
+			if (queryLen < 0 || queryLen > MAX_NPC_NAME_SIZE || !has(queryLen))
+			{
+				SendCheatResult(opcode, CHEAT_BAD_VALUE);
+				break;
+			}
+
+			char query[MAX_NPC_NAME_SIZE + 1] {};
+			GetString(query, pBuf, queryLen, index);
+			SendCheatNpcSearch(query);
+		}
+		break;
+
+		case CHEAT_TELEPORT_NPC:
+			SendCheatResult(
+				opcode, has(2) ? CheatTeleportNpc(GetShort(pBuf, index)) : CHEAT_BAD_VALUE);
+			break;
+
+		case CHEAT_KILL_AROUND:
+			SendCheatResult(opcode, CheatKillAround());
 			break;
 
 		default:

@@ -25,6 +25,7 @@
 
 #include <Ebenezer/binder/EbenezerBinder.h>
 
+#include <algorithm>
 #include <ctime>
 #include <fstream>
 #include <ranges>
@@ -1385,6 +1386,13 @@ void EbenezerApp::UpdateGameTime()
 	SetShort(pSendBuf, m_nAmount, sendIndex);
 	Send_AIServer(1000, pSendBuf, sendIndex);
 
+	// OpenKO: the client runs its own clock, so the cheats menu's hour is held by re-sending it.
+	if (CheatHour() != Cheats::HOUR_NORMAL)
+	{
+		sendIndex = BuildTimePacket(pSendBuf);
+		Send_All(pSendBuf, sendIndex);
+	}
+
 	if (bKnights)
 	{
 		memset(pSendBuf, 0, sizeof(pSendBuf));
@@ -1425,9 +1433,8 @@ void EbenezerApp::UpdateWeather()
 
 	m_nWeather = weather;
 
-	SetByte(sendBuffer, WIZ_WEATHER, sendIndex);
-	SetByte(sendBuffer, (uint8_t) m_nWeather, sendIndex);
-	SetShort(sendBuffer, m_nAmount, sendIndex);
+	// OpenKO: the cheats menu's weather, when it imposes one.
+	sendIndex  = BuildWeatherPacket(sendBuffer);
 	Send_All(sendBuffer, sendIndex);
 }
 
@@ -3051,9 +3058,78 @@ void EbenezerApp::SendCheatSettingsToAI()
 	Send_AIServer(1000, sendBuffer, sendIndex);
 }
 
+std::optional<Cheats::WeatherOverride> EbenezerApp::CheatWeather() const
+{
+	const Cheats::Settings settings = CheatSettings();
+	if (!settings.bOn)
+		return std::nullopt;
+
+	return Cheats::WeatherFor(settings.eWeather);
+}
+
+int EbenezerApp::CheatHour() const
+{
+	const Cheats::Settings settings = CheatSettings();
+	return settings.bOn ? settings.cHour : Cheats::HOUR_NORMAL;
+}
+
+int EbenezerApp::BuildTimePacket(char* buf) const
+{
+	const int hour = CheatHour();
+
+	int sendIndex  = 0;
+	SetByte(buf, WIZ_TIME, sendIndex);
+	SetShort(buf, m_nYear, sendIndex);
+	SetShort(buf, m_nMonth, sendIndex);
+	SetShort(buf, m_nDate, sendIndex);
+	SetShort(buf, hour != Cheats::HOUR_NORMAL ? hour : m_nHour, sendIndex);
+	SetShort(buf, hour != Cheats::HOUR_NORMAL ? 0 : m_nMin, sendIndex);
+	return sendIndex;
+}
+
+int EbenezerApp::BuildWeatherPacket(char* buf) const
+{
+	const auto weather = CheatWeather();
+
+	int sendIndex      = 0;
+	SetByte(buf, WIZ_WEATHER, sendIndex);
+	if (weather.has_value())
+	{
+		SetByte(buf, weather->byType, sendIndex);
+		SetShort(buf, weather->sAmount, sendIndex);
+	}
+	else
+	{
+		SetByte(buf, static_cast<uint8_t>(m_nWeather), sendIndex);
+		SetShort(buf, m_nAmount, sendIndex);
+	}
+
+	return sendIndex;
+}
+
+bool EbenezerApp::IsAIServerConnected()
+{
+	std::lock_guard<std::mutex> lock(_aiSocketMutex);
+	return std::ranges::any_of(
+		_aiSocketMap, [](const auto& entry) { return entry.second != nullptr; });
+}
+
 void EbenezerApp::OnCheatSettingsChanged(
 	const Cheats::Settings& before, const Cheats::Settings& after)
 {
+	char sendBuffer[32] {};
+
+	// The client is told the weather and time whenever what's in effect changes.
+	auto weatherOf = [](const Cheats::Settings& settings)
+	{ return settings.bOn ? Cheats::WeatherFor(settings.eWeather) : std::nullopt; };
+	if (weatherOf(before) != weatherOf(after))
+		Send_All(sendBuffer, BuildWeatherPacket(sendBuffer));
+
+	auto hourOf = [](const Cheats::Settings& settings)
+	{ return settings.bOn ? settings.cHour : Cheats::HOUR_NORMAL; };
+	if (hourOf(before) != hourOf(after))
+		Send_All(sendBuffer, BuildTimePacket(sendBuffer));
+
 	// The weight limit is part of each player's abilities, which the client is told about.
 	if (Cheats::EffectiveFlag(before, &Cheats::Settings::bNoWeightLimit)
 		!= Cheats::EffectiveFlag(after, &Cheats::Settings::bNoWeightLimit))

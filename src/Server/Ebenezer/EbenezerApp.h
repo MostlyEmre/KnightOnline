@@ -325,6 +325,23 @@ public:
 	/// defaults.
 	void LoadCheatSettings();
 
+	/// \returns the weather the cheats menu imposes, or nullopt for the server's own
+	std::optional<Cheats::WeatherOverride> CheatWeather() const;
+
+	/// \returns the hour the cheats menu imposes, or Cheats::HOUR_NORMAL
+	int CheatHour() const;
+
+	/// \brief Builds WIZ_TIME: the game time, or the cheats menu's hour.
+	/// \returns its length
+	int BuildTimePacket(char* buf) const;
+
+	/// \brief Builds WIZ_WEATHER: the server's weather, or the cheats menu's.
+	/// \returns its length
+	int BuildWeatherPacket(char* buf) const;
+
+	/// \returns whether any AIServer socket is connected
+	bool IsAIServerConnected();
+
 	/// \brief Appends cheat settings to a packet (Cheats::SETTINGS_SIZE bytes).
 	static void WriteCheatSettings(char* buf, const Cheats::Settings& settings, int& index);
 
