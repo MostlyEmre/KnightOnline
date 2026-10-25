@@ -312,6 +312,10 @@ public:
 	/// \returns whether a cheat toggle is in effect: never while cheats are off
 	bool CheatFlag(bool Cheats::Settings::* flag) const;
 
+	/// \returns an HP change from a monster's spell with the cheats menu's damage taken applied:
+	/// damage (negative) is scaled, healing isn't
+	int CheatDamageTaken(int hpChange) const;
+
 	/// \brief Replaces the cheat settings: saves them, hands AIServer a snapshot, tells every player
 	/// in the game, and applies what changed (OnCheatSettingsChanged).
 	/// \returns false, changing nothing, when a value isn't allowed

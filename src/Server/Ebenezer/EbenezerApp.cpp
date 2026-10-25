@@ -2894,6 +2894,14 @@ bool EbenezerApp::CheatFlag(bool Cheats::Settings::* flag) const
 	return Cheats::EffectiveFlag(CheatSettings(), flag);
 }
 
+int EbenezerApp::CheatDamageTaken(int hpChange) const
+{
+	if (hpChange >= 0)
+		return hpChange;
+
+	return -Cheats::ScaleDamage(-hpChange, CheatPct(&Cheats::Settings::sDamageTakenPct));
+}
+
 namespace
 {
 
@@ -3044,8 +3052,23 @@ void EbenezerApp::SendCheatSettingsToAI()
 }
 
 void EbenezerApp::OnCheatSettingsChanged(
-	const Cheats::Settings& /*before*/, const Cheats::Settings& /*after*/)
+	const Cheats::Settings& before, const Cheats::Settings& after)
 {
+	// The weight limit is part of each player's abilities, which the client is told about.
+	if (Cheats::EffectiveFlag(before, &Cheats::Settings::bNoWeightLimit)
+		!= Cheats::EffectiveFlag(after, &Cheats::Settings::bNoWeightLimit))
+	{
+		int socketCount = GetUserSocketCount();
+		for (int i = 0; i < socketCount; i++)
+		{
+			auto pUser = GetUserPtrUnchecked(i);
+			if (pUser == nullptr || pUser->GetState() != CONNECTION_STATE_GAMESTART)
+				continue;
+
+			pUser->SetUserAbility();
+			pUser->SendStatsUpdate();
+		}
+	}
 }
 
 bool EbenezerApp::LoadShoppingMallTable()

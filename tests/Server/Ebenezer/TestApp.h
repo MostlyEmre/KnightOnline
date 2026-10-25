@@ -103,6 +103,36 @@ public:
 		return true;
 	}
 
+	/// \brief A class's coefficients, so its abilities (max weight, HP, MP) can be worked out
+	bool AddCoefficientEntry(int16_t classId)
+	{
+		auto modelForInsertion       = new Ebenezer::model::Coefficient {};
+		modelForInsertion->ClassId   = classId;
+		modelForInsertion->HitPoint  = 1.0;
+		modelForInsertion->ManaPoint = 1.0;
+		modelForInsertion->Sp        = 1.0;
+
+		if (!m_CoefficientTableMap.PutData(classId, modelForInsertion))
+		{
+			delete modelForInsertion;
+			return false;
+		}
+
+		return true;
+	}
+
+	/// \brief Levels 1 to `levels`, each needing `requiredExp` to finish
+	void AddLevelUpEntries(int levels, int32_t requiredExp)
+	{
+		for (int level = 1; level <= levels; level++)
+		{
+			auto modelForInsertion         = new Ebenezer::model::LevelUp {};
+			modelForInsertion->Level       = static_cast<uint8_t>(level);
+			modelForInsertion->RequiredExp = requiredExp;
+			m_LevelUpTableArray.push_back(modelForInsertion);
+		}
+	}
+
 	bool AddItemExchangeEntry(const Ebenezer::model::ItemExchange& itemExchangeModel)
 	{
 		auto modelForInsertion = new Ebenezer::model::ItemExchange { itemExchangeModel };

@@ -15,6 +15,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ranges.h>
 
+#include <climits>
 #include <unordered_set>
 
 namespace Ebenezer
@@ -2915,6 +2916,9 @@ void CUser::SetDetailData()
 
 	m_iMaxExp    = m_pMain->m_LevelUpTableArray[m_pUserData->m_bLevel - 1]->RequiredExp;
 	m_iMaxWeight = (m_pUserData->m_bStr + m_sItemStr) * 50;
+	// OpenKO: the cheats menu's "no weight limit".
+	if (m_pMain->CheatFlag(&Cheats::Settings::bNoWeightLimit))
+		m_iMaxWeight = SHRT_MAX;
 
 	m_iZoneIndex = m_pMain->GetZoneIndex(m_pUserData->m_bZone);
 
@@ -4233,6 +4237,9 @@ void CUser::SetUserAbility()
 
 	m_sBodyAc    = m_pUserData->m_bLevel;
 	m_iMaxWeight = (m_pUserData->m_bStr + m_sItemStr) * 50;
+	// OpenKO: the cheats menu's "no weight limit".
+	if (m_pMain->CheatFlag(&Cheats::Settings::bNoWeightLimit))
+		m_iMaxWeight = SHRT_MAX;
 	/*
 	궁수 공격력 = 0.005 * 활 공격력 * (Dex + 40) + 직업계수 * 활 공격력 * 화살공격력 * 레벨 * Dex
 	전사 공격력 = 0.005 * 무기 공격력 * (Str + 40) + 직업계수 * 활 공격력 * 화살공격력 * 레벨 * Dex
@@ -4796,25 +4803,7 @@ void CUser::ItemMove(char* pBuf)
 	}
 
 	//	비러머글 사자의 힘 >.<
-	SetByte(sendBuffer, WIZ_ITEM_MOVE, sendIndex);
-	SetByte(sendBuffer, 0x01, sendIndex);
-	SetShort(sendBuffer, m_sTotalHit, sendIndex);
-	SetShort(sendBuffer, m_sTotalAc, sendIndex);
-	SetShort(sendBuffer, GetMaxWeightForClient(), sendIndex);
-	SetShort(sendBuffer, m_iMaxHp, sendIndex);
-	SetShort(sendBuffer, m_iMaxMp, sendIndex);
-	SetShort(sendBuffer, m_sItemStr + m_sStrAmount, sendIndex);
-	SetShort(sendBuffer, m_sItemSta + m_sStaAmount, sendIndex);
-	SetShort(sendBuffer, m_sItemDex + m_sDexAmount, sendIndex);
-	SetShort(sendBuffer, m_sItemIntel + m_sIntelAmount, sendIndex);
-	SetShort(sendBuffer, m_sItemCham + m_sChaAmount, sendIndex);
-	SetShort(sendBuffer, m_bFireR, sendIndex);
-	SetShort(sendBuffer, m_bColdR, sendIndex);
-	SetShort(sendBuffer, m_bLightningR, sendIndex);
-	SetShort(sendBuffer, m_bMagicR, sendIndex);
-	SetShort(sendBuffer, m_bDiseaseR, sendIndex);
-	SetShort(sendBuffer, m_bPoisonR, sendIndex);
-	Send(sendBuffer, sendIndex);
+	SendStatsUpdate();
 	//
 	SendItemWeight();
 
@@ -5265,6 +5254,10 @@ void CUser::ItemTrade(char* pBuf)
 			goto fail_return;
 		}
 
+		// OpenKO: the cheats menu's free shops.
+		if (m_pMain->CheatFlag(&Cheats::Settings::bFreeShops))
+			buyPrice = 0;
+
 		if (m_pUserData->m_iGold < buyPrice)
 		{
 			result = 3;
@@ -5646,9 +5639,12 @@ void CUser::ItemGet(char* pBuf)
 
 		if (count > 0 && count < 32767)
 		{
+			// OpenKO: the cheats menu's coin multiplier; the packets keep the dropped count.
+			const int gain = CoinPickupAmount(count);
+
 			if (m_sPartyIndex == -1)
 			{
-				CurrencyChange(m_pUserData->m_iGold, count);
+				CurrencyChange(m_pUserData->m_iGold, gain);
 
 				SetByte(sendBuffer, WIZ_ITEM_GET, sendIndex);
 				SetByte(sendBuffer, 0x01, sendIndex);
@@ -5684,7 +5680,7 @@ void CUser::ItemGet(char* pBuf)
 						continue;
 
 					money = static_cast<int>(
-						count * (float) (pUser->m_pUserData->m_bLevel / (float) levelsum));
+						gain * (float) (pUser->m_pUserData->m_bLevel / (float) levelsum));
 					CurrencyChange(pUser->m_pUserData->m_iGold, money);
 
 					sendIndex = 0;
@@ -5935,13 +5931,7 @@ void CUser::ChangeLoyalty(const int loyaltyChange, const bool isExcludeMonthly)
 	if (!isExcludeMonthly)
 		CurrencyChange(m_pUserData->m_iLoyaltyMonthly, loyaltyChange);
 
-	char sendBuff[256] {};
-	int sendIndex = 0;
-	SetByte(sendBuff, WIZ_LOYALTY_CHANGE, sendIndex);
-	SetByte(sendBuff, LOYALTY_CHANGE_NATIONAL, sendIndex);
-	SetInt(sendBuff, m_pUserData->m_iLoyalty, sendIndex);
-	SetInt(sendBuff, m_pUserData->m_iLoyaltyMonthly, sendIndex);
-	Send(sendBuff, sendIndex);
+	SendLoyaltyChange();
 }
 
 bool CUser::CheckManner(const int32_t min, const int32_t max) const
@@ -7714,6 +7704,10 @@ void CUser::Dead()
 
 void CUser::ItemWoreOut(int type, int damage)
 {
+	// OpenKO: the cheats menu's "no durability loss".
+	if (m_pMain->CheatFlag(&Cheats::Settings::bNoDurabilityLoss))
+		return;
+
 	int worerate = static_cast<int>(sqrt(damage / 10.0));
 	if (worerate == 0)
 		return;
@@ -12296,7 +12290,11 @@ bool CUser::RunEvent(const EVENT_DATA* pEventData)
 				break;
 
 			case EXEC_EXP_CHANGE:
-				ExpChange(pExec->m_ExecInt[0]);
+				// OpenKO: a quest's EXP reward is multiplied by the cheats menu.
+				if (pExec->m_ExecInt[0] > 0)
+					ExpGain(pExec->m_ExecInt[0]);
+				else
+					ExpChange(pExec->m_ExecInt[0]);
 				break;
 
 			case EXEC_PROMOTE_KNIGHT:
@@ -12314,7 +12312,10 @@ bool CUser::RunEvent(const EVENT_DATA* pEventData)
 				break;
 
 			case EXEC_CHANGE_LOYALTY:
-				ChangeLoyalty(pExec->m_ExecInt[0], true);
+				// OpenKO: a quest's NP reward is multiplied by the cheats menu.
+				ChangeLoyalty(static_cast<int>(Cheats::ScaleGain(pExec->m_ExecInt[0],
+								  m_pMain->CheatPct(&Cheats::Settings::sLoyaltyPct))),
+					true);
 				break;
 
 			case EXEC_SKILL_POINT_FREE:

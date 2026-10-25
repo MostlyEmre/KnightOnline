@@ -29,6 +29,7 @@
     <ClCompile Include="RankStipendReward_test.cpp" />
     <ClCompile Include="ShoppingMall_test.cpp" />
     <ClCompile Include="CheatHandshake_test.cpp" />
+    <ClCompile Include="CheatHooks_test.cpp" />
     <ClCompile Include="CheatSettings_test.cpp" />
     <ClCompile Include="UpgradeScrolls_test.cpp" />
     <ClCompile Include="data\UserKnightsRank_test_data.h" />

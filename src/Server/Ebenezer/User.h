@@ -344,6 +344,34 @@ public:
 	/// \brief Answers a cheat request: [CHEAT_RESULT][request][e_CheatResult]
 	void SendCheatResult(uint8_t opcode, uint8_t result);
 
+	/// \brief EXP gained from a monster or a quest, multiplied by the cheats menu, levelling up as
+	/// many times as it reaches
+	void ExpGain(int base);
+
+	/// \brief National Points gained from a monster, multiplied by the cheats menu
+	void LoyaltyGain(int base);
+
+	/// \brief Tells the client its National Points (WIZ_LOYALTY_CHANGE, national)
+	void SendLoyaltyChange();
+
+	/// \returns the coins a pickup of `count` gives, multiplied by the cheats menu
+	int CoinPickupAmount(int count) const;
+
+	/// \brief Tells the client its attack, defence, max weight, HP, MP, stat bonuses and resistances
+	/// (WIZ_ITEM_MOVE, 1)
+	void SendStatsUpdate();
+
+	/// \returns whether a skill's MP can be paid: always with the cheats menu's infinite MP
+	bool CanPayMana(int cost) const;
+
+	/// \brief Pays a skill's MP, unless the cheats menu's infinite MP is on
+	void PayMana(int cost);
+
+	/// \brief Uses up a skill's arrows, potion or scroll, unless the cheats menu keeps consumables;
+	/// either way they must be there.
+	/// \returns false when there aren't enough
+	bool UseConsumable(int itemId, int count);
+
 	/// \brief Whether a Power-up Store item fits in the inventory
 	/// \return STORE_BUY_SUCCESS if it does, otherwise STORE_BUY_NO_ROOM or STORE_BUY_TOO_HEAVY
 	uint8_t CheckShoppingMallItemRoom(const model::Item* pTable, int16_t count) const;

@@ -600,7 +600,10 @@ void CAISocket::RecvNpcAttack(char* pBuf)
 			pSrcUser->SendTargetHP(0, tid, -damage);
 			if (attackType != MAGIC_ATTACK && attackType != DURATION_ATTACK)
 			{
-				pSrcUser->ItemWoreOut(DURABILITY_TYPE_ATTACK, damage);
+				// OpenKO: weapons wear as if the cheats menu's damage multiplier weren't there.
+				pSrcUser->ItemWoreOut(DURABILITY_TYPE_ATTACK,
+					Cheats::UnscaleDamage(
+						damage, _main->CheatPct(&Cheats::Settings::sDamageDealtPct)));
 
 				// LEFT HAND!!! by Yookozuna
 				tempDamage = damage * pSrcUser->m_bMagicTypeLeftHand / 100;
@@ -1129,21 +1132,16 @@ void CAISocket::RecvUserExp(char* pBuf)
 		return;
 	}
 
-	CurrencyChange(pUser->m_pUserData->m_iLoyalty, sLoyalty);
-	pUser->ExpChange(sExp);
+	// OpenKO: both are multiplied by the cheats menu, and the NP update goes out in the format the
+	// client reads.
+	if (sLoyalty > 0)
+		pUser->LoyaltyGain(sLoyalty);
 
-	// The experience is for a kill: it earns Knight Cash too.
+	pUser->ExpGain(sExp);
+
+	// The experience is for a kill: it earns Knight Cash too (from the unmultiplied EXP).
 	if (sExp > 0)
 		pUser->AddKnightCash(std::clamp(sExp / KNIGHT_CASH_KILL_EXP, 1, KNIGHT_CASH_KILL_MAX));
-
-	if (sLoyalty > 0)
-	{
-		char sendBuffer[128] {};
-		int sendIndex = 0;
-		SetByte(sendBuffer, WIZ_LOYALTY_CHANGE, sendIndex);
-		SetDWORD(sendBuffer, pUser->m_pUserData->m_iLoyalty, sendIndex);
-		pUser->Send(sendBuffer, sendIndex);
-	}
 }
 
 void CAISocket::RecvSystemMsg(char* pBuf)
