@@ -15,7 +15,9 @@
 #include <shared/JvCryption.h>
 #include <shared-server/TcpServerSocket.h>
 
+#include <array>
 #include <list>
+#include <optional>
 #include <span>
 
 namespace Ebenezer
@@ -366,6 +368,53 @@ public:
 
 	/// \brief Pays a skill's MP, unless the cheats menu's infinite MP is on
 	void PayMana(int cost);
+
+	/// \returns the stats a race starts with (strength, stamina, dexterity, intelligence,
+	/// charisma), or nullopt for an unknown race
+	static std::optional<std::array<uint8_t, 5>> RaceBaseStats(uint8_t race);
+
+	/// \brief Resets the stats to the race's and gives back every point, then tells the client
+	/// (CLASS_RESET_STAT_REQ). No checks, no cost.
+	void ApplyStatPointReset();
+
+	/// \brief Gives back every skill point, then tells the client (CLASS_RESET_SKILL_REQ). No checks,
+	/// no cost.
+	void ApplySkillPointReset();
+
+	/// \brief Tells the region the user's level, free points, EXP, HP, MP and weight
+	/// (WIZ_LEVEL_CHANGE)
+	void SendLevelChangeInfo();
+
+	/// \brief Cheats menu: sets the level. Going up grants the game's points for those levels;
+	/// going down resets stats and skills. EXP goes to the start of the level.
+	/// \returns an e_CheatResult
+	uint8_t CheatSetLevel(int level);
+
+	/// \brief Cheats menu: adds POINTS_PER_PRESS stat (kind 0) or skill (kind 1) points, up to 255
+	uint8_t CheatAddPoints(uint8_t kind);
+
+	/// \brief Cheats menu: resets stats (kind 0) or skills (kind 1) for free, even with gear on
+	uint8_t CheatResetPoints(uint8_t kind);
+
+	/// \brief Cheats menu: fills HP and MP
+	uint8_t CheatRefill();
+
+	/// \brief Cheats menu: sets coins (kind 0), National Points (1) or Knight Cash (2) to one of
+	/// the steps
+	uint8_t CheatSetCurrency(uint8_t kind, uint32_t value);
+
+	/// \brief Cheats menu: tells the client which IDs of an item exist (CHEAT_ITEM_VARIANTS)
+	void SendCheatItemVariants(int baseId);
+
+	/// \brief Cheats menu: gives an item: a stack of a countable item, or one per free bag slot
+	uint8_t CheatGiveItem(int itemId, int count);
+
+	/// \brief Cheats menu: swaps an equipped item for the same item at another +level, keeping its
+	/// share of durability, and tells the client (CHEAT_SET_PLUS)
+	uint8_t CheatSetPlus(uint8_t slot, int plus);
+
+	/// \brief Cheats menu: repairs every item, and tells the client (CHEAT_REPAIR_ALL)
+	uint8_t CheatRepairAll();
 
 	/// \brief Uses up a skill's arrows, potion or scroll, unless the cheats menu keeps consumables;
 	/// either way they must be there.

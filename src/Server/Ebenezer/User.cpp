@@ -3903,22 +3903,7 @@ void CUser::LevelChange(int16_t level, bool bLevelUp)
 
 	Send2AI_UserUpdateInfo();
 
-	memset(sendBuffer, 0, sizeof(sendBuffer));
-	sendIndex = 0;
-	SetByte(sendBuffer, WIZ_LEVEL_CHANGE, sendIndex);
-	SetShort(sendBuffer, _socketId, sendIndex);
-	SetByte(sendBuffer, m_pUserData->m_bLevel, sendIndex);
-	SetByte(sendBuffer, m_pUserData->m_bPoints, sendIndex);
-	SetByte(sendBuffer, m_pUserData->m_bstrSkill[0], sendIndex);
-	SetDWORD(sendBuffer, m_iMaxExp, sendIndex);
-	SetDWORD(sendBuffer, m_pUserData->m_iExp, sendIndex);
-	SetShort(sendBuffer, m_iMaxHp, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_sHp, sendIndex);
-	SetShort(sendBuffer, m_iMaxMp, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_sMp, sendIndex);
-	SetShort(sendBuffer, GetMaxWeightForClient(), sendIndex);
-	SetShort(sendBuffer, GetCurrentWeightForClient(), sendIndex);
-	m_pMain->Send_Region(sendBuffer, sendIndex, m_pUserData->m_bZone, m_RegionX, m_RegionZ);
+	SendLevelChangeInfo();
 
 	if (m_sPartyIndex != -1)
 	{
@@ -9374,8 +9359,7 @@ void CUser::GivePromotionQuest()
 void CUser::SkillPointResetRequest(bool isFree)
 {
 	// 돈을 먼저 깍고.. 만약,, 돈이 부족하면.. 에러...
-	int sendIndex = 0, skillPointsSpent = 0, i = 0, j = 0, respecCost = 0;
-	char sendBuffer[128] {};
+	int skillPointsSpent = 0, i = 0, respecCost = 0;
 
 	if (!isFree)
 	{
@@ -9441,16 +9425,7 @@ void CUser::SkillPointResetRequest(bool isFree)
 
 	// 문제될 소지가 많음 : 가용스킬이 255을 넘는 상황이 발생할 확율이 높음..
 	//m_pUserData->m_bstrSkill[0] += skill_point;
-	m_pUserData->m_bstrSkill[0] = (m_pUserData->m_bLevel - 9) * 2;
-	for (j = 1; j < 9; j++)
-		m_pUserData->m_bstrSkill[j] = 0;
-
-	SetByte(sendBuffer, WIZ_CLASS_CHANGE, sendIndex);
-	SetByte(sendBuffer, CLASS_RESET_SKILL_REQ, sendIndex);
-	SetByte(sendBuffer, CLASS_CHANGE_SUCCESS, sendIndex);
-	SetDWORD(sendBuffer, m_pUserData->m_iGold, sendIndex);
-	SetByte(sendBuffer, m_pUserData->m_bstrSkill[0], sendIndex);
-	Send(sendBuffer, sendIndex);
+	ApplySkillPointReset();
 
 	spdlog::debug("User::SkillPointResetRequest: completed successfully "
 				  "[charId={} goldSpent={} level={}]",
@@ -9471,8 +9446,7 @@ void CUser::SendResetSkillError(e_ClassChangeResult errorCode, int cost)
 void CUser::StatPointResetRequest(bool isFree)
 {
 	// 돈을 먼저 깍고.. 만약,, 돈이 부족하면.. 에러...
-	int sendIndex = 0, respecCost = 0;
-	char sendBuffer[128] {};
+	int respecCost = 0;
 
 	if (m_pUserData->m_bLevel > MAX_LEVEL)
 	{
@@ -9518,123 +9492,25 @@ void CUser::StatPointResetRequest(bool isFree)
 		}
 	}
 
-	switch (m_pUserData->m_bRace)
+	const auto baseStats = RaceBaseStats(m_pUserData->m_bRace);
+	if (!baseStats.has_value())
 	{
-		case KARUS_BIG:
-		case KARUS_MIDDLE:
-			if (m_pUserData->m_bStr == 65 && m_pUserData->m_bSta == 65 && m_pUserData->m_bDex == 60
-				&& m_pUserData->m_bIntel == 50 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
+		spdlog::error(
+			"User::StatPointResetRequest: Unhandled race {} [accountName={} characterName={}]",
+			m_pUserData->m_bRace, m_strAccountID, m_pUserData->m_id);
+		SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
+		return;
+	}
 
-			m_pUserData->m_bStr   = 65;
-			m_pUserData->m_bSta   = 65;
-			m_pUserData->m_bDex   = 60;
-			m_pUserData->m_bIntel = 50;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		case KARUS_SMALL:
-			if (m_pUserData->m_bStr == 50 && m_pUserData->m_bSta == 50 && m_pUserData->m_bDex == 70
-				&& m_pUserData->m_bIntel == 70 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
-
-			m_pUserData->m_bStr   = 50;
-			m_pUserData->m_bSta   = 50;
-			m_pUserData->m_bDex   = 70;
-			m_pUserData->m_bIntel = 70;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		case KARUS_WOMAN:
-			if (m_pUserData->m_bStr == 50 && m_pUserData->m_bSta == 60 && m_pUserData->m_bDex == 60
-				&& m_pUserData->m_bIntel == 70 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
-
-			m_pUserData->m_bStr   = 50;
-			m_pUserData->m_bSta   = 60;
-			m_pUserData->m_bDex   = 60;
-			m_pUserData->m_bIntel = 70;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		case BABARIAN:
-			if (m_pUserData->m_bStr == 65 && m_pUserData->m_bSta == 65 && m_pUserData->m_bDex == 60
-				&& m_pUserData->m_bIntel == 50 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
-
-			m_pUserData->m_bStr   = 65;
-			m_pUserData->m_bSta   = 65;
-			m_pUserData->m_bDex   = 60;
-			m_pUserData->m_bIntel = 50;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		case ELMORAD_MAN:
-			if (m_pUserData->m_bStr == 60 && m_pUserData->m_bSta == 60 && m_pUserData->m_bDex == 70
-				&& m_pUserData->m_bIntel == 50 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
-
-			m_pUserData->m_bStr   = 60;
-			m_pUserData->m_bSta   = 60;
-			m_pUserData->m_bDex   = 70;
-			m_pUserData->m_bIntel = 50;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		case ELMORAD_WOMAN:
-			if (m_pUserData->m_bStr == 50 && m_pUserData->m_bSta == 50 && m_pUserData->m_bDex == 70
-				&& m_pUserData->m_bIntel == 70 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
-
-			m_pUserData->m_bStr   = 50;
-			m_pUserData->m_bSta   = 50;
-			m_pUserData->m_bDex   = 70;
-			m_pUserData->m_bIntel = 70;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		default:
-			spdlog::error(
-				"User::StatPointResetRequest: Unhandled race {} [accountName={} characterName={}]",
-				m_pUserData->m_bRace, m_strAccountID, m_pUserData->m_id);
-			SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-			return;
+	const std::array<uint8_t, 5> stats { m_pUserData->m_bStr, m_pUserData->m_bSta,
+		m_pUserData->m_bDex, m_pUserData->m_bIntel, m_pUserData->m_bCha };
+	if (stats == *baseStats)
+	{
+		spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
+					  "[charId={} level={}]",
+			m_pUserData->m_id, m_pUserData->m_bLevel);
+		SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
+		return;
 	}
 
 	if (respecCost > 0 && !GoldLose(respecCost))
@@ -9646,26 +9522,7 @@ void CUser::StatPointResetRequest(bool isFree)
 		return;
 	}
 
-	m_pUserData->m_bPoints = (m_pUserData->m_bLevel - 1) * 3 + 10;
-
-	SetUserAbility();
-	Send2AI_UserUpdateInfo();
-
-	SetByte(sendBuffer, WIZ_CLASS_CHANGE, sendIndex);
-	SetByte(sendBuffer, CLASS_RESET_STAT_REQ, sendIndex);
-	SetByte(sendBuffer, CLASS_CHANGE_SUCCESS, sendIndex);
-	SetDWORD(sendBuffer, m_pUserData->m_iGold, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bStr, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bSta, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bDex, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bIntel, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bCha, sendIndex);
-	SetShort(sendBuffer, m_iMaxHp, sendIndex);
-	SetShort(sendBuffer, m_iMaxMp, sendIndex);
-	SetShort(sendBuffer, m_sTotalHit, sendIndex);
-	SetShort(sendBuffer, GetMaxWeightForClient(), sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bPoints, sendIndex);
-	Send(sendBuffer, sendIndex);
+	ApplyStatPointReset();
 
 	spdlog::debug("User::StatPointResetRequest: completed successfully "
 				  "[charId={} goldSpent={} level={}]",

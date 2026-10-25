@@ -1,6 +1,8 @@
 add_executable(Ebenezer.Tests
+  CheatCharacter_test.cpp
   CheatHandshake_test.cpp
   CheatHooks_test.cpp
+  CheatItems_test.cpp
   CheatSettings_test.cpp
   EventExec_test.cpp
   EventLogic_test.cpp
