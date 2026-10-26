@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <d3dx9.h>
+#include "Platform/RenderApi.h"
 
 #include <cstdint>
 #include <cfloat>

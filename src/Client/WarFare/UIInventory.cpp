@@ -697,7 +697,7 @@ int CUIInventory::GetArmDestinationIndex(__IconItemSkill* spItem)
 	return -1;
 }
 
-bool CUIInventory::CheckIconDropIfSuccessSendToServer(__IconItemSkill* spItem)
+bool CUIInventory::CheckIconDropIfSuccessSendToServer([[maybe_unused]] __IconItemSkill* spItem)
 {
 	assert(spItem == s_sSelectedIconInfo.pItemSelect);
 
@@ -2298,6 +2298,14 @@ bool CUIInventory::IsValidPosFromArmToArmInverse(int iOrder)
 	}
 
 	return false;
+}
+
+void CUIInventory::SlotItemChanged(e_ItemSlot eSlot)
+{
+	if (eSlot < 0 || eSlot >= ITEM_SLOT_COUNT || m_pMySlot[eSlot] == nullptr)
+		return;
+
+	ItemAdd(m_pMySlot[eSlot]->pItemBasic, m_pMySlot[eSlot]->pItemExt, eSlot);
 }
 
 void CUIInventory::ItemAdd(__TABLE_ITEM_BASIC* pItem, __TABLE_ITEM_EXT* pItemExt, e_ItemSlot eSlot)

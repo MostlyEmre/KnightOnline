@@ -24,5 +24,5 @@ target_include_directories(JpegFile PUBLIC
 target_compile_options(JpegFile PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W3>
   $<$<CXX_COMPILER_ID:GNU>:-Wall>
-  $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra>
+  $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wall -Wextra>
 )

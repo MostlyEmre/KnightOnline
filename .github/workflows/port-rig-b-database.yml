@@ -1,0 +1,133 @@
+# Reference rig B: the real SQL Server, loaded from OpenKO-db, with the servers built
+# natively on Linux against it via ODBC, side by side with the same servers built against
+# the SQLite backend and a seed database converted from the same OpenKO-db commit.
+# Proof 2: same startup row counts, same procedure / query results.
+
+name: "Port: rig B (SQL Server reference)"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - macos-port
+    paths:
+      - '.github/workflows/port-rig-b-database.yml'
+      - 'port/rigs/rig-b/**'
+      - 'port/db/**'
+      - 'src/db-library/**'
+      - 'cmake/FindSQLite3Amalgamation.cmake'
+      - 'CMakeLists.txt'
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+env:
+  MSSQL_SA_PASSWORD: "D0ckeIzKn!ght"
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    name: "SQL Server vs SQLite (Linux)"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - name: Start SQL Server and import OpenKO-db
+        run: |
+          docker compose up --build -d sqlserver
+          docker compose up --build -d kodb-util
+          for i in $(seq 1 60); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q sqlserver)")
+            [ "$status" = "healthy" ] && break
+            sleep 5
+          done
+          docker compose exec -T kodb-util /usr/local/bin/cleanImport.sh 2>&1 | tail -20 | tee import.log
+          docker compose exec -T kodb-util sh -c 'cd /var/lib/app/kodb-util/OpenKO-db && git rev-parse HEAD' | tr -d '\r' | tee openko-db-commit.txt
+
+      - name: Check out the same OpenKO-db commit for the SQLite seed
+        run: |
+          git clone --quiet https://github.com/Open-KO/OpenKO-db.git openko-db
+          git -C openko-db checkout --quiet "$(cat openko-db-commit.txt)"
+          git -C openko-db describe --tags --always
+
+      - name: Install ODBC driver and configure DSN
+        run: |
+          if ! dpkg -s msodbcsql18 >/dev/null 2>&1; then
+            curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc >/dev/null
+            curl -sSL "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list" | sudo tee /etc/apt/sources.list.d/mssql-release.list >/dev/null
+            sudo apt-get update
+            sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          fi
+          sudo apt-get install -y unixodbc unixodbc-dev
+          printf '%s\n' \
+            '[KN_online]' \
+            'Driver = ODBC Driver 18 for SQL Server' \
+            'Server = 127.0.0.1,1433' \
+            'Database = KN_online' \
+            'Encrypt = no' \
+            'TrustServerCertificate = yes' | sudo tee /etc/odbc.ini
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Build servers and probe (ODBC backend)
+        run: |
+          cmake -S . -B build-odbc -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE -DOPENKO_BUILD_TESTS=OFF \
+            -DOPENKO_DB_BACKEND=ODBC -DOPENKO_BUILD_PORT_TOOLS=ON
+          cmake --build build-odbc --parallel --target \
+            AIServer Ebenezer Aujard VersionManager ItemManager copy-server-assets db-parity-probe
+
+      - name: Build servers and probe (SQLite backend), seed the database
+        run: |
+          cmake -S . -B build-sqlite -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE -DOPENKO_BUILD_TESTS=OFF \
+            -DOPENKO_DB_BACKEND=SQLITE -DOPENKO_BUILD_PORT_TOOLS=ON
+          cmake --build build-sqlite --parallel --target \
+            AIServer Ebenezer Aujard VersionManager ItemManager copy-server-assets db-parity-probe openko-sqlite-load
+          python3 port/db/openkodb_to_sqlite.py openko-db seed.sql | tee seed-convert.txt
+          build-sqlite/bin/Debug/openko-sqlite-load seed.sqlite seed.sql
+
+      - name: Inspect the reference database
+        run: bash port/rigs/rig-b/inspect-db.sh | tee db-inspect.txt
+
+      - name: Run the servers on SQL Server
+        run: bash port/rigs/rig-b/run-servers.sh build-odbc/bin/Debug 30
+
+      - name: Run the servers on SQLite
+        run: |
+          cp seed.sqlite servers.sqlite
+          OPENKO_SQLITE_DB="$PWD/servers.sqlite" bash port/rigs/rig-b/run-servers.sh build-sqlite/bin/Debug 30
+
+      - name: Compare startup row counts
+        run: |
+          diff -u build-odbc/bin/Debug/run-logs/startup-row-counts.txt build-sqlite/bin/Debug/run-logs/startup-row-counts.txt
+          echo "identical: $(wc -l < build-odbc/bin/Debug/run-logs/startup-row-counts.txt) table loads"
+
+      - name: Re-import SQL Server and run the parity probe on both backends
+        if: always()
+        run: |
+          docker compose exec -T kodb-util /usr/local/bin/cleanImport.sh > reimport.log 2>&1
+          build-odbc/bin/Debug/db-parity-probe probe-sqlserver.jsonl
+          cp seed.sqlite probe.sqlite
+          OPENKO_SQLITE_DB="$PWD/probe.sqlite" build-sqlite/bin/Debug/db-parity-probe probe-sqlite.jsonl
+          python3 port/db/parity/compare.py probe-sqlserver.jsonl probe-sqlite.jsonl --report parity-report.md
+
+      - name: Collect results
+        if: always()
+        run: |
+          mkdir -p rig-b-out/odbc rig-b-out/sqlite
+          cp -v import.log openko-db-commit.txt db-inspect.txt seed-convert.txt rig-b-out/ 2>/dev/null || true
+          cp -v probe-sqlserver.jsonl probe-sqlite.jsonl parity-report.md rig-b-out/ 2>/dev/null || true
+          cp -rv build-odbc/bin/Debug/run-logs rig-b-out/odbc/ 2>/dev/null || true
+          cp -rv build-sqlite/bin/Debug/run-logs rig-b-out/sqlite/ 2>/dev/null || true
+          cp -v build-odbc/bin/Debug/logs/*.log rig-b-out/odbc/ 2>/dev/null || true
+          cp -v build-sqlite/bin/Debug/logs/*.log rig-b-out/sqlite/ 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rig-b-out
+          path: rig-b-out

@@ -1,6 +1,7 @@
 add_library(shared STATIC
   ByteBuffer.cpp
   ByteBuffer.h
+  CheatSettings.h
   CircularBuffer.cpp
   CircularBuffer.h
   crc32.cpp
@@ -19,6 +20,7 @@ add_library(shared STATIC
   Packet.h
   packets.h
   pch.h
+  SpellDamage.h
   StringUtils.cpp
   StringUtils.h
   Thread.cpp

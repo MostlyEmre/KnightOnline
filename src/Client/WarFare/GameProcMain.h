@@ -71,6 +71,8 @@ public:
 
 	class CN3SndObj *m_pSnd_Town, *m_pSnd_Battle; //마을음악, 전투음악 포인터..
 	class CMagicSkillMng* m_pMagicSkillMng;
+	class CGenie* m_pGenie;                       // Genie (auto-hunt)
+	class CCheats* m_pCheats;                     // The cheats menu
 
 	class CUINPCChangeEvent* m_pUINpcChange;
 	class CUIWarp* m_pUIWarp;
@@ -209,11 +211,22 @@ protected:
 	void MsgRecv_Knights_Duty_Change(Packet& pkt);
 	void MsgRecv_Knigts_Join_Req(Packet& pkt);
 	void MsgRecv_ItemUpgrade(Packet& pkt);
+	void MsgRecv_ShoppingMall(Packet& pkt);
+	void MsgRecv_Genie(Packet& pkt);
 
 	void MsgRecv_ZoneAbility(Packet& pkt);
 
 public:
 	void ProcessUIKeyInput(bool bEnable = true) override;
+
+	/// \brief Asks the server to open the Power-up Store (the P button).
+	void RequestPowerUpStore();
+
+	/// \brief Opens or closes Genie's window (G)
+	bool CommandToggleUIGenie();
+
+	/// \brief Opens or closes the cheats menu (J); refuses on a server that doesn't allow cheats.
+	bool CommandToggleUICheats();
 	bool OnMouseMove(POINT ptCur, POINT ptPrev);
 	bool OnMouseLbtnDown(POINT ptCur, POINT ptPrev);
 	bool OnMouseLBtnPressd(POINT ptCur, POINT ptPrev);

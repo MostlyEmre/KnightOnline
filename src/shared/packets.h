@@ -133,6 +133,14 @@ enum e_GameOpcode : uint8_t
 	WIZ_BIFROST             = 0x7B,
 	WIZ_SERVER_KILL         = 0x7F,
 
+	/// Genie (auto-hunt): not in 1.298; later official versions use 0x97 for it.
+	/// \see e_GenieOpcode
+	WIZ_GENIE               = 0x97,
+
+	/// The cheats menu: private to this fork; the client sends it only after the server announced it.
+	/// \see e_CheatOpcode
+	WIZ_CHEAT               = 0xF1,
+
 	// NOTE(srmeier): testing this debug string functionality
 	WIZ_DEBUG_STRING_PACKET = 0xFE,
 
@@ -199,9 +207,28 @@ enum e_DBOpcode : uint8_t
 enum e_CustomOpCode : uint8_t
 {
 	/// User Ranking Stipend Request
-	DB_CUSTOM_STIPEND_REQUEST  = 0,
+	DB_CUSTOM_STIPEND_REQUEST            = 0,
 	/// User Ranking Stipend Response
-	DB_CUSTOM_STIPEND_RESPONSE = 1
+	DB_CUSTOM_STIPEND_RESPONSE           = 1,
+	/// Knight Cash (the Power-up Store's currency) of an account
+	DB_CUSTOM_KNIGHT_CASH_LOAD_REQUEST   = 2,
+	DB_CUSTOM_KNIGHT_CASH_LOAD_RESPONSE  = 3,
+	/// Knight Cash spent on a Power-up Store item
+	DB_CUSTOM_KNIGHT_CASH_SPEND_REQUEST  = 4,
+	DB_CUSTOM_KNIGHT_CASH_SPEND_RESPONSE = 5,
+	/// Knight Cash earned by playing, or given back
+	DB_CUSTOM_KNIGHT_CASH_ADD_REQUEST    = 6,
+	DB_CUSTOM_KNIGHT_CASH_ADD_RESPONSE   = 7
+};
+
+/// \brief Results of the DB_CUSTOM_KNIGHT_CASH_* requests
+enum e_KnightCashResult : uint8_t
+{
+	KNIGHT_CASH_SUCCESS    = 0,
+	/// Not enough Knight Cash for the purchase
+	KNIGHT_CASH_NOT_ENOUGH = 1,
+	/// Unexpected error - likely an issue communicating with the database
+	KNIGHT_CASH_ERROR      = 0xFF
 };
 
 /// \brief The type of stipend being requested
@@ -703,13 +730,148 @@ enum e_AuthorityChangeOpcode : uint8_t
 	COMMAND_AUTHORITY = 1
 };
 
+/// \brief WIZ_SHOPPING_MALL sub-opcodes: the Power-up Store. Open, close and buy are the official
+/// requests; the official server answers open and close only, and the store itself was a web page.
+/// What the server sends past the official replies (the Knight Cash and the items for sale, and
+/// the answers to buy and STORE_KNIGHT_CASH) is OpenKO's.
 enum e_StoreOpcode : uint8_t
 {
-	STORE_OPEN    = 1,
-	STORE_CLOSE   = 2,
-	STORE_BUY     = 3,
-	STORE_MINI    = 4,
-	STORE_PROCESS = 5
+	/// Client: [] -> Server: [int16 e_StoreOpenResult], then on success [int16 free inventory
+	/// slots][int32 Knight Cash][int16 item count] and per item [int32 item ID][int16 count][int32 price]
+	STORE_OPEN        = 1,
+
+	/// Client: [] -> Server: the inventory, per slot (HAVE_MAX) [int32 item ID][int16 durability]
+	/// [int16 count][uint8 flag][int16 time left]
+	STORE_CLOSE       = 2,
+
+	/// Client: [int32 item ID][int16 count] -> Server: [uint8 e_StoreBuyResult][int32 Knight Cash]
+	/// [int16 free inventory slots]
+	STORE_BUY         = 3,
+
+	STORE_MINI        = 4,
+	STORE_PROCESS     = 5,
+
+	/// OpenKO. Server: [int32 Knight Cash gained][int32 Knight Cash]
+	STORE_KNIGHT_CASH = 0x10
+};
+
+/// \brief STORE_OPEN results; sent as int16
+enum e_StoreOpenResult : int8_t
+{
+	STORE_OPEN_SUCCESS        = 1,
+	STORE_OPEN_DEAD           = -2,
+	STORE_OPEN_TRADING        = -3,
+	STORE_OPEN_ZONE           = -5,
+	/// OpenKO: the Knight Cash couldn't be loaded, or nothing is for sale
+	STORE_OPEN_UNAVAILABLE    = -6,
+	STORE_OPEN_ALREADY_OPEN   = -7,
+	STORE_OPEN_INVENTORY_FULL = -8
+};
+
+enum e_StoreBuyResult : uint8_t
+{
+	STORE_BUY_SUCCESS     = 1,
+	STORE_BUY_NO_CASH     = 2,
+	STORE_BUY_NO_ROOM     = 3,
+	STORE_BUY_TOO_HEAVY   = 4,
+	/// Not in the store, a purchase still going through, or the item isn't for sale
+	STORE_BUY_INVALID     = 5,
+	/// The Knight Cash couldn't be reached
+	STORE_BUY_UNAVAILABLE = 6
+};
+
+/// \brief WIZ_GENIE sub-opcodes: the Genie handshake. The client sends WIZ_GENIE only after the
+/// server has announced that Genie is allowed, since a server that doesn't know the opcode
+/// disconnects the client. The hunting itself uses the client's ordinary packets.
+enum e_GenieOpcode : uint8_t
+{
+	/// Server: [uint8 allowed], once the player is in the game
+	GENIE_AVAILABLE = 1,
+
+	/// Client: [] -> Server: [uint8 ok]
+	GENIE_START     = 2,
+
+	/// Client: []
+	GENIE_STOP      = 3
+};
+
+/// \brief WIZ_CHEAT sub-opcodes: the cheats menu. The client sends WIZ_CHEAT only after the
+/// server has announced that cheats are allowed. Settings travel as Cheats::Settings
+/// (shared/CheatSettings.h, SETTINGS_SIZE bytes). Requests are answered with CHEAT_RESULT unless a
+/// reply is listed.
+enum e_CheatOpcode : uint8_t
+{
+	/// Server: [uint8 allowed], once the player is in the game; when allowed, CHEAT_SETTINGS follows
+	CHEAT_AVAILABLE     = 1,
+
+	/// Server: [settings]. Client: [settings] -> Server: CHEAT_SETTINGS to every player in the game
+	CHEAT_SETTINGS      = 2,
+
+	/// Server: [uint8 request opcode][uint8 e_CheatResult]
+	CHEAT_RESULT        = 3,
+
+	/// Client: [uint8 level]
+	CHEAT_SET_LEVEL     = 10,
+
+	/// Client: [uint8 kind: 0 stat points, 1 skill points]
+	CHEAT_ADD_POINTS    = 11,
+
+	/// Client: [uint8 kind: 0 stats, 1 skills]
+	CHEAT_RESET_POINTS  = 12,
+
+	/// Client: []
+	CHEAT_REFILL        = 13,
+
+	/// Client: [uint8 kind: 0 coins, 1 National Points, 2 Knight Cash][uint32 value]
+	CHEAT_SET_CURRENCY  = 14,
+
+	/// Client: [uint32 base item ID] -> Server: [uint32 base item ID][125 bytes: bit e set when
+	/// base + e exists]
+	CHEAT_ITEM_VARIANTS = 20,
+
+	/// Client: [uint32 item ID][uint16 count]
+	CHEAT_GIVE_ITEM     = 21,
+
+	/// Client: [uint8 equipped slot][uint8 +level] -> Server: [uint8 slot][uint32 new item ID]
+	/// [int16 durability], then CHEAT_RESULT
+	CHEAT_SET_PLUS      = 22,
+
+	/// Client: [] -> Server: [], then CHEAT_RESULT
+	CHEAT_REPAIR_ALL    = 23,
+
+	/// Client: [int16 zone]
+	CHEAT_TELEPORT_ZONE = 31,
+
+	/// Client: [uint8 length][query] -> Server: [uint8 count] count x [int16 NPC ID][int16 zone]
+	/// [uint8 length][name]
+	CHEAT_FIND_NPC      = 32,
+
+	/// Client: [int16 NPC ID]
+	CHEAT_TELEPORT_NPC  = 33,
+
+	/// Client: []
+	CHEAT_KILL_AROUND   = 34
+};
+
+enum e_CheatResult : uint8_t
+{
+	CHEAT_OK           = 0,
+	/// The server doesn't allow cheats
+	CHEAT_NOT_ALLOWED  = 1,
+	/// The master switch is off
+	CHEAT_OFF          = 2,
+	CHEAT_BAD_VALUE    = 3,
+	CHEAT_DEAD         = 4,
+	CHEAT_BAG_FULL     = 5,
+	CHEAT_NO_SUCH_ITEM = 6,
+	/// The item has no such +level
+	CHEAT_NO_PLUS      = 7,
+	CHEAT_EMPTY_SLOT   = 8,
+	/// Warping, trading or changing zone
+	CHEAT_BUSY         = 9,
+	CHEAT_NOT_FOUND    = 10,
+	/// AIServer isn't connected
+	CHEAT_NO_AI        = 11
 };
 
 enum e_RentalOpcode : uint8_t
@@ -816,12 +978,14 @@ enum e_AIOpcode : uint8_t
 	AG_USER_SET_HP         = 105, // User의 HP
 	AG_USER_LOG_OUT        = 106, // User의 LogOut
 	AG_USER_REGENE         = 107, // User의 Regene
-	AG_USER_EXP            = 108, // User의 경험치
+	AG_USER_EXP            = 108, // User의 경험치: [i16 user][i32 exp][i32 NP]
 	AG_USER_UPDATE         = 109, // User의 Update Info
 	AG_USER_FAIL           = 110, // 잘못된 유저 처리...
 	AG_USER_PARTY          = 111, // 파티처리 담당
 	AG_USER_VISIBILITY     = 112, // updates invisibility status
 	AG_NPC_HP_CHANGE       = 113, // updates an NPC's HP
+	AG_CHEAT_SETTINGS      = 114, // cheats menu settings: [u32 seq][Cheats::Settings]
+	AG_CHEAT_KILL_AROUND   = 115, // cheats menu: kill the monsters around a player: [i16 user ID]
 };
 
 #endif                            // SHARED_PACKETS_H

@@ -26,12 +26,14 @@ add_library(Ebenezer.Core
   GameDefine.h
   GameEvent.cpp
   GameEvent.h
+  ItemUpgradeRules.h
   Knights.cpp
   Knights.h
   KnightsManager.cpp
   KnightsManager.h
   KnightsSiegeWar.cpp
   KnightsSiegeWar.h
+  LayoutChecks.cpp
   LOGIC_ELSE.cpp
   LOGIC_ELSE.h
   MagicProcess.cpp
@@ -53,6 +55,7 @@ add_library(Ebenezer.Core
   UdpSocket.h
   User.cpp
   User.h
+  UserCheat.cpp
 )
 
 add_executable(Ebenezer

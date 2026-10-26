@@ -6,6 +6,7 @@
 #include "AIServerApp.h"
 #include "User.h"
 
+#include <shared/SpellDamage.h>
 #include <spdlog/spdlog.h>
 
 namespace AIServer
@@ -195,6 +196,9 @@ uint8_t CMagicProcess::ExecuteType1(
 													  // 	if(damage <= 0)	damage = 1;
 	//TRACE(_T("magictype1 ,, magicid=%d, damage=%d\n"), magicid, damage);
 
+	// OpenKO: the cheats menu's damage dealt.
+	damage     = m_pMain->ScaleDealt(damage);
+
 	//	if (damage > 0) {
 	CNpc* pNpc = m_pMain->_npcMap.GetData(tid - NPC_BAND);
 	if (pNpc != nullptr && pNpc->m_NpcState != NPC_DEAD && pNpc->m_iHP > 0)
@@ -238,6 +242,9 @@ uint8_t CMagicProcess::ExecuteType2(int magicid, int tid, int data1, int /*data2
 	damage = m_pSrcUser->GetDamage(tid, magicid); // Get damage points of enemy.
 												  //	if(damage <= 0)	damage = 1;
 	//TRACE(_T("magictype2 ,, magicid=%d, damage=%d\n"), magicid, damage);
+
+	// OpenKO: the cheats menu's damage dealt.
+	damage = m_pMain->ScaleDealt(damage);
 
 	if (damage > 0)
 	{
@@ -330,7 +337,8 @@ void CMagicProcess::ExecuteType3(int magicid, int tid, int data1, int data2, int
 			}
 			else
 			{
-				damage = abs(damage);
+				// OpenKO: the cheats menu\'s damage dealt.
+				damage = m_pMain->ScaleDealt(abs(damage));
 
 				// 기절시키는 마법이라면.....
 				if (pType->Attribute == 3)
@@ -368,7 +376,8 @@ void CMagicProcess::ExecuteType3(int magicid, int tid, int data1, int data2, int
 		}
 		else
 		{
-			damage = abs(damage);
+			// OpenKO: the cheats menu\'s damage dealt.
+			damage = m_pMain->ScaleDealt(abs(damage));
 
 			// 기절시키는 마법이라면.....
 			if (pType->Attribute == 3)
@@ -511,7 +520,8 @@ void CMagicProcess::ExecuteType7(int magicid, int tid, int data1, int data2, int
 	if (pType == nullptr)
 		return;
 
-	damage = pType->Damage;
+	// OpenKO: the cheats menu's damage dealt.
+	damage = m_pMain->ScaleDealt(pType->Damage);
 	// attacking ex: binding
 	if (damage > 0)
 	{
@@ -580,9 +590,8 @@ int16_t CMagicProcess::GetMagicDamage(
 	int tid, int total_hit, int attribute, int dexpoint, int righthand_damage)
 {
 	int16_t damage = 0;
-	int random = 0, total_r = 0;
+	int total_r    = 0;
 	uint8_t result = 0;
-	bool bSign     = true; // false이면 -, true이면 +
 
 	// Check if target id is valid.
 	if (tid < NPC_BAND || tid > INVALID_BAND)
@@ -637,28 +646,13 @@ int16_t CMagicProcess::GetMagicDamage(
 				break;
 		}
 
-		total_hit = (total_hit * (dexpoint + 20)) / 170;
-
-		if (total_hit < 0)
-		{
-			total_hit = abs(total_hit);
-			bSign     = false;
-		}
-
-		damage = static_cast<int16_t>(total_hit - (0.7f * total_hit * total_r / 200));
-		random = myrand(0, damage);
-		damage = static_cast<int16_t>(
-			(0.7f * (total_hit - (0.9f * total_hit * total_r / 200))) + 0.2f * random);
-		//		damage = damage + (3 * righthand_damage);
-		damage = damage + righthand_damage;
+		// OpenKO: the formula, with the monster's resistance capped, is in shared/SpellDamage.h.
+		damage = SpellDamage::ToMonster(total_hit, total_r, dexpoint, righthand_damage, myrand);
 	}
 	else
 	{
 		damage = 0;
 	}
-
-	if (!bSign && damage != 0)
-		damage = -damage;
 
 	//return 1;
 	return damage;
@@ -896,7 +890,8 @@ void CMagicProcess::AreaAttackDamage(int magictype, int rx, int rz, int magicid,
 			}
 			else
 			{
-				damage = abs(damage);
+				// OpenKO: the cheats menu\'s damage dealt.
+				damage = m_pMain->ScaleDealt(abs(damage));
 				if (pType3->Attribute == 3)
 					attack_type = 3; // 기절시키는 마법이라면.....
 				else
@@ -993,7 +988,8 @@ void CMagicProcess::AreaAttackDamage(int magictype, int rx, int rz, int magicid,
 		}
 		else if (magictype == 7)
 		{
-			damage      = target_damage;
+			// OpenKO: the cheats menu's damage dealt.
+			damage      = m_pMain->ScaleDealt(target_damage);
 			attack_type = magicid;
 			if (!pNpc->SetDamage(attack_type, damage, m_pSrcUser->m_strUserID,
 					m_pSrcUser->m_iUserId + USER_BAND))

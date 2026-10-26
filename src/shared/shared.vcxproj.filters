@@ -73,6 +73,9 @@
     <ClInclude Include="Packet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CheatSettings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="packets.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -84,6 +87,9 @@
     </ClInclude>
     <ClInclude Include="lzf.h">
       <Filter>LZF</Filter>
+    </ClInclude>
+    <ClInclude Include="SpellDamage.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="StringUtils.h">
       <Filter>Header Files</Filter>

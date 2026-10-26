@@ -34,6 +34,9 @@ protected:
 		_app = std::make_unique<TestApp>();
 		ASSERT_TRUE(_app != nullptr);
 
+		// These test the official odds; UpgradeScrolls_test covers the boosted ones.
+		_app->m_bUpgradeBoost = false;
+
 		// Load required tables
 		for (const auto& itemModel : s_itemData)
 			ASSERT_TRUE(_app->AddItemEntry(itemModel));

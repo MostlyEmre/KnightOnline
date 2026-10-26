@@ -349,13 +349,13 @@ bool AIServerApp::ListenByServerZoneType()
 		return false;
 	}
 
-	if (!_serverSocketManager.Listen(port))
+	if (!_serverSocketManager.Listen(port, _listenAddress))
 	{
 		spdlog::error("AIServerApp::ListenByServerZoneType: failed to listen on port {}", port);
 		return false;
 	}
 
-	spdlog::info("AIServerApp::ListenByServerZoneType: Listening on 0.0.0.0:{}", port);
+	spdlog::info("AIServerApp::ListenByServerZoneType: Listening on {}:{}", _listenAddress, port);
 	return true;
 }
 
@@ -1085,7 +1085,7 @@ void AIServerApp::AllNpcInfo()
 				spdlog::trace("AIServerApp::AllNpcInfo: send_count={}, count={}, zone={}", send_tot,
 					count, nZone);
 				memset(sendBuffer, 0, sizeof(sendBuffer));
-				std::this_thread::sleep_for(50ms);
+				std::this_thread::sleep_for(std::chrono::milliseconds(_npcInfoIntervalMs));
 			}
 		}
 
@@ -1099,7 +1099,7 @@ void AIServerApp::AllNpcInfo()
 			send_tot++;
 			spdlog::trace("AIServerApp::AllNpcInfo: send_count={}, count={}, zone={}", send_tot,
 				count, nZone);
-			std::this_thread::sleep_for(50ms);
+			std::this_thread::sleep_for(std::chrono::milliseconds(_npcInfoIntervalMs));
 		}
 
 		sendIndex = 0;
@@ -1116,6 +1116,33 @@ void AIServerApp::AllNpcInfo()
 	std::this_thread::sleep_for(1s);
 }
 // ~sungyong 2002.05.23
+
+bool AIServerApp::ApplyCheatSettings(uint32_t seq, const Cheats::Settings& settings)
+{
+	if (!Cheats::IsNewer(seq, _cheatSeq.load(std::memory_order_relaxed)))
+		return false;
+
+	_cheatSeq.store(seq, std::memory_order_relaxed);
+	_cheatDamageDealtPct.store(
+		Cheats::Effective(settings, &Cheats::Settings::sDamageDealtPct), std::memory_order_relaxed);
+	_cheatDamageTakenPct.store(
+		Cheats::Effective(settings, &Cheats::Settings::sDamageTakenPct), std::memory_order_relaxed);
+	_cheatDropPct.store(
+		Cheats::Effective(settings, &Cheats::Settings::sDropPct), std::memory_order_relaxed);
+	_cheatRespawnPct.store(
+		Cheats::Effective(settings, &Cheats::Settings::sRespawnPct), std::memory_order_relaxed);
+	return true;
+}
+
+int AIServerApp::ScaleDealt(int damage) const
+{
+	return Cheats::ScaleDamage(damage, _cheatDamageDealtPct.load(std::memory_order_relaxed));
+}
+
+int AIServerApp::ScaleTaken(int damage) const
+{
+	return Cheats::ScaleDamage(damage, _cheatDamageTakenPct.load(std::memory_order_relaxed));
+}
 
 CUser* AIServerApp::GetUserPtr(int nid)
 {
@@ -1538,6 +1565,11 @@ void AIServerApp::SetupCommandLineArgParser(argparse::ArgumentParser& parser)
 	parser.add_argument("--event-dir")
 		.help("location of directory containing the AI server specific event scripts (.EVTs)")
 		.store_into(_overrideEventDir);
+
+	parser.add_argument("--npc-info-interval")
+		.help("milliseconds to pause between the batches of NPC info sent to Ebenezer at startup "
+			  "(default 50); Ebenezer accepts players once it has them all")
+		.store_into(_npcInfoIntervalMs);
 }
 
 bool AIServerApp::ProcessCommandLineArgs(const argparse::ArgumentParser& parser)

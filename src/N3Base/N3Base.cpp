@@ -10,7 +10,7 @@
 #include "N3FXShape.h"
 #include "N3Chr.h"
 #include "N3Base.h"
-#include <mmsystem.h>
+#include "Platform/Time.h"
 
 LPDIRECT3DDEVICE9 CN3Base::s_lpD3DDev = nullptr;      // 참조 포인터.. 멋대로 해제하면 안된다..
 uint32_t CN3Base::s_dwTextureCaps     = 0;            // Texture 호환성..
@@ -128,7 +128,7 @@ float CN3Base::TimerProcess(TIMER_COMMAND command)
 		// Use QueryPerformanceFrequency() to get frequency of timer.  If QPF is
 		// not supported, we will timeGetTime() which returns milliseconds.
 		LARGE_INTEGER qwTicksPerSec;
-		m_bUsingQPF = QueryPerformanceFrequency(&qwTicksPerSec);
+		m_bUsingQPF = Platform::QueryPerformanceFrequency(&qwTicksPerSec);
 		if (m_bUsingQPF)
 			m_llQPFTicksPerSec = qwTicksPerSec.QuadPart;
 	}
@@ -146,7 +146,7 @@ float CN3Base::TimerProcess(TIMER_COMMAND command)
 		if (m_llStopTime != 0 && command != TIMER_START && command != TIMER_GETABSOLUTETIME)
 			qwTime.QuadPart = m_llStopTime;
 		else
-			QueryPerformanceCounter(&qwTime);
+			Platform::QueryPerformanceCounter(&qwTime);
 
 		// Return the elapsed time
 		if (command == TIMER_GETELAPSEDTIME)
@@ -218,7 +218,7 @@ float CN3Base::TimerProcess(TIMER_COMMAND command)
 		if (m_fStopTime != 0.0 && command != TIMER_START && command != TIMER_GETABSOLUTETIME)
 			fTime = m_fStopTime;
 		else
-			fTime = timeGetTime() * 0.001;
+			fTime = Platform::TimeGetTime() * 0.001;
 
 		// Return the elapsed time
 		if (command == TIMER_GETELAPSEDTIME)
@@ -398,9 +398,9 @@ float CN3Base::TimeGet()
 
 	if (bInit == false)
 	{
-		if (TRUE == ::QueryPerformanceCounter(&nTime))
+		if (TRUE == Platform::QueryPerformanceCounter(&nTime))
 		{
-			::QueryPerformanceFrequency(&nFrequency);
+			Platform::QueryPerformanceFrequency(&nFrequency);
 			bUseHWTimer = TRUE;
 		}
 		else
@@ -413,9 +413,9 @@ float CN3Base::TimeGet()
 
 	if (bUseHWTimer)
 	{
-		::QueryPerformanceCounter(&nTime);
+		Platform::QueryPerformanceCounter(&nTime);
 		return (float) ((double) (nTime.QuadPart) / (double) nFrequency.QuadPart);
 	}
 
-	return (float) timeGetTime();
+	return (float) Platform::TimeGetTime();
 }

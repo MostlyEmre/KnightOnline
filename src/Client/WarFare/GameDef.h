@@ -4,7 +4,7 @@
 #pragma once
 
 #include <string>
-#include <dinput.h>
+#include <N3Base/Platform/KeyCodes.h>
 #include <cstdint>
 
 #include <shared/version.h>
@@ -43,6 +43,7 @@ enum e_ExitType : uint8_t
 	EXIT_TYPE_NONE       = 0,
 	EXIT_TYPE_CHR_SELECT = 1,
 	EXIT_TYPE_QUIT       = 2,
+	EXIT_TYPE_RESTART    = 3, // the Options window's Restart, during a battle
 };
 
 inline constexpr int EXIT_TIME_AFTER_BATTLE = 10;
@@ -85,7 +86,9 @@ enum eKeyMap : uint8_t
 	KM_SKILL_PAGE_5          = DIK_F5,
 	KM_SKILL_PAGE_6          = DIK_F6,
 	KM_SKILL_PAGE_7          = DIK_F7,
-	KM_SKILL_PAGE_8          = DIK_F8
+	KM_SKILL_PAGE_8          = DIK_F8,
+	KM_TOGGLE_GENIE          = DIK_G,
+	KM_TOGGLE_CHEATS         = DIK_J
 };
 
 enum e_PlayerType : uint8_t

@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "EbenezerApp.h"
+#include "ItemUpgradeRules.h"
 #include "Map.h"
 #include "OperationMessage.h"
 #include "User.h"
@@ -14,6 +15,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ranges.h>
 
+#include <climits>
 #include <unordered_set>
 
 namespace Ebenezer
@@ -188,14 +190,19 @@ void CUser::Initialize()
 	while (!m_arUserEvent.empty())
 		m_arUserEvent.pop_back();
 
-	m_bIsPartyLeader      = false;
-	m_byInvisibilityState = 0;
-	m_sDirection          = 0;
-	m_bIsChicken          = false;
-	m_byKnightsRank       = 0;
-	m_byPersonalRank      = 0;
+	m_bIsPartyLeader          = false;
+	m_byInvisibilityState     = 0;
+	m_sDirection              = 0;
+	m_bIsChicken              = false;
+	m_byKnightsRank           = 0;
+	m_byPersonalRank          = 0;
 
-	m_byLastExchangeNum   = 0;
+	m_byLastExchangeNum       = 0;
+
+	m_bShoppingMallState      = SHOPPING_MALL_CLOSED;
+	m_bShoppingMallBuyPending = false;
+	m_iKnightCash             = 0;
+	m_bGenieActive            = false;
 
 	TcpServerSocket::Initialize();
 }
@@ -688,6 +695,18 @@ void CUser::Parsing(int len, char* pData)
 
 		case WIZ_WAREHOUSE:
 			WarehouseProcess(pData + index);
+			break;
+
+		case WIZ_SHOPPING_MALL:
+			ShoppingMall(pData + index);
+			break;
+
+		case WIZ_GENIE:
+			Genie(pData + index);
+			break;
+
+		case WIZ_CHEAT:
+			Cheat(pData + index, len - index);
 			break;
 
 		case WIZ_REPORT_BUG:
@@ -2073,6 +2092,9 @@ void CUser::SendMyInfo(int type)
 		sendIndex); // account status (0 = none, 1 = normal prem with expiry in hours, 2 = pc room)
 	SetByte(sendBuffer, m_pUserData->m_byPremiumType, sendIndex);
 	SetShort(sendBuffer, m_pUserData->m_sPremiumTime, sendIndex);
+	// Officially, signing up to the beginner helper event (and not having had its reward yet) makes
+	// the user a "chicken" again on every login.
+	m_bIsChicken = CheckExistEvent(QUEST_BEGINNER_QUEST, QUEST_STATE_IN_PROGRESS);
 	SetByte(sendBuffer, static_cast<uint8_t>(m_bIsChicken), sendIndex);
 	SetDWORD(sendBuffer, m_pUserData->m_iMannerPoint, sendIndex);
 
@@ -2569,10 +2591,8 @@ void CUser::Regene(char* pBuf, int magicid)
 
 void CUser::ZoneChange(int zone, float x, float z)
 {
-	int sendIndex = 0, zoneindex = 0;
-	char sendBuffer[128] {};
-	C3DMap* pMap            = nullptr;
-	_ZONE_SERVERINFO* pInfo = nullptr;
+	int zoneindex = 0;
+	C3DMap* pMap  = nullptr;
 
 	if (g_serverdown_flag)
 		return;
@@ -2690,6 +2710,20 @@ void CUser::ZoneChange(int zone, float x, float z)
 		}
 	}
 
+	ZoneChangeUnchecked(zone, x, z);
+}
+
+void CUser::ZoneChangeUnchecked(int zone, float x, float z)
+{
+	int sendIndex = 0;
+	char sendBuffer[128] {};
+	_ZONE_SERVERINFO* pInfo = nullptr;
+
+	const int zoneindex     = m_pMain->GetZoneIndex(zone);
+	C3DMap* pMap            = m_pMain->GetMapByIndex(zoneindex);
+	if (pMap == nullptr)
+		return;
+
 	m_bZoneChangeFlag = true;
 	m_bWarp           = 0x01;
 
@@ -2783,6 +2817,26 @@ void CUser::ZoneChange(int zone, float x, float z)
 	m_bZoneChangeFlag = false;
 }
 
+void CUser::ZoneChangeParty(int zone, float x, float z)
+{
+	_PARTY_GROUP* party = m_sPartyIndex != -1 ? m_pMain->m_PartyMap.GetData(m_sPartyIndex)
+											  : nullptr;
+	if (party == nullptr)
+	{
+		ZoneChange(zone, x, z);
+		return;
+	}
+
+	for (int i = 0; i < MAX_PARTY_SIZE; i++)
+	{
+		std::shared_ptr<CUser> member = party->userSocketIds[i] >= 0
+											? m_pMain->GetUserPtr(party->userSocketIds[i])
+											: nullptr;
+		if (member != nullptr && member->m_bResHpType != USER_DEAD)
+			member->ZoneChange(zone, x, z);
+	}
+}
+
 void CUser::Warp(char* pBuf)
 {
 	int index       = 0;
@@ -2838,23 +2892,11 @@ void CUser::Warp(float x, float z)
 
 void CUser::SendTimeStatus()
 {
-	int sendIndex = 0;
 	char sendBuffer[256] {};
 
-	SetByte(sendBuffer, WIZ_TIME, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nYear, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nMonth, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nDate, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nHour, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nMin, sendIndex);
-	Send(sendBuffer, sendIndex);
-
-	sendIndex = 0;
-	memset(sendBuffer, 0, sizeof(sendBuffer));
-	SetByte(sendBuffer, WIZ_WEATHER, sendIndex);
-	SetByte(sendBuffer, (uint8_t) m_pMain->m_nWeather, sendIndex);
-	SetShort(sendBuffer, m_pMain->m_nAmount, sendIndex);
-	Send(sendBuffer, sendIndex);
+	// OpenKO: either can be the cheats menu's.
+	Send(sendBuffer, m_pMain->BuildTimePacket(sendBuffer));
+	Send(sendBuffer, m_pMain->BuildWeatherPacket(sendBuffer));
 }
 
 void CUser::SetDetailData()
@@ -2874,6 +2916,9 @@ void CUser::SetDetailData()
 
 	m_iMaxExp    = m_pMain->m_LevelUpTableArray[m_pUserData->m_bLevel - 1]->RequiredExp;
 	m_iMaxWeight = (m_pUserData->m_bStr + m_sItemStr) * 50;
+	// OpenKO: the cheats menu's "no weight limit".
+	if (m_pMain->CheatFlag(&Cheats::Settings::bNoWeightLimit))
+		m_iMaxWeight = Cheats::NO_WEIGHT_LIMIT;
 
 	m_iZoneIndex = m_pMain->GetZoneIndex(m_pUserData->m_bZone);
 
@@ -3858,22 +3903,7 @@ void CUser::LevelChange(int16_t level, bool bLevelUp)
 
 	Send2AI_UserUpdateInfo();
 
-	memset(sendBuffer, 0, sizeof(sendBuffer));
-	sendIndex = 0;
-	SetByte(sendBuffer, WIZ_LEVEL_CHANGE, sendIndex);
-	SetShort(sendBuffer, _socketId, sendIndex);
-	SetByte(sendBuffer, m_pUserData->m_bLevel, sendIndex);
-	SetByte(sendBuffer, m_pUserData->m_bPoints, sendIndex);
-	SetByte(sendBuffer, m_pUserData->m_bstrSkill[0], sendIndex);
-	SetDWORD(sendBuffer, m_iMaxExp, sendIndex);
-	SetDWORD(sendBuffer, m_pUserData->m_iExp, sendIndex);
-	SetShort(sendBuffer, m_iMaxHp, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_sHp, sendIndex);
-	SetShort(sendBuffer, m_iMaxMp, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_sMp, sendIndex);
-	SetShort(sendBuffer, GetMaxWeightForClient(), sendIndex);
-	SetShort(sendBuffer, GetCurrentWeightForClient(), sendIndex);
-	m_pMain->Send_Region(sendBuffer, sendIndex, m_pUserData->m_bZone, m_RegionX, m_RegionZ);
+	SendLevelChangeInfo();
 
 	if (m_sPartyIndex != -1)
 	{
@@ -3885,6 +3915,9 @@ void CUser::LevelChange(int16_t level, bool bLevelUp)
 		SetByte(sendBuffer, m_pUserData->m_bLevel, sendIndex);
 		m_pMain->Send_PartyMember(m_sPartyIndex, sendBuffer, sendIndex);
 	}
+
+	if (bLevelUp)
+		AddKnightCash(level * KNIGHT_CASH_PER_LEVEL);
 }
 
 void CUser::PointChange(char* pBuf)
@@ -4189,6 +4222,9 @@ void CUser::SetUserAbility()
 
 	m_sBodyAc    = m_pUserData->m_bLevel;
 	m_iMaxWeight = (m_pUserData->m_bStr + m_sItemStr) * 50;
+	// OpenKO: the cheats menu's "no weight limit".
+	if (m_pMain->CheatFlag(&Cheats::Settings::bNoWeightLimit))
+		m_iMaxWeight = Cheats::NO_WEIGHT_LIMIT;
 	/*
 	궁수 공격력 = 0.005 * 활 공격력 * (Dex + 40) + 직업계수 * 활 공격력 * 화살공격력 * 레벨 * Dex
 	전사 공격력 = 0.005 * 무기 공격력 * (Str + 40) + 직업계수 * 활 공격력 * 화살공격력 * 레벨 * Dex
@@ -4752,25 +4788,7 @@ void CUser::ItemMove(char* pBuf)
 	}
 
 	//	비러머글 사자의 힘 >.<
-	SetByte(sendBuffer, WIZ_ITEM_MOVE, sendIndex);
-	SetByte(sendBuffer, 0x01, sendIndex);
-	SetShort(sendBuffer, m_sTotalHit, sendIndex);
-	SetShort(sendBuffer, m_sTotalAc, sendIndex);
-	SetShort(sendBuffer, GetMaxWeightForClient(), sendIndex);
-	SetShort(sendBuffer, m_iMaxHp, sendIndex);
-	SetShort(sendBuffer, m_iMaxMp, sendIndex);
-	SetShort(sendBuffer, m_sItemStr + m_sStrAmount, sendIndex);
-	SetShort(sendBuffer, m_sItemSta + m_sStaAmount, sendIndex);
-	SetShort(sendBuffer, m_sItemDex + m_sDexAmount, sendIndex);
-	SetShort(sendBuffer, m_sItemIntel + m_sIntelAmount, sendIndex);
-	SetShort(sendBuffer, m_sItemCham + m_sChaAmount, sendIndex);
-	SetShort(sendBuffer, m_bFireR, sendIndex);
-	SetShort(sendBuffer, m_bColdR, sendIndex);
-	SetShort(sendBuffer, m_bLightningR, sendIndex);
-	SetShort(sendBuffer, m_bMagicR, sendIndex);
-	SetShort(sendBuffer, m_bDiseaseR, sendIndex);
-	SetShort(sendBuffer, m_bPoisonR, sendIndex);
-	Send(sendBuffer, sendIndex);
+	SendStatsUpdate();
 	//
 	SendItemWeight();
 
@@ -5221,6 +5239,10 @@ void CUser::ItemTrade(char* pBuf)
 			goto fail_return;
 		}
 
+		// OpenKO: the cheats menu's free shops.
+		if (m_pMain->CheatFlag(&Cheats::Settings::bFreeShops))
+			buyPrice = 0;
+
 		if (m_pUserData->m_iGold < buyPrice)
 		{
 			result = 3;
@@ -5602,9 +5624,12 @@ void CUser::ItemGet(char* pBuf)
 
 		if (count > 0 && count < 32767)
 		{
+			// OpenKO: the cheats menu's coin multiplier; the packets keep the dropped count.
+			const int gain = CoinPickupAmount(count);
+
 			if (m_sPartyIndex == -1)
 			{
-				CurrencyChange(m_pUserData->m_iGold, count);
+				CurrencyChange(m_pUserData->m_iGold, gain);
 
 				SetByte(sendBuffer, WIZ_ITEM_GET, sendIndex);
 				SetByte(sendBuffer, 0x01, sendIndex);
@@ -5640,7 +5665,7 @@ void CUser::ItemGet(char* pBuf)
 						continue;
 
 					money = static_cast<int>(
-						count * (float) (pUser->m_pUserData->m_bLevel / (float) levelsum));
+						gain * (float) (pUser->m_pUserData->m_bLevel / (float) levelsum));
 					CurrencyChange(pUser->m_pUserData->m_iGold, money);
 
 					sendIndex = 0;
@@ -5698,9 +5723,8 @@ fail_return:
 
 void CUser::StateChange(char* pBuf)
 {
-	int index = 0, sendIndex = 0;
+	int index    = 0;
 	uint8_t type = 0, buff = 0;
-	char sendBuffer[128] {};
 
 	type = GetByte(pBuf, index);
 	buff = GetByte(pBuf, index);
@@ -5719,10 +5743,6 @@ void CUser::StateChange(char* pBuf)
 	else if (type == 3)
 		m_bAbnormalType = buff;
 
-	SetByte(sendBuffer, WIZ_STATE_CHANGE, sendIndex);
-	SetShort(sendBuffer, _socketId, sendIndex);
-	SetByte(sendBuffer, type, sendIndex);
-
 	uint32_t nResult = 0;
 	if (type == 1)
 		nResult = m_bResHpType;
@@ -5736,8 +5756,51 @@ void CUser::StateChange(char* pBuf)
 	else
 		nResult = buff;
 
-	SetDWORD(sendBuffer, nResult, sendIndex);
+	SendStateChange(type, nResult);
+}
 
+void CUser::StateChangeServerDirect(uint8_t type, uint32_t value)
+{
+	// As the official server checks them (the client's own requests only go up to 5).
+	if (type >= 10)
+		return;
+
+	// Operators only!!!
+	if ((type == 5 || (type == 3 && value == 5)) && m_pUserData->m_bAuthority != AUTHORITY_MANAGER)
+		return;
+
+	if (type == 1)
+	{
+		if (m_pUserData->m_sHp <= 0 || m_bResHpType == USER_DEAD)
+			return;
+
+		// State 5 has no name here; officially it's checked alongside blinking.
+		if ((value == 2 && (m_bResHpType == USER_BLINKING || m_bResHpType == 5))
+			|| (value == 5 && m_bResHpType == USER_BLINKING))
+			return;
+	}
+
+	uint32_t result = value;
+	if (type == 1)
+		result = m_bResHpType = static_cast<uint8_t>(value);
+	else if (type == 2)
+		result = m_bNeedParty = static_cast<uint8_t>(value);
+	else if (type == 3)
+		result = m_bAbnormalType = static_cast<uint8_t>(value);
+	else if (type == 8)
+		result = static_cast<uint8_t>(m_bIsChicken = (value != 0));
+
+	SendStateChange(type, result);
+}
+
+void CUser::SendStateChange(uint8_t type, uint32_t value)
+{
+	int sendIndex = 0;
+	char sendBuffer[128] {};
+	SetByte(sendBuffer, WIZ_STATE_CHANGE, sendIndex);
+	SetShort(sendBuffer, _socketId, sendIndex);
+	SetByte(sendBuffer, type, sendIndex);
+	SetDWORD(sendBuffer, value, sendIndex);
 	m_pMain->Send_Region(sendBuffer, sendIndex, m_pUserData->m_bZone, m_RegionX, m_RegionZ);
 }
 
@@ -5853,13 +5916,7 @@ void CUser::ChangeLoyalty(const int loyaltyChange, const bool isExcludeMonthly)
 	if (!isExcludeMonthly)
 		CurrencyChange(m_pUserData->m_iLoyaltyMonthly, loyaltyChange);
 
-	char sendBuff[256] {};
-	int sendIndex = 0;
-	SetByte(sendBuff, WIZ_LOYALTY_CHANGE, sendIndex);
-	SetByte(sendBuff, LOYALTY_CHANGE_NATIONAL, sendIndex);
-	SetInt(sendBuff, m_pUserData->m_iLoyalty, sendIndex);
-	SetInt(sendBuff, m_pUserData->m_iLoyaltyMonthly, sendIndex);
-	Send(sendBuff, sendIndex);
+	SendLoyaltyChange();
 }
 
 bool CUser::CheckManner(const int32_t min, const int32_t max) const
@@ -5918,12 +5975,13 @@ void CUser::ChangeMannerPoint(const int loyaltyAmount)
 
 			CurrencyChange(partyMember->m_pUserData->m_iMannerPoint, partyPointChange);
 
+			// The helper is told their own new points (officially as well).
 			char sendBuff[128] {};
 			int sendIndex = 0;
 			SetByte(sendBuff, WIZ_LOYALTY_CHANGE, sendIndex);
 			SetByte(sendBuff, LOYALTY_CHANGE_MANNER, sendIndex);
-			SetInt(sendBuff, m_pUserData->m_iMannerPoint, sendIndex);
-			Send(sendBuff, sendIndex);
+			SetInt(sendBuff, partyMember->m_pUserData->m_iMannerPoint, sendIndex);
+			partyMember->Send(sendBuff, sendIndex);
 		}
 	}
 }
@@ -7631,6 +7689,10 @@ void CUser::Dead()
 
 void CUser::ItemWoreOut(int type, int damage)
 {
+	// OpenKO: the cheats menu's "no durability loss".
+	if (m_pMain->CheatFlag(&Cheats::Settings::bNoDurabilityLoss))
+		return;
+
 	int worerate = static_cast<int>(sqrt(damage / 10.0));
 	if (worerate == 0)
 		return;
@@ -9297,8 +9359,7 @@ void CUser::GivePromotionQuest()
 void CUser::SkillPointResetRequest(bool isFree)
 {
 	// 돈을 먼저 깍고.. 만약,, 돈이 부족하면.. 에러...
-	int sendIndex = 0, skillPointsSpent = 0, i = 0, j = 0, respecCost = 0;
-	char sendBuffer[128] {};
+	int skillPointsSpent = 0, i = 0, respecCost = 0;
 
 	if (!isFree)
 	{
@@ -9364,16 +9425,7 @@ void CUser::SkillPointResetRequest(bool isFree)
 
 	// 문제될 소지가 많음 : 가용스킬이 255을 넘는 상황이 발생할 확율이 높음..
 	//m_pUserData->m_bstrSkill[0] += skill_point;
-	m_pUserData->m_bstrSkill[0] = (m_pUserData->m_bLevel - 9) * 2;
-	for (j = 1; j < 9; j++)
-		m_pUserData->m_bstrSkill[j] = 0;
-
-	SetByte(sendBuffer, WIZ_CLASS_CHANGE, sendIndex);
-	SetByte(sendBuffer, CLASS_RESET_SKILL_REQ, sendIndex);
-	SetByte(sendBuffer, CLASS_CHANGE_SUCCESS, sendIndex);
-	SetDWORD(sendBuffer, m_pUserData->m_iGold, sendIndex);
-	SetByte(sendBuffer, m_pUserData->m_bstrSkill[0], sendIndex);
-	Send(sendBuffer, sendIndex);
+	ApplySkillPointReset();
 
 	spdlog::debug("User::SkillPointResetRequest: completed successfully "
 				  "[charId={} goldSpent={} level={}]",
@@ -9394,8 +9446,7 @@ void CUser::SendResetSkillError(e_ClassChangeResult errorCode, int cost)
 void CUser::StatPointResetRequest(bool isFree)
 {
 	// 돈을 먼저 깍고.. 만약,, 돈이 부족하면.. 에러...
-	int sendIndex = 0, respecCost = 0;
-	char sendBuffer[128] {};
+	int respecCost = 0;
 
 	if (m_pUserData->m_bLevel > MAX_LEVEL)
 	{
@@ -9441,123 +9492,25 @@ void CUser::StatPointResetRequest(bool isFree)
 		}
 	}
 
-	switch (m_pUserData->m_bRace)
+	const auto baseStats = RaceBaseStats(m_pUserData->m_bRace);
+	if (!baseStats.has_value())
 	{
-		case KARUS_BIG:
-		case KARUS_MIDDLE:
-			if (m_pUserData->m_bStr == 65 && m_pUserData->m_bSta == 65 && m_pUserData->m_bDex == 60
-				&& m_pUserData->m_bIntel == 50 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
+		spdlog::error(
+			"User::StatPointResetRequest: Unhandled race {} [accountName={} characterName={}]",
+			m_pUserData->m_bRace, m_strAccountID, m_pUserData->m_id);
+		SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
+		return;
+	}
 
-			m_pUserData->m_bStr   = 65;
-			m_pUserData->m_bSta   = 65;
-			m_pUserData->m_bDex   = 60;
-			m_pUserData->m_bIntel = 50;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		case KARUS_SMALL:
-			if (m_pUserData->m_bStr == 50 && m_pUserData->m_bSta == 50 && m_pUserData->m_bDex == 70
-				&& m_pUserData->m_bIntel == 70 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
-
-			m_pUserData->m_bStr   = 50;
-			m_pUserData->m_bSta   = 50;
-			m_pUserData->m_bDex   = 70;
-			m_pUserData->m_bIntel = 70;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		case KARUS_WOMAN:
-			if (m_pUserData->m_bStr == 50 && m_pUserData->m_bSta == 60 && m_pUserData->m_bDex == 60
-				&& m_pUserData->m_bIntel == 70 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
-
-			m_pUserData->m_bStr   = 50;
-			m_pUserData->m_bSta   = 60;
-			m_pUserData->m_bDex   = 60;
-			m_pUserData->m_bIntel = 70;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		case BABARIAN:
-			if (m_pUserData->m_bStr == 65 && m_pUserData->m_bSta == 65 && m_pUserData->m_bDex == 60
-				&& m_pUserData->m_bIntel == 50 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
-
-			m_pUserData->m_bStr   = 65;
-			m_pUserData->m_bSta   = 65;
-			m_pUserData->m_bDex   = 60;
-			m_pUserData->m_bIntel = 50;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		case ELMORAD_MAN:
-			if (m_pUserData->m_bStr == 60 && m_pUserData->m_bSta == 60 && m_pUserData->m_bDex == 70
-				&& m_pUserData->m_bIntel == 50 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
-
-			m_pUserData->m_bStr   = 60;
-			m_pUserData->m_bSta   = 60;
-			m_pUserData->m_bDex   = 70;
-			m_pUserData->m_bIntel = 50;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		case ELMORAD_WOMAN:
-			if (m_pUserData->m_bStr == 50 && m_pUserData->m_bSta == 50 && m_pUserData->m_bDex == 70
-				&& m_pUserData->m_bIntel == 70 && m_pUserData->m_bCha == 50)
-			{
-				spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
-							  "[charId={} level={}]",
-					m_pUserData->m_id, m_pUserData->m_bLevel);
-				SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-				return;
-			}
-
-			m_pUserData->m_bStr   = 50;
-			m_pUserData->m_bSta   = 50;
-			m_pUserData->m_bDex   = 70;
-			m_pUserData->m_bIntel = 70;
-			m_pUserData->m_bCha   = 50;
-			break;
-
-		default:
-			spdlog::error(
-				"User::StatPointResetRequest: Unhandled race {} [accountName={} characterName={}]",
-				m_pUserData->m_bRace, m_strAccountID, m_pUserData->m_id);
-			SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
-			return;
+	const std::array<uint8_t, 5> stats { m_pUserData->m_bStr, m_pUserData->m_bSta,
+		m_pUserData->m_bDex, m_pUserData->m_bIntel, m_pUserData->m_bCha };
+	if (stats == *baseStats)
+	{
+		spdlog::debug("User::StatPointResetRequest: failed, no stat points to refund "
+					  "[charId={} level={}]",
+			m_pUserData->m_id, m_pUserData->m_bLevel);
+		SendResetStatError(CLASS_CHANGE_NOT_YET, respecCost);
+		return;
 	}
 
 	if (respecCost > 0 && !GoldLose(respecCost))
@@ -9569,26 +9522,7 @@ void CUser::StatPointResetRequest(bool isFree)
 		return;
 	}
 
-	m_pUserData->m_bPoints = (m_pUserData->m_bLevel - 1) * 3 + 10;
-
-	SetUserAbility();
-	Send2AI_UserUpdateInfo();
-
-	SetByte(sendBuffer, WIZ_CLASS_CHANGE, sendIndex);
-	SetByte(sendBuffer, CLASS_RESET_STAT_REQ, sendIndex);
-	SetByte(sendBuffer, CLASS_CHANGE_SUCCESS, sendIndex);
-	SetDWORD(sendBuffer, m_pUserData->m_iGold, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bStr, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bSta, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bDex, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bIntel, sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bCha, sendIndex);
-	SetShort(sendBuffer, m_iMaxHp, sendIndex);
-	SetShort(sendBuffer, m_iMaxMp, sendIndex);
-	SetShort(sendBuffer, m_sTotalHit, sendIndex);
-	SetShort(sendBuffer, GetMaxWeightForClient(), sendIndex);
-	SetShort(sendBuffer, m_pUserData->m_bPoints, sendIndex);
-	Send(sendBuffer, sendIndex);
+	ApplyStatPointReset();
 
 	spdlog::debug("User::StatPointResetRequest: completed successfully "
 				  "[charId={} goldSpent={} level={}]",
@@ -12213,7 +12147,11 @@ bool CUser::RunEvent(const EVENT_DATA* pEventData)
 				break;
 
 			case EXEC_EXP_CHANGE:
-				ExpChange(pExec->m_ExecInt[0]);
+				// OpenKO: a quest's EXP reward is multiplied by the cheats menu.
+				if (pExec->m_ExecInt[0] > 0)
+					ExpGain(pExec->m_ExecInt[0]);
+				else
+					ExpChange(pExec->m_ExecInt[0]);
 				break;
 
 			case EXEC_PROMOTE_KNIGHT:
@@ -12231,7 +12169,10 @@ bool CUser::RunEvent(const EVENT_DATA* pEventData)
 				break;
 
 			case EXEC_CHANGE_LOYALTY:
-				ChangeLoyalty(pExec->m_ExecInt[0], true);
+				// OpenKO: a quest's NP reward is multiplied by the cheats menu.
+				ChangeLoyalty(static_cast<int>(Cheats::ScaleGain(pExec->m_ExecInt[0],
+								  m_pMain->CheatPct(&Cheats::Settings::sLoyaltyPct))),
+					true);
 				break;
 
 			case EXEC_SKILL_POINT_FREE:
@@ -12240,6 +12181,20 @@ bool CUser::RunEvent(const EVENT_DATA* pEventData)
 
 			case EXEC_STAT_POINT_FREE:
 				StatPointResetRequest(true);
+				break;
+
+			case EXEC_ROB_ALLITEM_PARTY:
+				RobAllItemParty(pExec->m_ExecInt[0]);
+				break;
+
+			case EXEC_ZONE_CHANGE_PARTY:
+				ZoneChangeParty(pExec->m_ExecInt[0], static_cast<float>(pExec->m_ExecInt[1]),
+					static_cast<float>(pExec->m_ExecInt[2]));
+				break;
+
+			case EXEC_STATE_CHANGE:
+				StateChangeServerDirect(static_cast<uint8_t>(pExec->m_ExecInt[0]),
+					static_cast<uint32_t>(pExec->m_ExecInt[1]));
 				break;
 
 			case EXEC_CHANGE_MANNER:
@@ -12769,6 +12724,64 @@ bool CUser::RobItem(int itemId, int16_t count)
 
 	Send(sendBuffer, sendIndex);
 	return true;
+}
+
+bool CUser::RobAllItem(int itemId)
+{
+	if (m_pMain->m_ItemTableMap.GetData(itemId) == nullptr)
+		return false;
+
+	int i = SLOT_MAX;
+	for (; i < SLOT_MAX + HAVE_MAX; i++)
+	{
+		if (m_pUserData->m_sItemArray[i].nNum == itemId)
+			break;
+	}
+
+	if (i >= SLOT_MAX + HAVE_MAX)
+		return false;
+
+	_ITEM_DATA& item    = m_pUserData->m_sItemArray[i];
+	item.nNum           = 0;
+	item.sDuration      = 0;
+	item.sCount         = 0;
+	item.byFlag         = 0;
+	item.sTimeRemaining = 0;
+	item.nSerialNum     = 0;
+
+	int sendIndex       = 0;
+	char sendBuffer[256] {};
+	SendItemWeight();
+	SetByte(sendBuffer, WIZ_ITEM_COUNT_CHANGE, sendIndex);
+	SetShort(sendBuffer, 1, sendIndex);
+	SetByte(sendBuffer, 1, sendIndex);
+	SetByte(sendBuffer, i - SLOT_MAX, sendIndex);
+	SetDWORD(sendBuffer, itemId, sendIndex);
+	SetDWORD(sendBuffer, 0, sendIndex);
+	SetByte(sendBuffer, ITEM_COUNT_CHANGE_EXISTING, sendIndex);
+	SetShort(sendBuffer, 0, sendIndex);
+	Send(sendBuffer, sendIndex);
+	return true;
+}
+
+void CUser::RobAllItemParty(int itemId)
+{
+	_PARTY_GROUP* party = m_sPartyIndex != -1 ? m_pMain->m_PartyMap.GetData(m_sPartyIndex)
+											  : nullptr;
+	if (party == nullptr)
+	{
+		RobAllItem(itemId);
+		return;
+	}
+
+	for (int i = 0; i < MAX_PARTY_SIZE; i++)
+	{
+		std::shared_ptr<CUser> member = party->userSocketIds[i] >= 0
+											? m_pMain->GetUserPtr(party->userSocketIds[i])
+											: nullptr;
+		if (member != nullptr)
+			member->RobAllItem(itemId);
+	}
 }
 
 bool CUser::CheckAndRobItems(const std::span<const ItemPair> items, const int gold)
@@ -13782,6 +13795,11 @@ void CUser::ItemUpgrade(char* pBuf)
 		if (!matchedRequiredItems)
 			continue;
 
+		// Low and Middle Class scrolls only take items of their class.
+		if (!ItemUpgradeRules::ScrollsFitItem(
+				itemUpgradeModel->RequiredItem, m_pMain->ItemGrade(originItemId)))
+			continue;
+
 		if (itemUpgradeModel->RequiredCoins > m_pUserData->m_iGold)
 		{
 			SendItemUpgradeFailed(ITEM_UPGRADE_RESULT_NEED_COINS);
@@ -13798,6 +13816,14 @@ void CUser::ItemUpgrade(char* pBuf)
 		return;
 	}
 
+	// With the boost, an upgrade the game marks impossible (0%: the top level) is refused, rather
+	// than a certain failure that destroys the item.
+	if (m_pMain->m_bUpgradeBoost && matchedItemUpgradeModel->GenRate <= 0)
+	{
+		SendItemUpgradeFailed(ITEM_UPGRADE_RESULT_NO_MATCH);
+		return;
+	}
+
 	GoldLose(matchedItemUpgradeModel->RequiredCoins);
 
 	// The outer myrand call officially uses CRandomizer (a state-based randomizer).
@@ -13805,7 +13831,11 @@ void CUser::ItemUpgrade(char* pBuf)
 	// far more frequently than the standard random number generator (which isn't really
 	// a good thing at all).
 	rand           = myrand(0, myrand(9000, 10000));
-	upgradeSuccess = (matchedItemUpgradeModel->GenRate > rand);
+	upgradeSuccess = ItemUpgradeRules::RollSucceeds(
+		m_pMain->m_bUpgradeBoost
+			? ItemUpgradeRules::BoostedGenRate(matchedItemUpgradeModel->GenRate)
+			: matchedItemUpgradeModel->GenRate,
+		rand);
 
 	if (upgradeSuccess)
 	{
@@ -14534,6 +14564,12 @@ void CUser::GameStart(char* pBuf)
 		if (bRecastSavedMagic)
 			ItemMallMagicRecast(false);
 #endif
+
+		// OpenKO: whether the client may offer Genie (auto-hunt).
+		SendGenieAvailable();
+
+		// OpenKO: whether the client may offer the cheats menu, and its settings.
+		SendCheatAvailable();
 	}
 }
 
@@ -14924,6 +14960,356 @@ bool CUser::SaveEvent(e_QuestId questId, e_QuestState questState)
 	}
 
 	return true;
+}
+
+int CUser::GetEmptySlotCount() const
+{
+	int count = 0;
+	for (int i = 0; i < HAVE_MAX; i++)
+	{
+		if (m_pUserData->m_sItemArray[SLOT_MAX + i].nNum == 0)
+			++count;
+	}
+
+	return count;
+}
+
+uint8_t CUser::CheckShoppingMallItemRoom(const model::Item* pTable, int16_t count) const
+{
+	// A countable item goes on its stack, if there is one: it has to fit there.
+	const int pos = GetEmptySlot(pTable->ID, pTable->Countable);
+	if (pos < 0 || pos >= HAVE_MAX)
+		return STORE_BUY_NO_ROOM;
+
+	const _ITEM_DATA& slot = m_pUserData->m_sItemArray[SLOT_MAX + pos];
+	if (pTable->Countable != 0 && slot.nNum == pTable->ID && slot.sCount + count > MAX_ITEM_COUNT)
+		return STORE_BUY_NO_ROOM;
+
+	if ((pTable->Weight * count) + m_iItemWeight > m_iMaxWeight)
+		return STORE_BUY_TOO_HEAVY;
+
+	return STORE_BUY_SUCCESS;
+}
+
+bool CUser::ReadKnightCashAccount(const char* pBuf, int& index, char (&accountId)[MAX_ID_SIZE + 1])
+{
+	const uint8_t accountIdLen = GetByte(pBuf, index);
+	if (accountIdLen == 0 || accountIdLen > MAX_ID_SIZE)
+	{
+		spdlog::error("User::ReadKnightCashAccount: Invalid accountId length [accountIdLen={}]",
+			accountIdLen);
+		return false;
+	}
+
+	GetString(accountId, pBuf, accountIdLen, index);
+	return true;
+}
+
+void CUser::ShoppingMall(char* pBuf)
+{
+	if (GetState() != CONNECTION_STATE_GAMESTART)
+		return;
+
+	int index = 0;
+	switch (GetByte(pBuf, index))
+	{
+		case STORE_OPEN:
+			ShoppingMallOpen();
+			break;
+
+		case STORE_CLOSE:
+			ShoppingMallClose();
+			break;
+
+		case STORE_BUY:
+			ShoppingMallBuy(pBuf + index);
+			break;
+
+		default:
+			break;
+	}
+}
+
+void CUser::ShoppingMallOpen()
+{
+	char sendBuffer[128] {};
+	int sendIndex  = 0;
+	int16_t result = STORE_OPEN_SUCCESS;
+
+	// The official server's checks, in its order. It also turns users away (error -4) for two
+	// fields OpenKO doesn't have.
+	if (m_bResHpType == USER_DEAD || m_pUserData->m_sHp < 1)
+		result = STORE_OPEN_DEAD;
+	else if (m_sExchangeUser != -1)
+		result = STORE_OPEN_TRADING;
+	else if (m_pUserData->m_bZone >= 40 && m_pUserData->m_bZone <= 45)
+		result = STORE_OPEN_ZONE;
+	// Officially also when the store is open already. Here it's opened again then, so that a
+	// client that lost track of it isn't kept out.
+	else if (m_bShoppingMallState == SHOPPING_MALL_OPENING || m_bShoppingMallBuyPending)
+		result = STORE_OPEN_ALREADY_OPEN;
+	else if (GetEmptySlotCount() == 0)
+		result = STORE_OPEN_INVENTORY_FULL;
+	else if (m_pMain->m_ShoppingMallItems.empty())
+		result = STORE_OPEN_UNAVAILABLE;
+
+	if (result != STORE_OPEN_SUCCESS)
+	{
+		SetByte(sendBuffer, WIZ_SHOPPING_MALL, sendIndex);
+		SetByte(sendBuffer, STORE_OPEN, sendIndex);
+		SetShort(sendBuffer, result, sendIndex);
+		Send(sendBuffer, sendIndex);
+		return;
+	}
+
+	// The official server opens the store (a web page) straight away. Here the Knight Cash is
+	// loaded first: RecvKnightCashLoad() opens it.
+	m_bShoppingMallState = SHOPPING_MALL_OPENING;
+	SetByte(sendBuffer, DB_OPENKO_CUSTOM, sendIndex);
+	SetShort(sendBuffer, _socketId, sendIndex);
+	SetByte(sendBuffer, DB_CUSTOM_KNIGHT_CASH_LOAD_REQUEST, sendIndex);
+	SetString1(sendBuffer, m_strAccountID, sendIndex);
+	m_pMain->m_LoggerSendQueue.PutData(sendBuffer, sendIndex);
+}
+
+void CUser::RecvKnightCashLoad(const char* pBuf)
+{
+	int index = 0;
+	char accountId[MAX_ID_SIZE + 1] {};
+	if (!ReadKnightCashAccount(pBuf, index, accountId))
+		return;
+
+	const uint8_t result = GetByte(pBuf, index);
+	const int knightCash = GetInt(pBuf, index);
+
+	// Only for whoever asked: someone else may be on the socket by now.
+	if (m_bShoppingMallState != SHOPPING_MALL_OPENING || strcmp(m_strAccountID, accountId) != 0)
+		return;
+
+	char sendBuffer[MAX_PACKET_SIZE] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_SHOPPING_MALL, sendIndex);
+	SetByte(sendBuffer, STORE_OPEN, sendIndex);
+
+	if (result != KNIGHT_CASH_SUCCESS)
+	{
+		m_bShoppingMallState = SHOPPING_MALL_CLOSED;
+		SetShort(sendBuffer, STORE_OPEN_UNAVAILABLE, sendIndex);
+		Send(sendBuffer, sendIndex);
+		return;
+	}
+
+	m_bShoppingMallState = SHOPPING_MALL_OPEN;
+	m_iKnightCash        = knightCash;
+
+	// As many items as the packet holds: 10 bytes each.
+	const int itemCount  = std::min(
+        static_cast<int>(m_pMain->m_ShoppingMallItems.size()), (MAX_PACKET_SIZE - 64) / 10);
+	SetShort(sendBuffer, STORE_OPEN_SUCCESS, sendIndex);
+	SetShort(sendBuffer, GetEmptySlotCount(), sendIndex);
+	SetInt(sendBuffer, m_iKnightCash, sendIndex);
+	SetShort(sendBuffer, itemCount, sendIndex);
+	for (int i = 0; i < itemCount; i++)
+	{
+		const _SHOPPING_MALL_ITEM& item = m_pMain->m_ShoppingMallItems[i];
+		SetInt(sendBuffer, item.itemId, sendIndex);
+		SetShort(sendBuffer, item.count, sendIndex);
+		SetInt(sendBuffer, item.price, sendIndex);
+	}
+
+	Send(sendBuffer, sendIndex);
+}
+
+void CUser::ShoppingMallClose()
+{
+	if (m_bShoppingMallState == SHOPPING_MALL_CLOSED)
+		return;
+
+	m_bShoppingMallState = SHOPPING_MALL_CLOSED;
+
+	// The official answer: the inventory, which the purchases were put in. Here they're given as
+	// they're bought, so it's the inventory the client has already.
+	char sendBuffer[512] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_SHOPPING_MALL, sendIndex);
+	SetByte(sendBuffer, STORE_CLOSE, sendIndex);
+	for (int i = 0; i < HAVE_MAX; i++)
+	{
+		const _ITEM_DATA& item = m_pUserData->m_sItemArray[SLOT_MAX + i];
+		SetInt(sendBuffer, item.nNum, sendIndex);
+		SetShort(sendBuffer, item.sDuration, sendIndex);
+		SetShort(sendBuffer, item.sCount, sendIndex);
+		SetByte(sendBuffer, item.byFlag, sendIndex);
+		SetShort(sendBuffer, item.sTimeRemaining, sendIndex);
+	}
+
+	Send(sendBuffer, sendIndex);
+}
+
+void CUser::ShoppingMallBuy(char* pBuf)
+{
+	int index                        = 0;
+	const int itemId                 = GetInt(pBuf, index);
+	const int16_t count              = static_cast<int16_t>(GetShort(pBuf, index));
+
+	const _SHOPPING_MALL_ITEM* pItem = m_pMain->GetShoppingMallItem(itemId);
+	const model::Item* pTable        = m_pMain->m_ItemTableMap.GetData(itemId);
+
+	uint8_t result                   = STORE_BUY_SUCCESS;
+	if (m_bShoppingMallState != SHOPPING_MALL_OPEN || m_bShoppingMallBuyPending || pItem == nullptr
+		|| pTable == nullptr || count != pItem->count)
+		result = STORE_BUY_INVALID;
+	else
+		result = CheckShoppingMallItemRoom(pTable, count);
+
+	if (result != STORE_BUY_SUCCESS)
+	{
+		SendShoppingMallBuyResult(result);
+		return;
+	}
+
+	// Aujard takes the price, then ShoppingMallBuyResult() gives the item.
+	m_bShoppingMallBuyPending = true;
+
+	char sendBuffer[128] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, DB_OPENKO_CUSTOM, sendIndex);
+	SetShort(sendBuffer, _socketId, sendIndex);
+	SetByte(sendBuffer, DB_CUSTOM_KNIGHT_CASH_SPEND_REQUEST, sendIndex);
+	SetString1(sendBuffer, m_strAccountID, sendIndex);
+	SetInt(sendBuffer, itemId, sendIndex);
+	SetShort(sendBuffer, count, sendIndex);
+	SetInt(sendBuffer, pItem->price, sendIndex);
+	m_pMain->m_LoggerSendQueue.PutData(sendBuffer, sendIndex);
+}
+
+void CUser::ShoppingMallBuyResult(
+	uint8_t result, int itemId, int16_t count, int price, int knightCash)
+{
+	m_bShoppingMallBuyPending = false;
+	m_iKnightCash             = knightCash;
+
+	uint8_t buyResult         = STORE_BUY_SUCCESS;
+	if (result == KNIGHT_CASH_NOT_ENOUGH)
+	{
+		buyResult = STORE_BUY_NO_CASH;
+	}
+	else if (result != KNIGHT_CASH_SUCCESS)
+	{
+		buyResult = STORE_BUY_UNAVAILABLE;
+	}
+	else
+	{
+		const model::Item* pTable = m_pMain->m_ItemTableMap.GetData(itemId);
+		buyResult                 = pTable != nullptr ? CheckShoppingMallItemRoom(pTable, count)
+													  : STORE_BUY_INVALID;
+		if (buyResult == STORE_BUY_SUCCESS && !GiveItem(itemId, count))
+			buyResult = STORE_BUY_NO_ROOM;
+
+		// It no longer fits (the inventory changed while Aujard was busy): the Knight Cash
+		// goes back.
+		if (buyResult != STORE_BUY_SUCCESS)
+		{
+			m_pMain->KnightCashAddToAgent(-1, m_strAccountID, price, false);
+			m_iKnightCash += price;
+		}
+		else
+		{
+			spdlog::info("User::ShoppingMallBuyResult: bought [charId={} itemId={} count={} "
+						 "price={} knightCash={}]",
+				m_pUserData->m_id, itemId, count, price, m_iKnightCash);
+		}
+	}
+
+	SendShoppingMallBuyResult(buyResult);
+}
+
+void CUser::SendShoppingMallBuyResult(uint8_t result)
+{
+	char sendBuffer[32] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_SHOPPING_MALL, sendIndex);
+	SetByte(sendBuffer, STORE_BUY, sendIndex);
+	SetByte(sendBuffer, result, sendIndex);
+	SetInt(sendBuffer, m_iKnightCash, sendIndex);
+	SetShort(sendBuffer, GetEmptySlotCount(), sendIndex);
+	Send(sendBuffer, sendIndex);
+}
+
+void CUser::AddKnightCash(int amount)
+{
+	if (amount <= 0 || m_strAccountID[0] == '\0')
+		return;
+
+	m_pMain->KnightCashAddToAgent(_socketId, m_strAccountID, amount, true);
+}
+
+void CUser::RecvKnightCashAdd(const char* pBuf)
+{
+	int index = 0;
+	char accountId[MAX_ID_SIZE + 1] {};
+	if (!ReadKnightCashAccount(pBuf, index, accountId))
+		return;
+
+	const uint8_t result = GetByte(pBuf, index);
+	const int amount     = GetInt(pBuf, index);
+	const uint8_t notify = GetByte(pBuf, index);
+	const int knightCash = GetInt(pBuf, index);
+	if (result != KNIGHT_CASH_SUCCESS || strcmp(m_strAccountID, accountId) != 0)
+		return;
+
+	m_iKnightCash = knightCash;
+	if (notify == 0)
+		return;
+
+	char sendBuffer[32] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_SHOPPING_MALL, sendIndex);
+	SetByte(sendBuffer, STORE_KNIGHT_CASH, sendIndex);
+	SetInt(sendBuffer, amount, sendIndex);
+	SetInt(sendBuffer, knightCash, sendIndex);
+	Send(sendBuffer, sendIndex);
+}
+
+void CUser::SendGenieAvailable()
+{
+	char sendBuffer[8] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_GENIE, sendIndex);
+	SetByte(sendBuffer, GENIE_AVAILABLE, sendIndex);
+	SetByte(sendBuffer, m_pMain->m_bGenieEnabled ? 1 : 0, sendIndex);
+	Send(sendBuffer, sendIndex);
+}
+
+void CUser::Genie(char* pBuf)
+{
+	if (GetState() != CONNECTION_STATE_GAMESTART)
+		return;
+
+	int index = 0;
+	switch (GetByte(pBuf, index))
+	{
+		case GENIE_START:
+		{
+			m_bGenieActive = m_pMain->m_bGenieEnabled && m_bResHpType != USER_DEAD
+							 && m_pUserData->m_sHp > 0;
+
+			char sendBuffer[8] {};
+			int sendIndex = 0;
+			SetByte(sendBuffer, WIZ_GENIE, sendIndex);
+			SetByte(sendBuffer, GENIE_START, sendIndex);
+			SetByte(sendBuffer, m_bGenieActive ? 1 : 0, sendIndex);
+			Send(sendBuffer, sendIndex);
+		}
+		break;
+
+		case GENIE_STOP:
+			m_bGenieActive = false;
+			break;
+
+		default:
+			break;
+	}
 }
 
 } // namespace Ebenezer

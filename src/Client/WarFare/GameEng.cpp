@@ -9,6 +9,7 @@
 
 #include <N3Base/N3Camera.h>
 #include <N3Base/N3Light.h>
+#include <N3Base/Platform/Shell.h>
 
 constexpr float LIGHTNING_DURATION = 2.0f;
 
@@ -19,8 +20,8 @@ CGameEng::CGameEng()
 	// 프로그램이 실행된 경로..
 	char szBuf[_MAX_PATH];
 	char szDrive[_MAX_DRIVE], szDir[_MAX_DIR];
-	::GetModuleFileName(nullptr, szBuf, _MAX_PATH);
-	_splitpath(szBuf, szDrive, szDir, nullptr, nullptr);
+	std::string szExePath = Platform::GetExecutablePath();
+	_splitpath(szExePath.c_str(), szDrive, szDir, nullptr, nullptr);
 	_makepath(szBuf, szDrive, szDir, nullptr, nullptr);
 
 	///////////////////////////////////////////////////////////////

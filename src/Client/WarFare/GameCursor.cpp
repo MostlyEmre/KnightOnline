@@ -10,6 +10,7 @@
 #include "ClientResourceFormatter.h"
 
 #include <N3Base/N3UIImage.h>
+#include <N3Base/Platform/Input.h>
 
 CGameCursor::CGameCursor()
 {
@@ -27,7 +28,7 @@ CGameCursor::CGameCursor()
 CGameCursor::~CGameCursor()
 {
 	if (m_hCursor)
-		::SetCursor(m_hCursor);
+		Platform::SetCursor(m_hCursor);
 }
 
 bool CGameCursor::Load(File& file)
@@ -35,8 +36,8 @@ bool CGameCursor::Load(File& file)
 	if (!CN3UIBase::Load(file))
 		return false;
 
-	m_hCursor = ::GetCursor();
-	::SetCursor(nullptr);
+	m_hCursor = Platform::GetCursor();
+	Platform::SetCursor(nullptr);
 
 	std::string szID;
 	for (int i = 0; i < CURSOR_COUNT; i++)
@@ -93,9 +94,9 @@ void CGameCursor::Render()
 
 void CGameCursor::Tick()
 {
-	HCURSOR hCursor = ::GetCursor();
+	HCURSOR hCursor = Platform::GetCursor();
 	if (hCursor)
-		::SetCursor(nullptr);
+		Platform::SetCursor(nullptr);
 
 	POINT ptCur = CGameProcedure::s_pLocalInput->MouseGetPos();
 	for (int i = 0; i < CURSOR_COUNT; i++)

@@ -3,16 +3,15 @@
 
 #include "StdAfx.h"
 #include "LocalInput.h"
-#include <mmsystem.h>
 
 #include "GameProcMain.h"
 #include "GameEng.h"
 
+#include <N3Base/Platform/Time.h>
+#include <N3Base/Platform/Window.h>
+
 CLocalInput::CLocalInput()
 {
-	m_lpDI          = nullptr;
-	m_lpDIDKeyboard = nullptr;
-
 	m_hWnd          = nullptr;
 
 	m_bNoKeyDown    = FALSE;
@@ -40,19 +39,10 @@ CLocalInput::CLocalInput()
 CLocalInput::~CLocalInput()
 {
 	// shutdown keyboard
-	if (m_lpDIDKeyboard != nullptr)
+	if (m_Keyboard.IsCreated())
 	{
 		UnacquireKeyboard();
-
-		m_lpDIDKeyboard->Release();
-		m_lpDIDKeyboard = nullptr;
-	}
-
-	// kill directinput
-	if (m_lpDI != nullptr)
-	{
-		m_lpDI->Release();
-		m_lpDI = nullptr;
+		m_Keyboard.Release();
 	}
 }
 
@@ -62,24 +52,13 @@ CLocalInput::~CLocalInput()
 //////////////////////////////////////////////////////////////////////////////////
 BOOL CLocalInput::Init(HINSTANCE hInst, HWND hWnd)
 {
-	HRESULT rval = DI_OK;
-
-	m_hWnd       = hWnd; // 윈도우 핸들 기억..
-
-	rval         = DirectInput8Create(hInst, DIRECTINPUT_VERSION, IID_IDirectInput8, (void**) &m_lpDI, nullptr);
-	if (rval != DI_OK)
-		return FALSE;
+	m_hWnd = hWnd; // 윈도우 핸들 기억..
 
 	// Create the keyboard device
-	rval = m_lpDI->CreateDevice(GUID_SysKeyboard, &m_lpDIDKeyboard, nullptr);
-	if (rval == DI_OK)
-	{
-		m_lpDIDKeyboard->SetDataFormat(&c_dfDIKeyboard);
-		m_lpDIDKeyboard->SetCooperativeLevel(hWnd, DISCL_NONEXCLUSIVE | DISCL_FOREGROUND | DISCL_NOWINKEY);
+	if (!m_Keyboard.Init(hInst, hWnd))
+		return FALSE;
 
-		AcquireKeyboard();
-	}
-
+	AcquireKeyboard();
 	return TRUE;
 }
 
@@ -117,7 +96,7 @@ void CLocalInput::MouseSetPos(int x, int y)
 /////////////////////////////////////////////////////////////////////////////////////////////
 BOOL CLocalInput::KeyboardGetKeyState(int nDIKey)
 {
-	if (nDIKey < 0 || nDIKey >= NUMDIKEYS)
+	if (m_bMuted || nDIKey < 0 || nDIKey >= NUMDIKEYS)
 		return FALSE;
 
 	return m_byCurKeys[nDIKey];
@@ -128,16 +107,11 @@ BOOL CLocalInput::KeyboardGetKeyState(int nDIKey)
 /////////////////////////////////////////////////////////////////////////////////////////////
 void CLocalInput::AcquireKeyboard()
 {
-	if (m_lpDIDKeyboard != nullptr)
+	if (m_Keyboard.Acquire())
 	{
-		HRESULT rval = m_lpDIDKeyboard->Acquire();
-		//		if (rval != DI_OK) MessageBox(::GetActiveWindow(), "Acquire Keyboard Failed.", "DirectInput", MB_OK);
-		if (rval == DI_OK || rval == S_FALSE)
-		{
-			//			m_bKeyboard = TRUE;
-			KeyboardFlushData();
-			return;
-		}
+		//			m_bKeyboard = TRUE;
+		KeyboardFlushData();
+		return;
 	}
 	//		m_bKeyboard = FALSE;
 }
@@ -150,8 +124,7 @@ void CLocalInput::UnacquireKeyboard()
 	KeyboardFlushData();
 	//	m_bKeyboard = FALSE;
 
-	if (m_lpDIDKeyboard != nullptr)
-		m_lpDIDKeyboard->Unacquire();
+	m_Keyboard.Unacquire();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -160,9 +133,7 @@ void CLocalInput::UnacquireKeyboard()
 // 되도록이면 전체 프로시저 돌때 한번씩만 도는게 좋다.. 여러번 하면 혼란이 올수도 있다.
 void CLocalInput::Tick()
 {
-	HRESULT err     = DI_OK;
-
-	HWND hWndActive = ::GetActiveWindow(); // 포커싱되었을때만...
+	HWND hWndActive = Platform::GetActiveWindow(); // 포커싱되었을때만...
 	if (hWndActive != m_hWnd)
 		return;
 
@@ -171,10 +142,9 @@ void CLocalInput::Tick()
 	///////////////////////
 	//	if(m_bKeyboard)
 	//	{
-	memcpy(m_byOldKeys, m_byCurKeys, NUMDIKEYS);                   // 전의 키 상태 기록
+	memcpy(m_byOldKeys, m_byCurKeys, NUMDIKEYS); // 전의 키 상태 기록
 
-	err = m_lpDIDKeyboard->GetDeviceState(NUMDIKEYS, m_byCurKeys); // 현재 키 상태 기록
-	if (err != DI_OK)
+	if (!m_Keyboard.GetState(m_byCurKeys))       // 현재 키 상태 기록
 		AcquireKeyboard();
 	else
 	{
@@ -205,11 +175,11 @@ void CLocalInput::Tick()
 	m_ptOldMouse = m_ptCurMouse; // 일단 전의 것 복사...
 
 	RECT rcClient;
-	::GetClientRect(m_hWnd, &rcClient);
-	::GetCursorPos(&m_ptCurMouse);           // 좀 이상해서... 그냥 시스템 마우스 커서 위치 가져오기
-	::ScreenToClient(m_hWnd, &m_ptCurMouse); // 클라이언트 영역으로 변환
+	Platform::GetClientRect(m_hWnd, &rcClient);
+	Platform::GetCursorPos(&m_ptCurMouse);           // 좀 이상해서... 그냥 시스템 마우스 커서 위치 가져오기
+	Platform::ScreenToClient(m_hWnd, &m_ptCurMouse); // 클라이언트 영역으로 변환
 
-	if (PtInRect(&rcClient, m_ptCurMouse))   //  && GetFocus() == m_hWnd) // 스크린 영역 밖에 있거나 포커스가 가있지 않으면..
+	if (PtInRect(&rcClient, m_ptCurMouse))           //  && GetFocus() == m_hWnd) // 스크린 영역 밖에 있거나 포커스가 가있지 않으면..
 	{
 		// 마우스 버튼 상태 보관.
 		m_nMouseFlagOld = m_nMouseFlag;
@@ -245,29 +215,29 @@ void CLocalInput::Tick()
 		if ((m_nMouseFlagOld & MOUSE_RBDOWN) && !(m_nMouseFlag & MOUSE_RBDOWN))
 			m_nMouseFlag |= MOUSE_RBCLICKED;
 
-		static DWORD dwDblClk = GetDoubleClickTime(); // 윈도우의 더블 클릭시간을 가져오고..
-		if (m_nMouseFlag & MOUSE_LBCLICKED)           // 왼쪽 더블 클릭 감지
+		static DWORD dwDblClk = Platform::GetDoubleClickTime(); // 윈도우의 더블 클릭시간을 가져오고..
+		if (m_nMouseFlag & MOUSE_LBCLICKED)                     // 왼쪽 더블 클릭 감지
 		{
 			static DWORD dwCLicked = 0;
-			if (timeGetTime() < dwCLicked + dwDblClk)
+			if (Platform::TimeGetTime() < dwCLicked + dwDblClk)
 				m_nMouseFlag |= MOUSE_LBDBLCLK;
-			dwCLicked = timeGetTime();
+			dwCLicked = Platform::TimeGetTime();
 		}
 
 		if (m_nMouseFlag & MOUSE_MBCLICKED) // 왼쪽 더블 클릭 감지
 		{
 			static DWORD dwCLicked = 0;
-			if (timeGetTime() < dwCLicked + dwDblClk)
+			if (Platform::TimeGetTime() < dwCLicked + dwDblClk)
 				m_nMouseFlag |= MOUSE_MBDBLCLK;
-			dwCLicked = timeGetTime();
+			dwCLicked = Platform::TimeGetTime();
 		}
 
 		if (m_nMouseFlag & MOUSE_RBCLICKED) // 왼쪽 더블 클릭 감지
 		{
 			static DWORD dwCLicked = 0;
-			if (timeGetTime() < dwCLicked + dwDblClk)
+			if (Platform::TimeGetTime() < dwCLicked + dwDblClk)
 				m_nMouseFlag |= MOUSE_RBDBLCLK;
-			dwCLicked = timeGetTime();
+			dwCLicked = Platform::TimeGetTime();
 		}
 
 		// 드래그 영역 처리

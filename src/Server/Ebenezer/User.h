@@ -15,7 +15,9 @@
 #include <shared/JvCryption.h>
 #include <shared-server/TcpServerSocket.h>
 
+#include <array>
 #include <list>
+#include <optional>
 #include <span>
 
 namespace Ebenezer
@@ -214,6 +216,13 @@ public:
 	// Applicable only to exchange type 101.
 	uint8_t m_byLastExchangeNum              = 0;
 
+	// Power-up Store (WIZ_SHOPPING_MALL)
+	uint8_t m_bShoppingMallState             = SHOPPING_MALL_CLOSED;
+	bool m_bShoppingMallBuyPending           = false; // waiting on Aujard for a purchase
+	int m_iKnightCash                        = 0;     // as Aujard last told it
+
+	bool m_bGenieActive                      = false; // Genie (auto-hunt) is running
+
 	// Game socket specific:
 	_REGION_BUFFER* _regionBuffer            = nullptr;
 
@@ -287,6 +296,163 @@ public:
 	/// \return true when user stipend successfully paid, false otherwise
 	bool HandleUserStipendResponse(const char* buffer);
 
+	/// \brief Handles WIZ_SHOPPING_MALL: the Power-up Store
+	/// \see e_StoreOpcode
+	void ShoppingMall(char* pBuf);
+
+	/// \brief STORE_OPEN: with the official server's checks, then the Knight Cash from Aujard
+	void ShoppingMallOpen();
+
+	/// \brief STORE_CLOSE: answers with the inventory, as the official server does
+	void ShoppingMallClose();
+
+	/// \brief STORE_BUY: checks there's room for the item, then has Aujard take its price
+	void ShoppingMallBuy(char* pBuf);
+
+	/// \brief Finishes a purchase once Aujard has answered: gives the item, or the Knight Cash
+	/// back if it no longer fits
+	/// \param result e_KnightCashResult from DB_CUSTOM_KNIGHT_CASH_SPEND_RESPONSE
+	void ShoppingMallBuyResult(
+		uint8_t result, int itemId, int16_t count, int price, int knightCash);
+
+	/// \brief Handles DB_CUSTOM_KNIGHT_CASH_LOAD_RESPONSE: opens the store
+	void RecvKnightCashLoad(const char* pBuf);
+
+	/// \brief Handles DB_CUSTOM_KNIGHT_CASH_ADD_RESPONSE: tells the user what they earned
+	void RecvKnightCashAdd(const char* pBuf);
+
+	/// \brief Knight Cash earned by playing, added to the user's account
+	void AddKnightCash(int amount);
+
+	/// \return the number of empty inventory slots
+	int GetEmptySlotCount() const;
+
+	/// \brief Handles WIZ_GENIE: Genie (auto-hunt) starting and stopping
+	/// \see e_GenieOpcode
+	void Genie(char* pBuf);
+
+	/// \brief Tells the client whether Genie is allowed (GENIE_AVAILABLE)
+	void SendGenieAvailable();
+
+	/// \brief Handles WIZ_CHEAT: the cheats menu's settings and requests
+	/// \param len the payload's length, without the opcode
+	/// \see e_CheatOpcode
+	void Cheat(char* pBuf, int len);
+
+	/// \brief Tells the client whether cheats are allowed (CHEAT_AVAILABLE) and, when they are, the
+	/// current settings
+	void SendCheatAvailable();
+
+	/// \brief Answers a cheat request: [CHEAT_RESULT][request][e_CheatResult]
+	void SendCheatResult(uint8_t opcode, uint8_t result);
+
+	/// \brief EXP gained from a monster or a quest, multiplied by the cheats menu, levelling up as
+	/// many times as it reaches
+	void ExpGain(int base);
+
+	/// \brief National Points gained from a monster, multiplied by the cheats menu
+	void LoyaltyGain(int base);
+
+	/// \brief Tells the client its National Points (WIZ_LOYALTY_CHANGE, national)
+	void SendLoyaltyChange();
+
+	/// \returns the coins a pickup of `count` gives, multiplied by the cheats menu
+	int CoinPickupAmount(int count) const;
+
+	/// \brief Tells the client its attack, defence, max weight, HP, MP, stat bonuses and resistances
+	/// (WIZ_ITEM_MOVE, 1)
+	void SendStatsUpdate();
+
+	/// \returns whether a skill's MP can be paid: always with the cheats menu's infinite MP
+	bool CanPayMana(int cost) const;
+
+	/// \brief Pays a skill's MP, unless the cheats menu's infinite MP is on
+	void PayMana(int cost);
+
+	/// \returns the stats a race starts with (strength, stamina, dexterity, intelligence,
+	/// charisma), or nullopt for an unknown race
+	static std::optional<std::array<uint8_t, 5>> RaceBaseStats(uint8_t race);
+
+	/// \brief Resets the stats to the race's and gives back every point, then tells the client
+	/// (CLASS_RESET_STAT_REQ). No checks, no cost.
+	void ApplyStatPointReset();
+
+	/// \brief Gives back every skill point, then tells the client (CLASS_RESET_SKILL_REQ). No checks,
+	/// no cost.
+	void ApplySkillPointReset();
+
+	/// \brief Tells the region the user's level, free points, EXP, HP, MP and weight
+	/// (WIZ_LEVEL_CHANGE)
+	void SendLevelChangeInfo();
+
+	/// \brief Cheats menu: sets the level. Going up grants the game's points for those levels;
+	/// going down resets stats and skills. EXP goes to the start of the level.
+	/// \returns an e_CheatResult
+	uint8_t CheatSetLevel(int level);
+
+	/// \brief Cheats menu: adds POINTS_PER_PRESS stat (kind 0) or skill (kind 1) points, up to 255
+	uint8_t CheatAddPoints(uint8_t kind);
+
+	/// \brief Cheats menu: resets stats (kind 0) or skills (kind 1) for free, even with gear on
+	uint8_t CheatResetPoints(uint8_t kind);
+
+	/// \brief Cheats menu: fills HP and MP
+	uint8_t CheatRefill();
+
+	/// \brief Cheats menu: sets coins (kind 0), National Points (1) or Knight Cash (2) to one of
+	/// the steps
+	uint8_t CheatSetCurrency(uint8_t kind, uint32_t value);
+
+	/// \brief Cheats menu: tells the client which IDs of an item exist (CHEAT_ITEM_VARIANTS)
+	void SendCheatItemVariants(int baseId);
+
+	/// \brief Cheats menu: gives an item: a stack of a countable item, or one per free bag slot
+	uint8_t CheatGiveItem(int itemId, int count);
+
+	/// \brief Cheats menu: swaps an equipped item for the same item at another +level, keeping its
+	/// share of durability, and tells the client (CHEAT_SET_PLUS)
+	uint8_t CheatSetPlus(uint8_t slot, int plus);
+
+	/// \brief Cheats menu: repairs every item, and tells the client (CHEAT_REPAIR_ALL)
+	uint8_t CheatRepairAll();
+
+	/// \brief Moves the user to another zone, without ZoneChange's nation, level and war rules
+	void ZoneChangeUnchecked(int zone, float x, float z);
+
+	/// \brief Cheats menu: teleports to a zone on Cheats::ZONES, at its start position for the
+	/// user's nation, ignoring the zone rules
+	uint8_t CheatTeleportZone(int zone);
+
+	/// \brief Cheats menu: tells the client the NPCs (not monsters) whose names contain the query,
+	/// up to 9 (CHEAT_FIND_NPC)
+	void SendCheatNpcSearch(std::string_view query);
+
+	/// \brief Cheats menu: teleports next to an NPC found by SendCheatNpcSearch
+	uint8_t CheatTeleportNpc(int npcId);
+
+	/// \brief Cheats menu: asks AIServer to kill the monsters around the user
+	uint8_t CheatKillAround();
+
+	/// \brief Builds the request: [AG_CHEAT_KILL_AROUND][i16 user ID].
+	/// \returns its length
+	int BuildKillAroundAI(char* buf) const;
+
+	/// \brief Uses up a skill's arrows, potion or scroll, unless the cheats menu keeps consumables;
+	/// either way they must be there.
+	/// \returns false when there aren't enough
+	bool UseConsumable(int itemId, int count);
+
+	/// \brief Whether a Power-up Store item fits in the inventory
+	/// \return STORE_BUY_SUCCESS if it does, otherwise STORE_BUY_NO_ROOM or STORE_BUY_TOO_HEAVY
+	uint8_t CheckShoppingMallItemRoom(const model::Item* pTable, int16_t count) const;
+
+	void SendShoppingMallBuyResult(uint8_t result);
+
+	/// \brief Reads the account a DB_CUSTOM_KNIGHT_CASH_* response is for
+	/// \return true when successful, false otherwise
+	static bool ReadKnightCashAccount(
+		const char* pBuf, int& index, char (&accountId)[MAX_ID_SIZE + 1]);
+
 	/// \brief Checks to see if a user's clan ranking is between minRank and maxRank (inclusive).  If
 	/// the user's clan is successfully loaded, syncs the user's m_byKnightsRank value with the clan's m_byRanking
 	/// \return true when a user's clan ranking is in range, false otherwise
@@ -350,6 +516,15 @@ public:
 	/// \brief Attempts to count number of itemId from the user
 	/// \return true when all items were successfully taken, false otherwise
 	bool RobItem(int itemId, int16_t count);
+
+	/// \brief Removes the first stack of itemId from the user's inventory, whatever its count
+	/// (officially, what DESTROY_ITEM does)
+	/// \return false when there's no such item
+	bool RobAllItem(int itemId);
+
+	/// \brief ROB_ALLITEM_PARTY: RobAllItem() for everyone in the user's party, or the user alone
+	/// without one.
+	void RobAllItemParty(int itemId);
 
 	/// \brief Attempts to remove all the items from the user in the input array
 	/// \return true when all items were successfully taken, false otherwise
@@ -562,8 +737,21 @@ public:
 	void ChangeMannerPoint(int loyaltyChange);
 
 	void StateChange(char* pBuf);
+
+	/// \brief STATE_CHANGE: a state change made by a quest. Officially it accepts more state
+	/// types than the client's request (StateChange()), such as 8, the beginner helper event's
+	/// "chicken" flag.
+	void StateChangeServerDirect(uint8_t type, uint32_t value);
+
+	/// \brief Tells the region about one of the user's states.
+	void SendStateChange(uint8_t type, uint32_t value);
+
 	void PointChange(char* pBuf);
 	void ZoneChange(int zone, float x, float z);
+
+	/// \brief ZONE_CHANGE_PARTY: ZoneChange() for everyone alive in the user's party, or the user
+	/// alone without one.
+	void ZoneChangeParty(int zone, float x, float z);
 	void ItemGet(char* pBuf);
 	static bool IsValidName(const char* name);
 	void AllCharInfoToAgent();

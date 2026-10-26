@@ -11,6 +11,7 @@
 #include "PacketDef.h"
 
 #include <N3Base/N3Base.h>
+#include <N3Base/Platform/Socket.h>
 #include <shared/ExpandableCircularBuffer.h>
 
 #define _CRYPTION // 암호화 사용
@@ -22,7 +23,6 @@
 #include <string>
 #include <vector>
 
-inline constexpr int WM_SOCKETMSG  = (WM_USER + 1);
 inline constexpr int SEND_BUF_SIZE = 262144; // 최대 버퍼..
 inline constexpr int RECV_BUF_SIZE = 262144; // 최대 버퍼..
 
@@ -56,7 +56,7 @@ public:
 class CAPISocket
 {
 protected:
-	SOCKET m_hSocket;
+	Platform::TcpSocket m_Socket;
 
 	HWND m_hWndTarget;
 	std::string m_szIP;

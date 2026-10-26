@@ -51,6 +51,8 @@ public:
 		fFrmStrike1        = 0.0f;
 	}
 
+	__AnimData(const __AnimData& other) = default;
+
 	__AnimData& operator=(const __AnimData& other)
 	{
 		if (this == &other)

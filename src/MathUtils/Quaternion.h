@@ -9,8 +9,9 @@ struct __Vector3;
 struct __Quaternion
 {
 public:
-	__Quaternion()                    = default;
-	__Quaternion(const __Quaternion&) = default;
+	__Quaternion()                               = default;
+	__Quaternion(const __Quaternion&)            = default;
+	__Quaternion& operator=(const __Quaternion&) = default;
 	__Quaternion(const __Matrix44& mtx);
 	__Quaternion(float fX, float fY, float fZ, float fW);
 

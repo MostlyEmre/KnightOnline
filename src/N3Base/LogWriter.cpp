@@ -5,8 +5,10 @@
 #include "StdAfxBase.h"
 #include "N3Base.h"
 #include "LogWriter.h"
+#include "Platform/Time.h"
 
 #include <FileIO/FileWriter.h>
+#include <FileIO/PathResolver.h>
 
 std::string CLogWriter::s_szFileName;
 
@@ -40,7 +42,7 @@ void CLogWriter::Open(const std::string& szFN)
 		file.Close();
 
 		std::error_code ec;
-		std::filesystem::remove(s_szFileName, ec);
+		std::filesystem::remove(PathResolver::ResolveForWriting(s_szFileName), ec);
 
 		if (!file.Create(s_szFileName))
 			return;
@@ -50,7 +52,7 @@ void CLogWriter::Open(const std::string& szFN)
 
 	std::string buff;
 	SYSTEMTIME time;
-	GetLocalTime(&time);
+	Platform::GetLocalTime(&time);
 
 	buff = "---------------------------------------------------------------------------\r\n";
 	file.Write(buff.data(), buff.length());
@@ -73,7 +75,7 @@ void CLogWriter::Close()
 
 	std::string buff;
 	SYSTEMTIME time;
-	GetLocalTime(&time);
+	Platform::GetLocalTime(&time);
 
 	buff = fmt::format("// End writing log... [{:02}/{:02} {:02}:{:02}]\r\n", time.wMonth,
 		time.wDay, time.wHour, time.wMinute);
@@ -96,7 +98,7 @@ void CLogWriter::Write(const std::string_view message)
 	}
 
 	SYSTEMTIME time;
-	GetLocalTime(&time);
+	Platform::GetLocalTime(&time);
 
 	std::string outputMessage = fmt::format(
 		"    [{:02}:{:02}:{:02}] {}\r\n", time.wHour, time.wMinute, time.wSecond, message);

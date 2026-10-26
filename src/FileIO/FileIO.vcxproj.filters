@@ -24,12 +24,24 @@
     <ClInclude Include="FileWriter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="MemoryReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PathResolver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FileReader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="FileWriter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoryReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PathResolver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

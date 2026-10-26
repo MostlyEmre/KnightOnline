@@ -65,7 +65,7 @@
 #include <cstdio>
 #include <string>
 
-#include <windows.h>
+#include "../../N3Base/Platform/Types.h"
 
 enum e_JpegFileError : uint8_t
 {
@@ -141,18 +141,10 @@ public:
 	// swap Red and Blue bytes
 	// in-place
 
-	BOOL BGRFromRGB(BYTE* buf, // input buf
-		UINT widthPix,         // width in pixels
-		UINT height);          // lines
+	BOOL BGRFromRGB(BYTE* buf,            // input buf
+		UINT widthPix,                    // width in pixels
+		UINT height);                     // lines
 
-	int PalEntriesOnDevice(HDC hDC);
-	WORD DIBNumColors(LPSTR lpDIB);
-	WORD PaletteSize(LPSTR lpDIB);
-	HANDLE BitmapToDIB(HBITMAP hBitmap, HPALETTE hPal);
-	HBITMAP CopyScreenToBitmap(LPRECT lpRect);
-	HANDLE CopyScreenToDIB(LPRECT lpRect);
-	HANDLE AllocRoomForDIB(BITMAPINFOHEADER bi, HBITMAP hBitmap);
-	HPALETTE GetSystemPalette(void);
 	BOOL JpegFromDib(HANDLE hDib,         // Handle to DIB
 		int nQuality,                     // JPEG quality (0-100)
 		const std::string& csJpeg,        // Pathname to jpeg file
@@ -162,15 +154,17 @@ public:
 		const std::string& csJpeg,        // Pathname to jpeg file
 		const char** pcsMsg);             // Error msg to return
 
+#if defined(_WIN32)
 	BOOL SaveFromDecryptToJpeg(const std::string& csKsc, const std::string& csJpeg);
 
 	virtual BOOL DecryptJPEG(const std::string& csJpeg);
+#endif
 	virtual BOOL LoadJpegFile(const std::string& /*csJpeg*/)
 	{
 		return TRUE;
 	}
 
-	virtual void DrawImage(HDC hDC)
+	virtual void DrawImage(HDC /*hDC*/)
 	{
 	}
 

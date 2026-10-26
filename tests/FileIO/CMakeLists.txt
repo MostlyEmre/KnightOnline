@@ -2,7 +2,9 @@ add_executable(FileIO.Tests
   FileReader_test.cpp
   FileReaderSetup_test.cpp
   FileWriter_test.cpp
-  FileWriterSetup_test.cpp)
+  FileWriterSetup_test.cpp
+  MemoryReader_test.cpp
+  PathResolver_test.cpp)
 
 set_target_properties(FileIO.Tests PROPERTIES
   CXX_SCAN_FOR_MODULES OFF

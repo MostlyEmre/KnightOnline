@@ -12,6 +12,7 @@
 #include "PlayerOtherMgr.h"
 #include "PacketDef.h"
 #include "APISocket.h"
+#include <N3Base/Platform/FileSystem.h>
 #include "text_resources.h"
 
 #include <N3Base/N3UIString.h>
@@ -998,7 +999,7 @@ void CUIKnights::UpdateKnightsGrade(int iVal)
 			m_pImage_Grade[iVal - 1]->SetVisible(true);
 }
 
-void CUIKnights::UpdateKnightsRank(int iVal)
+void CUIKnights::UpdateKnightsRank(int /*iVal*/)
 {
 	// TODO: @Demircivi.
 }
@@ -1074,7 +1075,7 @@ bool CUIFriends::Load(File& file)
 	N3_VERIFY_UI_COMPONENT(m_pBtn_Delete, GetChildByID<CN3UIButton>("Btn_Delete"));
 
 	std::string szFN = CGameProcedure::s_szAccount + "_" + CGameProcedure::s_szServer + ".txt"; // 파일이름은 계정_서버.txt 로 한다.
-	FILE* pFile      = fopen(szFN.c_str(), "r");
+	FILE* pFile      = Platform::OpenFile(szFN, "r");
 	if (pFile != nullptr)
 	{
 		char szLine[256] = "";
@@ -1116,7 +1117,7 @@ void CUIFriends::SaveListToTextFile(const std::string& szID) // 문자열이 있
 	char szFlags[4]  = "w";
 	if (!szID.empty())
 		lstrcpy(szFlags, "a");
-	FILE* pFile = fopen(szFN.c_str(), szFlags);
+	FILE* pFile = Platform::OpenFile(szFN, szFlags);
 	if (nullptr == pFile)
 		return;
 

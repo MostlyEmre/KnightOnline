@@ -43,6 +43,9 @@ void CNpcThread::thread_loop()
 			if (pNpc->m_sNid < 0)
 				continue;
 
+			// OpenKO: a kill the cheats menu asked for, done on the monster's own thread.
+			pNpc->CheatKill();
+
 			fTime3     = fTime2 - pNpc->m_fDelayTime;
 			dwTickTime = static_cast<uint32_t>(fTime3 * 1000);
 

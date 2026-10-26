@@ -10,6 +10,10 @@
 #include "GameDef.h"
 #include "N3UIWndBase.h"
 
+#include <functional>
+
+class CUIArtButton;
+
 class CUIDroppedItemDlg : public CN3UIWndBase
 {
 public:
@@ -22,8 +26,21 @@ public:
 	int m_iBackupiOrder;
 
 protected:
+	CUIArtButton* m_pBtnLootAll; // not in the uif: added under the items
+	bool m_bLootingAll;          // picking the items up one after another
+	bool m_bLootPending;         // a pick-up request is waiting for its result
+
+	// Genie's looting: the window stays hidden and picks up only what fnWants accepts.
+	bool m_bQuietLoot;
+	bool m_bQuietWaiting; // a pick-up of Genie's holds s_bWaitFromServer until its result
+	std::function<bool(const __IconItemSkill&)> m_fnQuietWants;
+
+	void ReleaseQuietWait();
+
 	int GetInventoryEmptyInviOrder(__IconItemSkill* spItem = nullptr);
 	int GetItemiOrder(__IconItemSkill* spItem);
+	bool RequestItem(int iOrder);
+	void LootNext();
 
 public:
 	CUIDroppedItemDlg();
@@ -37,6 +54,21 @@ public:
 	void EnterDroppedState(int xpos, int ypos);
 	void LeaveDroppedState();
 	void GetItemByIDToInventory(uint8_t bResult, int iItemId, int iGold, int iPos, int iItemCount, const std::string& characterName);
+
+	/// \brief After a pick-up result (and GetItemByIDToInventory): Loot All asks for the next item.
+	void ContinueLootAll(uint8_t bResult);
+
+	/// \brief Genie's looting: the next opened bundle (iBundleID) fills the window without showing it;
+	/// StartQuietLoot() then picks up what fnWants accepts, and the window leaves the dropped state.
+	/// Like an item move, each pick-up waits for s_bWaitFromServer to clear and holds it until its
+	/// result, as both are matched to their item through s_sRecoveryJobInfo.
+	void BeginQuietLoot(int iBundleID, std::function<bool(const __IconItemSkill&)> fnWants);
+	void StartQuietLoot();
+
+	/// \brief Asks for the next item, if the quiet looting was waiting for an item move to finish
+	void ResumeQuietLoot();
+	void CancelQuietLoot();
+	bool IsQuietLooting() const;
 	void AddToItemTable(int iItemId, int iItemCount, int iOrder);
 	void AddToItemTableToInventory(int iItemId, int iItemCount, int iOrder);
 

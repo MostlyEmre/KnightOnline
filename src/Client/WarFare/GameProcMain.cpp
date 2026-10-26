@@ -55,6 +55,11 @@
 #include "UIItemUpgrade.h"
 #include "UILevelGuide.h"
 #include "UIMsgBoxOkCancel.h"
+#include "UIPowerUpStore.h"
+#include "Cheats.h"
+#include "Genie.h"
+#include "UICheats.h"
+#include "UIGenie.h"
 
 #include "SubProcPerTrade.h"
 #include "CountableItemEditDlg.h"
@@ -73,7 +78,10 @@
 
 #include <N3Base/N3UIButton.h>
 
-#include <io.h>
+#include <N3Base/Platform/FileSystem.h>
+#include <N3Base/Platform/Input.h>
+#include <N3Base/Platform/PlatformOptions.h>
+#include <N3Base/Platform/Window.h>
 
 std::string g_szCmdMsg[CMD_COUNT]; // 게임상 명령어
 
@@ -145,6 +153,8 @@ CGameProcMain::CGameProcMain()     // r기본 생성자.. 각 변수의 역활�
 
 	m_pSubProcPerTrade      = new CSubProcPerTrade();
 	m_pMagicSkillMng        = new CMagicSkillMng(this);
+	m_pGenie                = new CGenie(this);
+	m_pCheats               = new CCheats(this);
 	m_pTargetSymbol         = new CN3Shape(); // 플레이어가 타겟으로 잡은 캐릭터의 위치위에 그리면 된다..
 	m_pWarMessage           = new CWarMessage;
 
@@ -196,6 +206,8 @@ CGameProcMain::~CGameProcMain()
 
 	delete m_pSubProcPerTrade;
 	delete m_pMagicSkillMng;
+	delete m_pGenie;
+	delete m_pCheats;
 	delete m_pWarMessage;
 	delete m_pTargetSymbol; // 플레이어가 타겟으로 잡은 캐릭터의 위치위에 그리면 된다..
 
@@ -204,6 +216,16 @@ CGameProcMain::~CGameProcMain()
 
 void CGameProcMain::Release()
 {
+	// The window first: closing saves its settings, which needs the character Genie still knows.
+	if (s_pUIGenie != nullptr)
+		s_pUIGenie->Close();
+	if (s_pUICheats != nullptr)
+		s_pUICheats->Close();
+	if (m_pGenie != nullptr)
+		m_pGenie->OnLeaveGame();
+	if (m_pCheats != nullptr)
+		m_pCheats->OnLeaveGame();
+
 	this->ReleaseSound();
 	this->ReleaseUIs();
 
@@ -247,8 +269,6 @@ void CGameProcMain::ReleaseUIs()
 	m_pUIUpgradeSelect->Release();
 	m_pUIItemUpgrade->Release();
 	m_pUILevelGuide->Release();
-
-	CN3UIBase::DestroyTooltip();
 }
 
 void CGameProcMain::Init()
@@ -321,131 +341,50 @@ void CGameProcMain::Init()
 		s_pUILoading->Render("Loading Character Data...", 0);
 
 	// 경로 기억..
-	char szPathOld[_MAX_PATH], szPathFind[_MAX_PATH];
-	::GetCurrentDirectory(_MAX_PATH, szPathOld);
-
-	_finddata_t fi;
-	intptr_t hFind = 0;
+	std::error_code ec;
+	const std::string szPathOld = std::filesystem::current_path(ec).string();
 
 	// 리소스 다 읽기..
 	// 에니메이션 다 읽기..
-	lstrcpy(szPathFind, szPathOld);
-	lstrcat(szPathFind, "\\Chr");
-	::SetCurrentDirectory(szPathFind);
-	hFind = _findfirst("*.N3Anim", &fi);
-	if (hFind)
-	{
-		std::string szFN = "Chr\\";
-		szFN.append(fi.name);
-		s_MngAniCtrl.Get(szFN);
-		while (_findnext(hFind, &fi) != -1)
-		{
-			szFN = "Chr\\";
-			szFN.append(fi.name);
-			s_MngAniCtrl.Get(szFN);
-		}
-	}
-	_findclose(hFind);
+	for (const std::string& szName : Platform::FindFiles(szPathOld + "\\Chr", ".N3Anim"))
+		s_MngAniCtrl.Get("Chr\\" + szName);
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 10 %", 10);
 
 	// 리소스 다 읽기..
 	// 텍스처 다 읽기..
-	lstrcpy(szPathFind, szPathOld);
-	lstrcat(szPathFind, "\\Item");
-	::SetCurrentDirectory(szPathFind);
-	hFind = _findfirst("*.dxt", &fi);
-	if (hFind)
-	{
-		std::string szFN = "Item\\";
-		szFN.append(fi.name);
-		s_MngTex.Get(szFN);
-		while (_findnext(hFind, &fi) != -1)
-		{
-			szFN = "Item\\";
-			szFN.append(fi.name);
-			s_MngTex.Get(szFN);
-		}
-	}
-	_findclose(hFind);
+	for (const std::string& szName : Platform::FindFiles(szPathOld + "\\Item", ".dxt"))
+		s_MngTex.Get("Item\\" + szName);
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 25 %", 25);
 
 	// 리소스 다 읽기..
 	// 조인트 다 읽기..
-	lstrcpy(szPathFind, szPathOld);
-	lstrcat(szPathFind, "\\Chr");
-	::SetCurrentDirectory(szPathFind);
-	hFind = _findfirst("*.N3Joint", &fi);
-	if (hFind)
-	{
-		std::string szFN = "Chr\\";
-		szFN.append(fi.name);
-		s_MngJoint.Get(szFN);
-		while (_findnext(hFind, &fi) != -1)
-		{
-			szFN = "Chr\\";
-			szFN.append(fi.name);
-			s_MngJoint.Get(szFN);
-		}
-	}
-	_findclose(hFind);
+	for (const std::string& szName : Platform::FindFiles(szPathOld + "\\Chr", ".N3Joint"))
+		s_MngJoint.Get("Chr\\" + szName);
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 50 %", 50);
 
 	// 리소스 다 읽기..
 	// 스킨 읽기..
-	lstrcpy(szPathFind, szPathOld);
-	lstrcat(szPathFind, "\\Item");
-	::SetCurrentDirectory(szPathFind);
-	hFind = _findfirst("*.N3CSkins", &fi);
-	if (hFind)
-	{
-		std::string szFN = "Item\\";
-		szFN.append(fi.name);
-		s_MngSkins.Get(szFN);
-		while (_findnext(hFind, &fi) != -1)
-		{
-			szFN = "Item\\";
-			szFN.append(fi.name);
-			s_MngSkins.Get(szFN);
-		}
-	}
-	_findclose(hFind);
+	for (const std::string& szName : Platform::FindFiles(szPathOld + "\\Item", ".N3CSkins"))
+		s_MngSkins.Get("Item\\" + szName);
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 75 %", 75);
 
 	// 리소스 다 읽기..
 	// PMesh 읽기..
-	lstrcpy(szPathFind, szPathOld);
-	lstrcat(szPathFind, "\\Item");
-	::SetCurrentDirectory(szPathFind);
-	hFind = _findfirst("*.N3PMesh", &fi);
-	if (hFind)
-	{
-		std::string szFN = "Item\\";
-		szFN.append(fi.name);
-		s_MngPMesh.Get(szFN);
-		while (_findnext(hFind, &fi) != -1)
-		{
-			szFN = "Item\\";
-			szFN.append(fi.name);
-			s_MngPMesh.Get(szFN);
-		}
-	}
-	_findclose(hFind);
+	for (const std::string& szName : Platform::FindFiles(szPathOld + "\\Item", ".N3PMesh"))
+		s_MngPMesh.Get("Item\\" + szName);
 
 	if (s_pUILoading != nullptr)
 		s_pUILoading->Render("Loading Character Data... 100 %", 100);
 
 	MsgSend_GameStart();
-
-	// 경로 돌리기..
-	::SetCurrentDirectory(szPathOld);
 }
 
 void CGameProcMain::InitPlayerPosition(const __Vector3& vPos)              // 플레이어 위치 초기화.. 일으켜 세우고, 기본동작을 취하게 한다.
@@ -539,6 +478,9 @@ void CGameProcMain::Tick()
 
 	m_pUIStateBarAndMiniMap->UpdatePosition(s_pPlayer->Position(), s_pPlayer->Yaw()); // 위치 업데이트.
 
+	// Genie first: an area skill it casts goes off in the magic manager's Tick, at the spot it chose.
+	if (m_pGenie)
+		m_pGenie->Tick(CN3Base::TimeGet());
 	if (m_pMagicSkillMng)
 		m_pMagicSkillMng->Tick();
 	if (m_pWarMessage)
@@ -579,7 +521,11 @@ void CGameProcMain::Tick()
 			{
 				if (m_eExitType == EXIT_TYPE_QUIT)
 				{
-					PostQuitMessage(0);
+					Platform::PostQuitMessage(0);
+				}
+				else if (m_eExitType == EXIT_TYPE_RESTART)
+				{
+					Platform::RequestRestart();
 				}
 				else if (m_eExitType == EXIT_TYPE_CHR_SELECT && m_pUIExitMenu != nullptr)
 				{
@@ -705,6 +651,8 @@ void CGameProcMain::Render()
 	ACT_WORLD->RenderSkyWeather(); // 하늘 렌더링..
 
 	CGameProcedure::Render();      // UI 나 그밖의 기본적인 것들 렌더링..
+	m_pGenie->RenderIndicator();
+	m_pCheats->RenderIndicator();
 	if (m_pWarMessage)
 		m_pWarMessage->RenderMessage();
 	if (s_pGameCursor)
@@ -1093,6 +1041,18 @@ bool CGameProcMain::ProcessPacket(Packet& pkt)
 			MsgRecv_ItemUpgrade(pkt);
 			return true;
 
+		case WIZ_SHOPPING_MALL:
+			MsgRecv_ShoppingMall(pkt);
+			return true;
+
+		case WIZ_GENIE:
+			MsgRecv_Genie(pkt);
+			return true;
+
+		case WIZ_CHEAT:
+			m_pCheats->Receive(pkt);
+			return true;
+
 		default:
 			break;
 	}
@@ -1117,7 +1077,7 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 	if (m_pSubProcPerTrade->m_ePerTradeState != PER_TRADE_STATE_NONE)
 		return;
 
-	if (!s_bIsWindowInFocus)
+	if (!s_bIsWindowInFocus || IsModalWindowOpen())
 		return;
 
 	POINT ptPrev = s_pLocalInput->MouseGetPosOld();
@@ -1228,12 +1188,18 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 
 	if (!IsUIKeyOperated() && nullptr == CN3UIBase::GetFocusedEdit()) // 채팅모드가 아닐때
 	{
-		if (s_pPlayer->m_InfoBase.iAuthority == AUTHORITY_MANAGER)    //게임 운영자는 이 기능을 사용할수 있다.
+		// Moving (W, S, E) or attacking (R) by hand means the player is back: Genie stops.
+		if (s_pLocalInput->IsKeyPress(KM_MOVE_FOWARD) || s_pLocalInput->IsKeyPress(DIK_UP) || s_pLocalInput->IsKeyPress(KM_MOVE_BACKWARD)
+			|| s_pLocalInput->IsKeyPress(DIK_DOWN) || s_pLocalInput->IsKeyPress(KM_TOGGLE_MOVE_CONTINOUS)
+			|| s_pLocalInput->IsKeyPress(KM_TOGGLE_ATTACK))
+			m_pGenie->OnManualControl();
+
+		if (s_pPlayer->m_InfoBase.iAuthority == AUTHORITY_MANAGER) //게임 운영자는 이 기능을 사용할수 있다.
 		{
 			if (s_pLocalInput->IsKeyDown(DIK_Q))
-				s_pPlayer->m_bTempMoveTurbo = true;                   // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
+				s_pPlayer->m_bTempMoveTurbo = true;                // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
 			else
-				s_pPlayer->m_bTempMoveTurbo = false;                  // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
+				s_pPlayer->m_bTempMoveTurbo = false;               // 엄청 빨리 움직이게 한다..  // 임시 함수.. 나중에 없애자..
 		}
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_ATTACK))
@@ -1348,6 +1314,12 @@ void CGameProcMain::ProcessLocalInput(uint32_t dwMouseFlags)
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_INVENTORY))
 			CommandToggleUIInventory();
+
+		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_GENIE))
+			CommandToggleUIGenie();
+
+		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_CHEATS))
+			CommandToggleUICheats();
 
 		if (s_pLocalInput->IsKeyPress(KM_TOGGLE_STATE))
 			CommandToggleUIState();
@@ -1614,7 +1586,8 @@ bool CGameProcMain::MsgSend_RequestItemBundleOpen(CPlayerNPC* pCorpse)
 	if (fDistTmp >= (pCorpse->Radius() * 2.0f + 6.0f))
 		return false;
 
-	int iItemBundleID                    = pCorpse->m_iDroppedItemID;
+	int iItemBundleID = pCorpse->m_iDroppedItemID;
+	m_pUIDroppedItemDlg->CancelQuietLoot(); // opened by hand: the window shows
 	m_pUIDroppedItemDlg->m_iItemBundleID = pCorpse->m_iDroppedItemID;
 
 	s_pOPMgr->CorpseRemove(pCorpse, false); // 점점 투명하게 없앤다..
@@ -2854,7 +2827,7 @@ bool CGameProcMain::MsgRecv_NPCIn(Packet& pkt)
 {
 	int iID      = pkt.read<int16_t>();        // Server에서 관리하는 고유 ID
 	int iIDResrc = pkt.read<int16_t>();        // 리소스 ID
-	/*int iType       =*/pkt.read<uint8_t>();  // NPC Type - 0x05 : 상인
+	int iType    = pkt.read<uint8_t>();        // NPC Type - 0x05 : 상인
 	/*int iItemTrdeID =*/pkt.read<uint32_t>(); // 아이템 거래할 그룹 ID 서버에 요청할 ID
 	int iScale   = pkt.read<int16_t>();        // 스케일 100 은 1.0
 	int iItemID0 = pkt.read<uint32_t>();       // 리소스 ID
@@ -2898,6 +2871,7 @@ bool CGameProcMain::MsgRecv_NPCIn(Packet& pkt)
 		//TRACE("NPC In - Duplicated ID ({}, {}) Pos({:.2f},{:.2f},{:.2f})", iID, szName, fXPos, fYPos, fZPos);
 		pNPC->Action(PSA_BASIC, true, nullptr, true); // 강제로 살리고..
 		pNPC->m_fTimeAfterDeath = 0;
+		pNPC->m_byNpcType       = static_cast<uint8_t>(iType);
 		pNPC->PositionSet(__Vector3(fXPos, fYPos, fZPos), true);
 		return false;
 	}
@@ -2907,6 +2881,7 @@ bool CGameProcMain::MsgRecv_NPCIn(Packet& pkt)
 	pNPC          = new CPlayerNPC();
 	pNPC->IDSet(iID, szName, crID);              // 초기화.. 및 ID 세팅.
 	pNPC->m_InfoBase.eNation    = eNation;
+	pNPC->m_byNpcType           = static_cast<uint8_t>(iType);
 	pNPC->m_InfoBase.eRace      = RACE_NPC;      // NPC 라는 걸 알린다.
 	pNPC->m_InfoBase.iLevel     = iLevel;
 	pNPC->m_InfoBase.iAuthority = AUTHORITY_NPC; // 권한 NPC는 권한이 없고..
@@ -3220,8 +3195,14 @@ bool CGameProcMain::MsgRecv_Attack(Packet& pkt)
 	if (iIDAttacker == iIDTarget)
 		return false;                      // 공격자와 피해자가 같은 경우????
 
-	bool bIAmTarget        = (iIDTarget == s_pPlayer->IDNumber()) ? true : false;
-	bool bIAmAttacker      = (iIDAttacker == s_pPlayer->IDNumber()) ? true : false;
+	bool bIAmTarget   = (iIDTarget == s_pPlayer->IDNumber()) ? true : false;
+	bool bIAmAttacker = (iIDAttacker == s_pPlayer->IDNumber()) ? true : false;
+
+	// Genie fights back against what attacks the player, and counts the player's hits.
+	if (bIAmTarget && iIDAttacker >= 10000)
+		m_pGenie->OnAttackedBy(iIDAttacker);
+	else if (bIAmAttacker && iResult != 0)
+		m_pGenie->OnHit(iIDTarget);
 
 	CPlayerBase* pAttacker = nullptr;
 	if (bIAmAttacker)
@@ -3230,7 +3211,7 @@ bool CGameProcMain::MsgRecv_Attack(Packet& pkt)
 		pAttacker = s_pOPMgr->CharacterGetByID(iIDAttacker, true);
 	if (nullptr == pAttacker)                         // 어라 공격하는 넘이 없네??
 	{
-		if (iIDAttacker > 10000)                      // NPC 는 1000 이상이다.
+		if (iIDAttacker >= 10000)                     // NPC 는 1000 이상이다.
 			this->MsgSend_NPCInRequest(iIDAttacker);  // NPC 정보가 없을 경우 요청한다..
 		else if (iIDAttacker < 3000)
 			this->MsgSend_UserInRequest(iIDAttacker); // NPC 정보가 없을 경우 요청한다..
@@ -3334,7 +3315,12 @@ bool CGameProcMain::MsgRecv_Dead(Packet& pkt)
 	CPlayerBase* pTarget = nullptr;
 	if (iIDTarget == s_pPlayer->IDNumber())
 	{
-		pTarget           = s_pPlayer;
+		pTarget = s_pPlayer;
+		m_pGenie->OnDied();
+
+		// The store is for the living (the server won't open it for the dead either).
+		if (s_pUIPowerUpStore != nullptr)
+			s_pUIPowerUpStore->Close();
 
 		//		if(m_pUIDead) m_pUIDead->SetVisible(true);
 
@@ -3574,6 +3560,13 @@ bool CGameProcMain::MsgRecv_ItemBundleOpen(Packet& pkt) // 아이템 상자를 �
 
 	m_pUIDroppedItemDlg->InitIconUpdate();
 
+	// Genie's looting: picked up without the window.
+	if (m_pUIDroppedItemDlg->IsQuietLooting())
+	{
+		m_pGenie->OnBundleOpened();
+		m_pUIDroppedItemDlg->StartQuietLoot();
+	}
+
 	return true;
 }
 
@@ -3581,6 +3574,8 @@ void CGameProcMain::MsgRecv_ItemRepair(Packet& pkt) // Item Repair Result..
 {
 	int iResult = pkt.read<uint8_t>();              // Trade id
 	int iGold   = pkt.read<uint32_t>();             // Trade id
+	if (m_pGenie->OnRepairResult(static_cast<uint8_t>(iResult), iGold))
+		return;
 	m_pUIInventory->ReceiveResultFromServer(iResult, iGold);
 }
 
@@ -4389,6 +4384,7 @@ bool CGameProcMain::MsgRecv_ItemTradeStart(Packet& pkt) // 아이템 상거래..
 	CPlayerNPC* pNPC = s_pOPMgr->NPCGetByID(s_pPlayer->m_iIDTarget, true);
 	if (!pNPC)
 		return true;
+	m_pGenie->OnShopOpened(pNPC->IDNumber(), iTradeID, pNPC->IDString());
 	m_pUINpcEvent->Open(NPC_EVENT_ITEM_TRADE, iTradeID, pNPC->GetNPCOriginID());
 
 	return true;
@@ -4404,12 +4400,14 @@ bool CGameProcMain::MsgRecv_ItemTradeResult(Packet& pkt) // 아이템 상거래 
 	{
 		case 0x00:
 			bfType = pkt.read<uint8_t>(); // Trade id
-			m_pUITransactionDlg->ReceiveResultTradeFromServer(bResult, bfType, iMoney);
+			if (!m_pGenie->OnTradeResult(bResult, bfType, iMoney))
+				m_pUITransactionDlg->ReceiveResultTradeFromServer(bResult, bfType, iMoney);
 			break;
 
 		case 0x01:
 			iMoney = pkt.read<uint32_t>(); // Trade id
-			m_pUITransactionDlg->ReceiveResultTradeFromServer(bResult, bfType, iMoney);
+			if (!m_pGenie->OnTradeResult(bResult, bfType, iMoney))
+				m_pUITransactionDlg->ReceiveResultTradeFromServer(bResult, bfType, iMoney);
 			break;
 
 		case 0x03:
@@ -4438,6 +4436,7 @@ void CGameProcMain::InitZone(int iZone, const __Vector3& vPosPlayer)
 	static int iZonePrev = -1;
 	if (iZonePrev != iZone)   // 다른 존일 경우에만 로딩..
 	{
+		m_pGenie->OnZoneChanged();
 		m_pLightMgr->Release();
 		s_pEng->SetDefaultLight(m_pLightMgr->Light(0), m_pLightMgr->Light(1), m_pLightMgr->Light(2));
 
@@ -4961,7 +4960,12 @@ bool CGameProcMain::MsgRecv_ItemDroppedGetResult(Packet& pkt) // 땅에 떨어�
 	}
 
 	if (m_pUIDroppedItemDlg != nullptr)
+	{
 		m_pUIDroppedItemDlg->GetItemByIDToInventory(bResult, iItemID, iGoldID, bPos, sItemCount, szString);
+		m_pUIDroppedItemDlg->ContinueLootAll(bResult);
+	}
+
+	m_pGenie->OnLootResult(bResult);
 	return true;
 }
 
@@ -7573,6 +7577,7 @@ bool CGameProcMain::OnMouseLDBtnPress(POINT /*ptCur*/, POINT /*ptPrev*/)
 	if (s_pUIMgr->m_bDoneSomething)
 		return false;
 
+	m_pGenie->OnManualControl();
 	TryStartAttack();
 
 	return true;
@@ -7666,6 +7671,7 @@ bool CGameProcMain::OnMouseLBtnPress(POINT ptCur, POINT /*ptPrev*/)
 		{
 			if (s_pLocalInput->IsKeyDown(DIK_LCONTROL) || s_pLocalInput->IsKeyDown(DIK_RCONTROL))
 			{
+				m_pGenie->OnManualControl();
 				if (s_pPlayer->IsAttackableTarget(pTarget, false))
 				{
 					if (s_pPlayer->m_bTargetOrPosMove)
@@ -7687,6 +7693,7 @@ bool CGameProcMain::OnMouseLBtnPress(POINT ptCur, POINT /*ptPrev*/)
 		}
 		else if (!bFindCorpse)
 		{
+			m_pGenie->OnManualControl();
 			s_pPlayer->RotateTo(fYaw, true);
 			__Vector3 vMovePoint;
 			ACT_WORLD->PickWideWithTerrain(ptCur.x, ptCur.y, vMovePoint); // 지형을 찍어본다..
@@ -7710,6 +7717,7 @@ bool CGameProcMain::OnMouseLBtnPress(POINT ptCur, POINT /*ptPrev*/)
 	{
 		if (pTarget && (s_pLocalInput->IsKeyDown(DIK_LCONTROL) || s_pLocalInput->IsKeyDown(DIK_RCONTROL)))
 		{
+			m_pGenie->OnManualControl();
 			if (s_pPlayer->IsAttackableTarget(pTarget, false))
 			{
 				if (s_pPlayer->m_bTargetOrPosMove)
@@ -7763,6 +7771,7 @@ bool CGameProcMain::OnMouseLbtnDown(POINT ptCur, POINT /*ptPrev*/)
 
 		if (fNowTime - m_fLBClickTime > 0.1f && s_pPlayer->m_bTargetOrPosMove)
 		{
+			m_pGenie->OnManualControl();
 			if (s_pPlayer->m_bAttackContinous)
 				CommandToggleAttackContinous();
 
@@ -7776,6 +7785,7 @@ bool CGameProcMain::OnMouseLbtnDown(POINT ptCur, POINT /*ptPrev*/)
 		}
 		else if (fNowTime - m_fLBClickTime > 0.1f && !s_pPlayer->m_bTargetOrPosMove)
 		{
+			m_pGenie->OnManualControl();
 			if (s_pPlayer->m_bAttackContinous)
 				CommandToggleAttackContinous();
 
@@ -7926,8 +7936,8 @@ bool CGameProcMain::OnMouseRbtnDown(POINT ptCur, POINT ptPrev)
 		SetGameCursor(nullptr);
 
 		POINT ptScreen = ptPrev;
-		::ClientToScreen(s_hWndBase, &ptScreen);
-		::SetCursorPos(ptScreen.x, ptScreen.y);
+		Platform::ClientToScreen(s_hWndBase, &ptScreen);
+		Platform::SetCursorPos(ptScreen.x, ptScreen.y);
 		s_pLocalInput->MouseSetPos(ptPrev.x, ptPrev.y);
 	}
 
@@ -8050,4 +8060,158 @@ void CGameProcMain::MsgRecv_ZoneAbility(Packet& pkt)
 		s_pPlayer->m_InfoExt.bCanTalkToOtherNation    = pkt.read<bool>();
 		s_pPlayer->m_InfoExt.sZoneTariff              = pkt.read<int16_t>();
 	}
+}
+
+void CGameProcMain::RequestPowerUpStore()
+{
+	if (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
+		return;
+
+	uint8_t byBuff[4];
+	int iOffset = 0;
+	CAPISocket::MP_AddByte(byBuff, iOffset, WIZ_SHOPPING_MALL);
+	CAPISocket::MP_AddByte(byBuff, iOffset, STORE_OPEN);
+	s_pSocket->Send(byBuff, iOffset);
+}
+
+void CGameProcMain::MsgRecv_ShoppingMall(Packet& pkt)
+{
+	constexpr D3DCOLOR COLOR_EARNED = 0xffffff00; // as the experience earned
+	constexpr D3DCOLOR COLOR_ERROR  = 0xffff3b3b;
+
+	switch (pkt.read<uint8_t>())
+	{
+		case STORE_OPEN:
+		{
+			const int16_t sResult = pkt.read<int16_t>();
+			if (sResult != STORE_OPEN_SUCCESS)
+			{
+				std::string szMsg;
+				switch (sResult)
+				{
+					case STORE_OPEN_DEAD:
+						szMsg = "You can't use the Power-up Store while you're dead.";
+						break;
+
+					case STORE_OPEN_TRADING:
+						szMsg = "You can't use the Power-up Store while trading.";
+						break;
+
+					case STORE_OPEN_ZONE:
+						szMsg = "You can't use the Power-up Store here.";
+						break;
+
+					case STORE_OPEN_ALREADY_OPEN:
+						szMsg = "The Power-up Store is opening.";
+						break;
+
+					case STORE_OPEN_INVENTORY_FULL:
+						szMsg = "Your inventory is full. Make some room to use the Power-up Store.";
+						break;
+
+					default:
+						szMsg = "The Power-up Store isn't available right now.";
+						break;
+				}
+
+				MsgOutput(szMsg, COLOR_ERROR);
+				return;
+			}
+
+			const int iFreeSlots  = pkt.read<int16_t>();
+			const int iKnightCash = pkt.read<int32_t>();
+			const int iCount      = pkt.read<int16_t>();
+			std::vector<CUIPowerUpStore::Item> items;
+			for (int i = 0; i < iCount; i++)
+			{
+				CUIPowerUpStore::Item item;
+				item.iItemID = pkt.read<int32_t>();
+				item.iCount  = pkt.read<int16_t>();
+				item.iPrice  = pkt.read<int32_t>();
+				items.push_back(item);
+			}
+
+			if (s_pUIPowerUpStore == nullptr)
+				s_pUIPowerUpStore = new CUIPowerUpStore();
+			s_pUIPowerUpStore->OpenStore(iKnightCash, iFreeSlots, items);
+		}
+		break;
+
+		case STORE_BUY:
+		{
+			const uint8_t byResult = pkt.read<uint8_t>();
+			const int iKnightCash  = pkt.read<int32_t>();
+			const int iFreeSlots   = pkt.read<int16_t>();
+			if (s_pUIPowerUpStore != nullptr)
+				s_pUIPowerUpStore->OnBuyResult(byResult, iKnightCash, iFreeSlots);
+		}
+		break;
+
+		case STORE_KNIGHT_CASH:
+		{
+			const int iEarned     = pkt.read<int32_t>();
+			const int iKnightCash = pkt.read<int32_t>();
+			MsgOutput(fmt::format("Earned {} Knight Cash", iEarned), COLOR_EARNED);
+			if (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
+				s_pUIPowerUpStore->SetKnightCash(iKnightCash);
+		}
+		break;
+
+		// The inventory, as the official server sends it when the store closes: the purchases
+		// are in it already (WIZ_ITEM_COUNT_CHANGE as they were bought).
+		case STORE_CLOSE:
+		default:
+			break;
+	}
+}
+
+void CGameProcMain::MsgRecv_Genie(Packet& pkt)
+{
+	switch (pkt.read<uint8_t>())
+	{
+		case GENIE_AVAILABLE:
+			m_pGenie->OnAvailable(pkt.read<uint8_t>() != 0);
+			break;
+
+		case GENIE_START:
+			m_pGenie->OnStartResult(pkt.read<uint8_t>() != 0);
+			break;
+
+		default:
+			break;
+	}
+}
+
+bool CGameProcMain::CommandToggleUICheats()
+{
+	if (s_pUICheats != nullptr && s_pUICheats->IsVisible())
+	{
+		s_pUICheats->Close();
+		return false;
+	}
+
+	if (!m_pCheats->IsAvailable())
+	{
+		MsgOutput("This server doesn't allow cheats.", 0xffff3b3b);
+		return false;
+	}
+
+	if (s_pUICheats == nullptr)
+		s_pUICheats = new CUICheats();
+
+	s_pUICheats->Open();
+	return s_pUICheats->IsVisible();
+}
+
+bool CGameProcMain::CommandToggleUIGenie()
+{
+	if (s_pUIGenie == nullptr)
+		s_pUIGenie = new CUIGenie();
+
+	if (s_pUIGenie->IsVisible())
+		s_pUIGenie->Close();
+	else
+		s_pUIGenie->Open();
+
+	return s_pUIGenie->IsVisible();
 }

@@ -295,17 +295,17 @@ void CMagicProcess::MagicPacket(char* pBuf)
 				if (pMagic->FlyingEffect > 0)
 				{
 					// Reduce Magic Point!
-					if (pMagic->ManaCost > m_pSrcUser->m_pUserData->m_sMp)
+					if (!m_pSrcUser->CanPayMana(pMagic->ManaCost))
 					{
 						command = MAGIC_FAIL;
 						goto return_echo;
 					}
 
-					m_pSrcUser->MSpChange(-(pMagic->ManaCost));
+					m_pSrcUser->PayMana(pMagic->ManaCost);
 				}
 
 				// Subtract Arrow!
-				if (m_pSrcUser->ItemCountChange(pMagic->UseItem, 1, pType->NeedArrow) < 2)
+				if (!m_pSrcUser->UseConsumable(pMagic->UseItem, pType->NeedArrow))
 				{
 					command = MAGIC_FAIL;
 					goto return_echo;
@@ -855,7 +855,7 @@ model::Magic* CMagicProcess::IsAvailable(
 				return pTable; // Do not reduce MP/SP when combo number is higher than 0.
 			}
 
-			if (pTable->ManaCost > m_pSrcUser->m_pUserData->m_sMp)
+			if (!m_pSrcUser->CanPayMana(pTable->ManaCost))
 				goto fail_return;
 
 			/*
@@ -921,7 +921,7 @@ model::Magic* CMagicProcess::IsAvailable(
 							}
 						}
 
-						if (m_pSrcUser->ItemCountChange(pTable->UseItem, 1, 1) < 2)
+						if (!m_pSrcUser->UseConsumable(pTable->UseItem, 1))
 						{
 							type = MAGIC_CASTING;
 							goto fail_return;
@@ -976,7 +976,7 @@ model::Magic* CMagicProcess::IsAvailable(
 			// Actual deduction of Skill or Magic point.
 			if (pTable->Type1 != 4 || (pTable->Type1 == 4 && tid == -1))
 			{
-				m_pSrcUser->MSpChange(-pTable->ManaCost);
+				m_pSrcUser->PayMana(pTable->ManaCost);
 			}
 
 			// DEDUCTION OF HPs in Magic/Skill using HPs.
@@ -1378,6 +1378,10 @@ void CMagicProcess::ExecuteType3(int magicid, int sid, int tid, int data1, int /
 			&& m_pMain->m_byBattleOpen == SNOW_BATTLE)
 			damage = -10;
 
+		// OpenKO: a monster's spell follows the cheats menu's damage taken.
+		if (bFlag && (pType->DirectType == 1 || pType->Duration != 0))
+			damage = m_pMain->CheatDamageTaken(damage);
+
 		// Non-Durational Spells.
 		if (pType->Duration == 0)
 		{
@@ -1550,6 +1554,10 @@ void CMagicProcess::ExecuteType3(int magicid, int sid, int tid, int data1, int /
 						sid, userId, pType->TimeDamage, pType->Attribute);
 				else
 					duration_damage = pType->TimeDamage;
+
+				// OpenKO: a monster's damage over time follows the cheats menu's damage taken.
+				if (bFlag)
+					duration_damage = m_pMain->CheatDamageTaken(duration_damage);
 
 				// For continuous damages...
 				for (int k = 0; k < MAX_TYPE3_REPEAT; k++)
@@ -1819,7 +1827,7 @@ void CMagicProcess::ExecuteType4(int magicid, int sid, int tid, int data1, int /
 		{
 			// 비러머글 하피 >.<
 			if (m_pMain->IsValidUserId(sid))
-				m_pSrcUser->MSpChange(-(pMagic->ManaCost));
+				m_pSrcUser->PayMana(pMagic->ManaCost);
 		}
 
 		if (m_pMain->IsValidUserId(sid))

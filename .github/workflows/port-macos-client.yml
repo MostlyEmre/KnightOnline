@@ -1,0 +1,44 @@
+# The client (N3Base + JpegFile + WarFare) built natively for Apple Silicon with Apple Clang,
+# -Wall -Wextra and warnings as errors, and checked to be an arm64-only Mach-O.
+
+name: "Port: macOS client (arm64)"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - macos-port
+    paths:
+      - '.github/workflows/port-macos-client.yml'
+      - 'src/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  client:
+    runs-on: macos-latest
+    name: "Client (macOS arm64, Apple Clang)"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Build the client
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENKO_BUILD_MACOS_CLIENT=ON -DOPENKO_BUILD_SERVERS=OFF -DOPENKO_BUILD_TESTS=OFF \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE
+          cmake --build build --parallel --target WarFare
+
+      - name: Check the binary
+        run: |
+          file build/bin/Debug/KnightOnLine
+          test "$(lipo -archs build/bin/Debug/KnightOnLine)" = "arm64"
+          otool -L build/bin/Debug/KnightOnLine

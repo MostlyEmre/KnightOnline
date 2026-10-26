@@ -12,6 +12,9 @@
 #include "text_resources.h"
 
 #include <N3Base/N3SndObj.h>
+
+#include <FileIO/PathResolver.h>
+#include <shared/Ini.h>
 #include <N3Base/N3SndMgr.h>
 
 #include <ctime>
@@ -82,17 +85,16 @@ void CGameProcLogIn_1298::Init()
 	lstrcpy(szIniPath, CN3Base::PathGet().c_str());
 	lstrcat(szIniPath, "Server.Ini");
 
-	char szRegistrationSite[_MAX_PATH] {};
-	GetPrivateProfileString("Join", "Registration site", "", szRegistrationSite, _MAX_PATH, szIniPath);
-	m_szRegistrationSite = szRegistrationSite;
+	CIni ini(PathResolver::Resolve(szIniPath));
+	m_szRegistrationSite = ini.GetString("Join", "Registration site", "").substr(0, _MAX_PATH - 1);
 
-	int iServerCount     = GetPrivateProfileInt("Server", "Count", 0, szIniPath);
+	int iServerCount     = ini.GetInt("Server", "Count", 0);
 
 	char szIPs[256][32] {};
-	for (int i = 0; i < iServerCount; i++)
+	for (int i = 0; i < iServerCount && i < 256; i++)
 	{
 		std::string key = fmt::format("IP{}", i);
-		GetPrivateProfileString("Server", key.c_str(), "", szIPs[i], 32, szIniPath);
+		lstrcpyn(szIPs[i], ini.GetString("Server", key, "").c_str(), 32);
 	}
 
 	int iServer = -1;

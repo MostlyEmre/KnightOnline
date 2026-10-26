@@ -11,7 +11,9 @@
 #include <N3Base/N3UIString.h>
 
 #include <algorithm>
-#include <shellapi.h>
+#include <N3Base/Platform/PlatformOptions.h>
+#include <N3Base/Platform/Shell.h>
+#include <N3Base/Platform/Window.h>
 
 CUILogIn_1298::CUILogIn_1298()
 {
@@ -88,11 +90,18 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		}
 		else if (pSender == m_pBtn_Cancel)
 		{
-			PostQuitMessage(0);            // 종료...
+			Platform::PostQuitMessage(0);  // 종료...
 			return true;
 		}
 		else if (pSender == m_pBtn_Option) // 옵션..
 		{
+			// Without Option.exe, the game has its own Options window, and there's no need to quit.
+			if (!Platform::HasOptionsProgram())
+			{
+				CGameProcedure::ShowOptions();
+				return true;
+			}
+
 			std::string szMsg = fmt::format_text_resource(IDS_CONFIRM_EXECUTE_OPTION);
 			CGameProcedure::MessageBoxPost(szMsg, "", MB_YESNO, BEHAVIOR_EXECUTE_OPTION);
 			return true;
@@ -101,7 +110,7 @@ bool CUILogIn_1298::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 		{
 			if (!CGameProcedure::s_pProcLogIn->m_szRegistrationSite.empty())
 			{
-				ShellExecute(nullptr, "open", CGameProcedure::s_pProcLogIn->m_szRegistrationSite.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+				Platform::ShellOpen(CGameProcedure::s_pProcLogIn->m_szRegistrationSite);
 			}
 
 			return true;

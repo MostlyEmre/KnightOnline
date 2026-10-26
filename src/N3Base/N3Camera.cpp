@@ -439,7 +439,7 @@ void CN3Camera::Apply()
 	s_lpD3DDev->SetRenderState(D3DRS_FOGDENSITY, std::bit_cast<uint32_t>(fFogDensity));
 }
 
-void CN3Camera::Render(float fUnitSize)
+void CN3Camera::Render(float /*fUnitSize*/)
 {
 }
 

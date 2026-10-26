@@ -166,6 +166,7 @@
     <ClCompile Include="Knights.cpp" />
     <ClCompile Include="KnightsManager.cpp" />
     <ClCompile Include="KnightsSiegeWar.cpp" />
+    <ClCompile Include="LayoutChecks.cpp" />
     <ClCompile Include="LOGIC_ELSE.cpp" />
     <ClCompile Include="MagicProcess.cpp" />
     <ClCompile Include="Map.cpp" />
@@ -179,6 +180,7 @@
     </ClCompile>
     <ClCompile Include="UdpSocket.cpp" />
     <ClCompile Include="User.cpp" />
+    <ClCompile Include="UserCheat.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\shared\_USER_DATA.h" />
@@ -195,6 +197,7 @@
     <ClInclude Include="EXEC.h" />
     <ClInclude Include="GameDefine.h" />
     <ClInclude Include="GameEvent.h" />
+    <ClInclude Include="ItemUpgradeRules.h" />
     <ClInclude Include="Knights.h" />
     <ClInclude Include="KnightsManager.h" />
     <ClInclude Include="KnightsSiegeWar.h" />

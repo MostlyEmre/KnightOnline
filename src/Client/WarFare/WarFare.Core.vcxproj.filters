@@ -110,6 +110,9 @@
     <ClCompile Include="LocalInput.cpp">
       <Filter>Input</Filter>
     </ClCompile>
+    <ClCompile Include="LayoutChecks.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="LightMgr.cpp">
       <Filter>World\Lighting</Filter>
     </ClCompile>
@@ -147,6 +150,12 @@
       <Filter>Scene</Filter>
     </ClCompile>
     <ClCompile Include="GameProcMain.cpp">
+      <Filter>Scene\Ingame</Filter>
+    </ClCompile>
+    <ClCompile Include="Cheats.cpp">
+      <Filter>Scene\Ingame</Filter>
+    </ClCompile>
+    <ClCompile Include="Genie.cpp">
       <Filter>Scene\Ingame</Filter>
     </ClCompile>
     <ClCompile Include="N3Pond.cpp">
@@ -208,6 +217,9 @@
     </ClCompile>
     <ClCompile Include="UICharacterSelect.cpp">
       <Filter>Scene\Character selection</Filter>
+    </ClCompile>
+    <ClCompile Include="UIArt.cpp">
+      <Filter>Scene\Ingame\UI</Filter>
     </ClCompile>
     <ClCompile Include="UIChat.cpp">
       <Filter>Scene\Ingame\UI</Filter>
@@ -294,6 +306,18 @@
       <Filter>Scene\Ingame\UI</Filter>
     </ClCompile>
     <ClCompile Include="UINPCEvent.cpp">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UIOptions.cpp">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UICheats.cpp">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UIGenie.cpp">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UIPowerUpStore.cpp">
       <Filter>Scene\Ingame\UI</Filter>
     </ClCompile>
     <ClCompile Include="UIPartyBBS.cpp">
@@ -466,6 +490,18 @@
     <ClInclude Include="UINPCEvent.h">
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
+    <ClInclude Include="UIOptions.h">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UICheats.h">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UIGenie.h">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UIPowerUpStore.h">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClInclude>
     <ClInclude Include="UIPartyBBS.h">
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
@@ -503,6 +539,9 @@
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
     <ClInclude Include="UILevelGuide.h">
+      <Filter>Scene\Ingame\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UIArt.h">
       <Filter>Scene\Ingame\UI</Filter>
     </ClInclude>
     <ClInclude Include="UIChat.h">
@@ -680,6 +719,21 @@
       <Filter>Scene\Nation selection</Filter>
     </ClInclude>
     <ClInclude Include="GameProcMain.h">
+      <Filter>Scene\Ingame</Filter>
+    </ClInclude>
+    <ClInclude Include="CheatRules.h">
+      <Filter>Scene\Ingame</Filter>
+    </ClInclude>
+    <ClInclude Include="Cheats.h">
+      <Filter>Scene\Ingame</Filter>
+    </ClInclude>
+    <ClInclude Include="Genie.h">
+      <Filter>Scene\Ingame</Filter>
+    </ClInclude>
+    <ClInclude Include="GenieRules.h">
+      <Filter>Scene\Ingame</Filter>
+    </ClInclude>
+    <ClInclude Include="GenieSettings.h">
       <Filter>Scene\Ingame</Filter>
     </ClInclude>
     <ClInclude Include="GameProcedure.h">

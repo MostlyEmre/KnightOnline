@@ -15,6 +15,7 @@
 #include "EVENT.h"
 #include "UdpSocket.h"
 
+#include <shared/CheatSettings.h>
 #include <shared/Ini.h>
 #include <shared-server/AppThread.h>
 #include <shared-server/SharedMemoryBlock.h>
@@ -131,6 +132,19 @@ public:
 	/// \return true when successful, false otherwise
 	bool LoadItemExchange();
 
+	/// \brief Loads the m_ShoppingMallItems cache: the Power-up Store's items (KNIGHT_CASH_SHOP).
+	/// Makes the store's tables first, if the database doesn't have them yet.
+	/// \return true when successful, false otherwise (the store is then closed)
+	bool LoadShoppingMallTable();
+
+	/// \brief The Power-up Store's entry for an item, or nullptr if it isn't for sale
+	const _SHOPPING_MALL_ITEM* GetShoppingMallItem(int itemId) const;
+
+	/// \brief Asks Aujard to add amount to an account's Knight Cash (or take it off, when negative)
+	/// \param socketId the user to tell (DB_CUSTOM_KNIGHT_CASH_ADD_RESPONSE), or -1
+	/// \param notify whether the user is told about it in the game
+	void KnightCashAddToAgent(int socketId, const char* accountId, int amount, bool notify);
+
 	void Announcement(uint8_t type, int nation = 0, int chat_type = 8);
 	void ResetBattleZone();
 	void BanishLosers();
@@ -178,6 +192,7 @@ public:
 	bool LoadMagicTable();
 	bool LoadItemTable();
 	bool LoadItemUpgradeTable();
+	bool LoadItemGradeTable();
 	bool MapFileLoad();
 	void UserAcceptThread();
 	// sungyong 2001.11.06
@@ -262,6 +277,87 @@ public:
 	EventMap m_EventMap;
 	EventTriggerMap m_EventTriggerMap;
 	ItemExchangeMap m_ItemExchangeMap;
+
+	/// \brief The Power-up Store's items, in the store's order
+	std::vector<_SHOPPING_MALL_ITEM> m_ShoppingMallItems;
+
+	/// \brief Whether players may run Genie (auto-hunt): [GENIE] ENABLED in the config, on by default
+	bool m_bGenieEnabled = true;
+
+	/// \brief Each upgradeable item's class (the client's "Item Grade": 1 low, 2 middle, 3 high),
+	/// from ITEM_GRADE, which the port adds; without it, Low and Middle Class scrolls take nothing.
+	std::unordered_map<int, uint8_t> m_ItemGradeMap;
+
+	/// \brief Every possible upgrade succeeds, and impossible ones are refused instead of destroying
+	/// the item (ItemUpgradeRules::BoostedGenRate): [UPGRADE] BOOST, on by default
+	bool m_bUpgradeBoost = true;
+
+	/// \brief An item's class, 0 for none
+	int ItemGrade(int itemId) const;
+
+	/// \brief Whether players may use the cheats menu: [CHEATS] ALLOWED in the config. Off by
+	/// default, so a server hosted for others doesn't hand out cheats; --allow-cheats makes on the
+	/// default (the app's own server).
+	bool m_bCheatsAllowed                    = false;
+
+	/// \brief Where the cheat settings are kept, next to the config
+	std::filesystem::path _cheatSettingsPath = "cheats.ini";
+
+	/// \returns a copy of the cheat settings
+	Cheats::Settings CheatSettings() const;
+
+	/// \returns a multiplier in effect: 100 while cheats are off
+	uint16_t CheatPct(uint16_t Cheats::Settings::* pct) const;
+
+	/// \returns whether a cheat toggle is in effect: never while cheats are off
+	bool CheatFlag(bool Cheats::Settings::* flag) const;
+
+	/// \returns an HP change from a monster's spell with the cheats menu's damage taken applied:
+	/// damage (negative) is scaled, healing isn't
+	int CheatDamageTaken(int hpChange) const;
+
+	/// \brief Replaces the cheat settings: saves them, hands AIServer a snapshot, tells every player
+	/// in the game, and applies what changed (OnCheatSettingsChanged).
+	/// \returns false, changing nothing, when a value isn't allowed
+	bool SetCheatSettings(const Cheats::Settings& settings);
+
+	/// \brief Loads the saved cheat settings; a missing file or a value that isn't allowed gives the
+	/// defaults.
+	void LoadCheatSettings();
+
+	/// \returns the weather the cheats menu imposes, or nullopt for the server's own
+	std::optional<Cheats::WeatherOverride> CheatWeather() const;
+
+	/// \returns the hour the cheats menu imposes, or Cheats::HOUR_NORMAL
+	int CheatHour() const;
+
+	/// \brief Builds WIZ_TIME: the game time, or the cheats menu's hour.
+	/// \returns its length
+	int BuildTimePacket(char* buf) const;
+
+	/// \brief Builds WIZ_WEATHER: the server's weather, or the cheats menu's.
+	/// \returns its length
+	int BuildWeatherPacket(char* buf) const;
+
+	/// \returns whether any AIServer socket is connected
+	bool IsAIServerConnected();
+
+	/// \brief Appends cheat settings to a packet (Cheats::SETTINGS_SIZE bytes).
+	static void WriteCheatSettings(char* buf, const Cheats::Settings& settings, int& index);
+
+	/// \brief Reads cheat settings from a packet of `len` bytes.
+	/// \returns nullopt when it's too short or a value isn't allowed
+	static std::optional<Cheats::Settings> ReadCheatSettings(const char* buf, int len, int& index);
+
+	/// \brief Builds AIServer's snapshot: [AG_CHEAT_SETTINGS][u32 seq][settings].
+	/// \returns its length
+	int BuildCheatSettingsAI(char* buf) const;
+
+	/// \brief Sends AIServer the current snapshot.
+	virtual void SendCheatSettingsToAI();
+
+	/// \brief Applies a change of cheat settings to the game (weight limits, weather and time).
+	void OnCheatSettingsChanged(const Cheats::Settings& before, const Cheats::Settings& after);
 
 	/// \brief User Knights Ranking cache. Officially this is split into two caches
 	/// that track stipend claims in-memory, which means stipends reset on a server crash/restart.
@@ -390,6 +486,15 @@ private:
 	std::unique_ptr<ReadQueueThread> _readQueueThread;
 
 	std::mutex _serialMutex;
+
+	mutable std::mutex _cheatMutex;
+	Cheats::Settings _cheatSettings;
+
+	/// AIServer applies a snapshot only when it's newer than the last; seeded from the clock so it
+	/// keeps rising across restarts.
+	uint32_t _cheatSeq;
+
+	bool _allowCheatsByDefault = false;
 
 	std::filesystem::path _mapDir;
 	std::string _overrideMapDir;

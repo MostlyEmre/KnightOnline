@@ -225,7 +225,7 @@ bool CN3UIBase::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg) // 메시지�
 	return true;
 }
 
-void CN3UIBase::CallBackProc(int iID, uint32_t dwFlag)
+void CN3UIBase::CallBackProc(int /*iID*/, uint32_t /*dwFlag*/)
 {
 }
 

@@ -17,6 +17,11 @@
 #include <shared/StringUtils.h>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <array>
+#include <mutex>
+#include <vector>
+
 namespace AIServer
 {
 
@@ -135,7 +140,7 @@ void CGameSocket::CloseProcess()
 	TcpServerSocket::CloseProcess();
 }
 
-void CGameSocket::Parsing(int /*length*/, char* pData)
+void CGameSocket::Parsing(int length, char* pData)
 {
 	int index     = 0;
 	uint8_t bType = GetByte(pData, index);
@@ -231,10 +236,110 @@ void CGameSocket::Parsing(int /*length*/, char* pData)
 			RecvGateOpen(pData + index);
 			break;
 
+		case AG_CHEAT_SETTINGS:
+			RecvCheatSettings(pData + index, length - index);
+			break;
+
+		case AG_CHEAT_KILL_AROUND:
+			RecvCheatKillAround(pData + index, length - index);
+			break;
+
 		default:
 			spdlog::error("GameSocket::Parsing: Unhandled opcode {:02X}", bType);
 			break;
 	}
+}
+
+void CGameSocket::RecvCheatSettings(char* pBuf, int len)
+{
+	if (len < static_cast<int>(Cheats::AG_SETTINGS_SIZE))
+	{
+		spdlog::error("GameSocket::RecvCheatSettings: too short [len={}]", len);
+		return;
+	}
+
+	int index          = 0;
+	const uint32_t seq = GetDWORD(pBuf, index);
+
+	std::array<uint8_t, Cheats::SETTINGS_SIZE> bytes {};
+	for (uint8_t& byte : bytes)
+		byte = GetByte(pBuf, index);
+
+	const auto settings = Cheats::Read(bytes);
+	if (!settings.has_value())
+	{
+		spdlog::error("GameSocket::RecvCheatSettings: a value isn't allowed [seq={}]", seq);
+		return;
+	}
+
+	if (m_pMain->ApplyCheatSettings(seq, *settings))
+	{
+		spdlog::info("GameSocket::RecvCheatSettings: cheat settings seq={} on={} dealt={} taken={} "
+					 "drops={} respawn={}",
+			seq, settings->bOn, m_pMain->_cheatDamageDealtPct.load(),
+			m_pMain->_cheatDamageTakenPct.load(), m_pMain->_cheatDropPct.load(),
+			m_pMain->_cheatRespawnPct.load());
+	}
+}
+
+void CGameSocket::RecvCheatKillAround(char* pBuf, int len)
+{
+	if (len < 2)
+		return;
+
+	int index            = 0;
+	const int16_t userId = GetShort(pBuf, index);
+
+	CUser* pUser         = m_pMain->GetUserPtr(userId);
+	if (pUser == nullptr || pUser->m_bLive == USER_DEAD || pUser->m_sHP <= 0)
+		return;
+
+	MAP* pMap = m_pMain->GetMapByIndex(pUser->m_sZoneIndex);
+	if (pMap == nullptr)
+		return;
+
+	// The regions around the player; the NPC IDs are copied out, since killing takes the lock too.
+	std::vector<int> npcIds;
+	{
+		std::lock_guard<std::mutex> lock(g_region_mutex);
+		for (int rx = std::max(pUser->m_sRegionX - 1, 0);
+			rx <= std::min(pUser->m_sRegionX + 1, pMap->GetXRegionMax()); rx++)
+		{
+			for (int rz = std::max(pUser->m_sRegionZ - 1, 0);
+				rz <= std::min(pUser->m_sRegionZ + 1, pMap->GetZRegionMax()); rz++)
+			{
+				for (const auto& [npcId, _] :
+					pMap->m_ppRegion[rx][rz].m_RegionNpcArray.m_UserTypeMap)
+					npcIds.push_back(npcId);
+			}
+		}
+	}
+
+	__Vector3 vUser {}, vNpc {};
+	vUser.Set(pUser->m_curx, pUser->m_cury, pUser->m_curz);
+
+	int count = 0;
+	for (int npcId : npcIds)
+	{
+		if (npcId < NPC_BAND)
+			continue;
+
+		CNpc* pNpc = m_pMain->_npcMap.GetData(npcId - NPC_BAND);
+		if (pNpc == nullptr || pNpc->m_NpcState == NPC_DEAD || pNpc->m_iHP <= 0
+			|| !Cheats::IsMonsterType(pNpc->m_tNpcType) || pNpc->m_byGroup == pUser->m_bNation
+			|| pNpc->m_byObjectType == SPECIAL_OBJECT)
+			continue;
+
+		// Within the range a kill's EXP and drops are credited in.
+		vNpc.Set(pNpc->m_fCurX, pNpc->m_fCurY, pNpc->m_fCurZ);
+		if (static_cast<int>(pNpc->GetDistance(vNpc, vUser)) > NPC_EXP_RANGE)
+			continue;
+
+		pNpc->m_iCheatKillBy.store(userId, std::memory_order_relaxed);
+		++count;
+	}
+
+	spdlog::info("GameSocket::RecvCheatKillAround: [userId={} monsters={}]", userId, count);
 }
 
 // sungyong 2002.05.22

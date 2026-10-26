@@ -9,7 +9,9 @@
 
 #include <functional>
 #include <queue>
+#include <span>
 #include <stdexcept>
+#include <vector>
 
 class UnhandledSendCallbackException : public std::runtime_error
 {
@@ -48,9 +50,37 @@ public:
 		_sendCallbacks.push(callback);
 	}
 
+	/// \brief Keeps every packet sent from now on, instead of handing each to a callback.
+	void RecordSends()
+	{
+		ResetSend();
+		_recordSends = true;
+		_sentPackets.clear();
+	}
+
+	/// \returns the recorded packets that start with the opcode, in the order sent
+	std::vector<std::vector<char>> SentWith(uint8_t opcode) const
+	{
+		std::vector<std::vector<char>> packets;
+		for (const auto& packet : _sentPackets)
+		{
+			if (!packet.empty() && static_cast<uint8_t>(packet.front()) == opcode)
+				packets.push_back(packet);
+		}
+
+		return packets;
+	}
+
 	int Send(char* pBuf, int length) override
 	{
 		++_packetsSent;
+
+		if (_recordSends)
+		{
+			std::span<const char> bytes(pBuf, static_cast<size_t>(length));
+			_sentPackets.emplace_back(bytes.begin(), bytes.end());
+			return length;
+		}
 
 		if (_sendCallbacks.empty())
 			throw UnhandledSendCallbackException();
@@ -129,6 +159,8 @@ private:
 	_USER_DATA _userDataStore = {};
 	size_t _packetsSent       = 0;
 	std::queue<SendCallback> _sendCallbacks;
+	bool _recordSends = false;
+	std::vector<std::vector<char>> _sentPackets;
 };
 
 #endif // TESTS_SERVER_EBENEZER_TESTUSER_H

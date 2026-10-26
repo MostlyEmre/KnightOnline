@@ -4,6 +4,8 @@
 
 #include "StdAfxBase.h"
 #include "BitMapFile.h"
+#include "Platform/Shell.h"
+#include "Platform/Window.h"
 
 #include <FileIO/FileReader.h>
 #include <FileIO/FileWriter.h>
@@ -37,7 +39,8 @@ bool CBitMapFile::Load(File& file)
 	// bmp 파일임을 나타내는 "BM"마커 확인
 	if (m_bmfHeader.bfType != 0x4D42)
 	{
-		MessageBoxW(::GetActiveWindow(), L"원본 파일이 bitmap파일이 아닙니다.", L"error", MB_OK);
+		Platform::ShowMessageBox(
+			Platform::GetActiveWindow(), L"원본 파일이 bitmap파일이 아닙니다.", L"error");
 		return false;
 	}
 
@@ -49,8 +52,8 @@ bool CBitMapFile::Load(File& file)
 	if (24 != wBitCount || m_bmInfoHeader.biWidth <= 0
 		|| m_bmInfoHeader.biHeight <= 0) // 24비트 bmp가 아니면 return해 버린다.
 	{
-		MessageBoxW(::GetActiveWindow(),
-			L"원본 bitmap이 너비, 높이에 이상이 있거나 24bit파일이 아닙니다.", L"error", MB_OK);
+		Platform::ShowMessageBox(Platform::GetActiveWindow(),
+			L"원본 bitmap이 너비, 높이에 이상이 있거나 24bit파일이 아닙니다.", L"error");
 		return false;
 	}
 
@@ -63,7 +66,8 @@ bool CBitMapFile::Load(File& file)
 	m_pPixels      = ::GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, iDIBSize);
 	if (m_pPixels == nullptr)
 	{
-		MessageBoxW(::GetActiveWindow(), L"메모리를 할당하지 못했습니다.", L"error", MB_OK);
+		Platform::ShowMessageBox(
+			Platform::GetActiveWindow(), L"메모리를 할당하지 못했습니다.", L"error");
 		return false;
 	}
 
@@ -136,8 +140,8 @@ bool CBitMapFile::SaveRectToFile(const std::string& szFN, RECT rc)
 
 	if (nWidth <= 0 || nHeight <= 0)
 	{
-		MessageBoxW(::GetActiveWindow(), L"가로 세로가 0이하인 bitmap으로 저장할수 없습니다.",
-			L"error", MB_OK);
+		Platform::ShowMessageBox(Platform::GetActiveWindow(),
+			L"가로 세로가 0이하인 bitmap으로 저장할수 없습니다.", L"error");
 		return false;
 	}
 
@@ -146,7 +150,8 @@ bool CBitMapFile::SaveRectToFile(const std::string& szFN, RECT rc)
 	// 쓰기 모드로 파일 열기
 	if (!file.Create(szFN))
 	{
-		MessageBoxW(::GetActiveWindow(), L"원본 bitmap을 열 수 없습니다.", L"error", MB_OK);
+		Platform::ShowMessageBox(
+			Platform::GetActiveWindow(), L"원본 bitmap을 열 수 없습니다.", L"error");
 		return false;
 	}
 
@@ -224,7 +229,8 @@ bool CBitMapFile::Create(int nWidth, int nHeight, int nBPP)
 	m_pPixels      = ::GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, iDIBSize);
 	if (m_pPixels == nullptr)
 	{
-		MessageBoxW(::GetActiveWindow(), L"메모리를 할당하지 못했습니다.", L"error", MB_OK);
+		Platform::ShowMessageBox(
+			Platform::GetActiveWindow(), L"메모리를 할당하지 못했습니다.", L"error");
 		return false;
 	}
 

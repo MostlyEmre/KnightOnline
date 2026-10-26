@@ -17,11 +17,16 @@
 #include <shared/TimerThread.h>
 
 #include <db-library/ConnectionManager.h>
+#include <db-library/Exceptions.h>
+#include <db-library/PoolConnection.h>
 #include <db-library/RecordSetLoader_STLMap.h>
 #include <db-library/RecordSetLoader_Vector.h>
+#include <db-library/utils.h>
 
 #include <Ebenezer/binder/EbenezerBinder.h>
 
+#include <algorithm>
+#include <ctime>
 #include <fstream>
 #include <ranges>
 
@@ -50,6 +55,8 @@ EbenezerApp::EbenezerApp(EbenezerLogger& logger) :
 	// default _enableTelnet to on.
 	_enableTelnet     = true;
 	_telnetPort       = 2324;
+
+	_cheatSeq         = static_cast<uint32_t>(std::time(nullptr));
 
 	m_nYear           = 0;
 	m_nMonth          = 0;
@@ -281,13 +288,14 @@ bool EbenezerApp::OnStart()
 		return false;
 	}
 
-	if (!_serverSocketManager.Listen(pInfo->sPort))
+	if (!_serverSocketManager.Listen(pInfo->sPort, _listenAddress))
 	{
 		spdlog::error("FAIL TO CREATE LISTEN STATE");
 		return false;
 	}
 
-	spdlog::info("Listening on 0.0.0.0:{} - not accepting user connections yet", pInfo->sPort);
+	spdlog::info(
+		"Listening on {}:{} - not accepting user connections yet", _listenAddress, pInfo->sPort);
 
 	if (!InitializeMMF())
 	{
@@ -324,6 +332,13 @@ bool EbenezerApp::OnStart()
 	if (!LoadItemUpgradeTable())
 	{
 		spdlog::error("EbenezerApp::OnStart: failed to cache ITEM_UPGRADE table, closing");
+		return false;
+	}
+
+	spdlog::info("EbenezerApp::OnStart: loading ITEM_GRADE table");
+	if (!LoadItemGradeTable())
+	{
+		spdlog::error("EbenezerApp::OnStart: failed to cache ITEM_GRADE table, closing");
 		return false;
 	}
 
@@ -474,6 +489,12 @@ bool EbenezerApp::OnStart()
 		return false;
 	}
 
+	// The Power-up Store isn't needed to play: without it, the store is closed.
+	spdlog::info("EbenezerApp::OnStart: loading KNIGHT_CASH_SHOP table");
+	if (!LoadShoppingMallTable())
+		spdlog::warn("EbenezerApp::OnStart: failed to cache KNIGHT_CASH_SHOP, the Power-up Store "
+					 "is closed");
+
 	spdlog::info("EbenezerApp::OnStart: loading maps");
 	if (!MapFileLoad())
 	{
@@ -484,7 +505,7 @@ bool EbenezerApp::OnStart()
 	LoadNoticeData();
 
 	m_pUdpSocket = new CUdpSocket(this);
-	if (!m_pUdpSocket->CreateSocket())
+	if (!m_pUdpSocket->CreateSocket(_listenAddress))
 	{
 		spdlog::error("EbenezerApp::OnStart: failed to create UDP socket");
 		return false;
@@ -1147,6 +1168,11 @@ void EbenezerApp::SetupCommandLineArgParser(argparse::ArgumentParser& parser)
 	parser.add_argument("--quests-dir")
 		.help("location of directory containing the Ebenezer server specific quest scripts (.EVTs)")
 		.store_into(_overrideQuestsDir);
+
+	parser.add_argument("--allow-cheats")
+		.help("allows the cheats menu unless the config's [CHEATS] ALLOWED says otherwise")
+		.flag()
+		.store_into(_allowCheatsByDefault);
 }
 
 bool EbenezerApp::ProcessCommandLineArgs(const argparse::ArgumentParser& parser)
@@ -1239,6 +1265,9 @@ bool EbenezerApp::LoadConfig(CIni& iniFile)
 
 	m_nCastleCapture = iniFile.GetInt("CASTLE", "NATION", 1);
 	m_nServerNo      = iniFile.GetInt("ZONE_INFO", "MY_INFO", 1);
+	m_bGenieEnabled  = iniFile.GetBool("GENIE", "ENABLED", true);
+	m_bUpgradeBoost  = iniFile.GetBool("UPGRADE", "BOOST", true);
+	m_bCheatsAllowed = iniFile.GetBool("CHEATS", "ALLOWED", _allowCheatsByDefault);
 	m_nServerGroup   = static_cast<e_ServerGroupType>(iniFile.GetInt("ZONE_INFO", "SERVER_NUM", 0));
 	serverCount      = iniFile.GetInt("ZONE_INFO", "SERVER_COUNT", 1);
 	if (serverCount < 1)
@@ -1288,6 +1317,9 @@ bool EbenezerApp::LoadConfig(CIni& iniFile)
 			m_ServerGroupArray.PutData(pInfo->sServerNo, pInfo);
 		}
 	}
+
+	// OpenKO: the cheats menu's settings, kept beside the config.
+	LoadCheatSettings();
 
 	return true;
 }
@@ -1354,6 +1386,13 @@ void EbenezerApp::UpdateGameTime()
 	SetShort(pSendBuf, m_nAmount, sendIndex);
 	Send_AIServer(1000, pSendBuf, sendIndex);
 
+	// OpenKO: the client runs its own clock, so the cheats menu's hour is held by re-sending it.
+	if (CheatHour() != Cheats::HOUR_NORMAL)
+	{
+		sendIndex = BuildTimePacket(pSendBuf);
+		Send_All(pSendBuf, sendIndex);
+	}
+
 	if (bKnights)
 	{
 		memset(pSendBuf, 0, sizeof(pSendBuf));
@@ -1394,9 +1433,8 @@ void EbenezerApp::UpdateWeather()
 
 	m_nWeather = weather;
 
-	SetByte(sendBuffer, WIZ_WEATHER, sendIndex);
-	SetByte(sendBuffer, (uint8_t) m_nWeather, sendIndex);
-	SetShort(sendBuffer, m_nAmount, sendIndex);
+	// OpenKO: the cheats menu's weather, when it imposes one.
+	sendIndex  = BuildWeatherPacket(sendBuffer);
 	Send_All(sendBuffer, sendIndex);
 }
 
@@ -2139,6 +2177,9 @@ void EbenezerApp::SendAllUserInfo()
 	SetByte(sendBuffer, SERVER_INFO_END, sendIndex);
 	Send_AIServer(1000, sendBuffer, sendIndex);
 
+	// OpenKO: the cheats menu's settings, after a first connection or a reconnection.
+	SendCheatSettingsToAI();
+
 	spdlog::trace("EbenezerApp::SendAllUserInfo: completed");
 }
 
@@ -2684,6 +2725,539 @@ bool EbenezerApp::LoadItemExchange()
 	}
 
 	return true;
+}
+
+namespace
+{
+
+// The Power-up Store's tables, for databases made before it. The SQLite backend stores text as
+// SQL Server's varchar compares it: case-insensitively (KO_CI).
+#if defined(OPENKO_DB_BACKEND_SQLITE)
+constexpr const char* CREATE_KNIGHT_CASH = "CREATE TABLE KNIGHT_CASH (strAccountID TEXT COLLATE "
+										   "KO_CI NOT NULL PRIMARY KEY, nKnightCash "
+										   "INTEGER NOT NULL) WITHOUT ROWID";
+constexpr const char* CREATE_KNIGHT_CASH_SHOP = "CREATE TABLE KNIGHT_CASH_SHOP (sIndex INTEGER NOT "
+												"NULL PRIMARY KEY, ItemID INTEGER NOT NULL, "
+												"sCount INTEGER NOT NULL, nPrice INTEGER NOT NULL)";
+#else
+constexpr const char* CREATE_KNIGHT_CASH = "CREATE TABLE KNIGHT_CASH (strAccountID varchar(21) NOT "
+										   "NULL PRIMARY KEY, nKnightCash int NOT "
+										   "NULL)";
+constexpr const char* CREATE_KNIGHT_CASH_SHOP = "CREATE TABLE KNIGHT_CASH_SHOP (sIndex smallint "
+												"NOT NULL PRIMARY KEY, ItemID int NOT NULL, "
+												"sCount smallint NOT NULL, nPrice int NOT NULL)";
+#endif
+
+// What KNIGHT_CASH_SHOP starts with: every item in the store's ranges (7xxxxxxxx and 8xxxxxxxx)
+// that the ITEM table and the client both have, with a name and an icon, at a price in Knight
+// Cash. Left out for want of an icon: the Bronze and Silver Premium Services (800037000,
+// 800038000), the Clarity potion (800019000) and the Cake (800055000).
+// clang-format off
+constexpr _SHOPPING_MALL_ITEM SHOPPING_MALL_ITEMS[] = {
+	// Special items
+	{ 800032000, 1, 1000 },  // Name Change Scroll
+	{ 700001000, 1, 1000 },  // Redistribution Item
+	{ 700002000, 1, 500 },   // Trina's Piece
+	{ 800063000, 1, 300 },   // Stat Scroll
+	// Experience
+	{ 800050000, 1, 400 },   // Mount Scroll (+50% for an hour)
+	{ 800051000, 1, 200 },   // Ascent Scroll (+20% for an hour)
+	// Stat scrolls (L)
+	{ 800003000, 1, 300 },   // STR+
+	{ 800004000, 1, 300 },   // HP+
+	{ 800005000, 1, 300 },   // DEX+
+	{ 800006000, 1, 300 },   // INT+
+	{ 800007000, 1, 300 },   // MP+
+	{ 800008000, 1, 500 },   // Power of Lion
+	// Defense and HP scrolls (L)
+	{ 800009000, 1, 300 },   // 150 Defense+
+	{ 800010000, 1, 450 },   // 300 Defense+
+	{ 800011000, 1, 300 },   // 500 HP+
+	{ 800012000, 1, 400 },   // 1000 HP+
+	{ 800013000, 1, 500 },   // 1500 HP+
+	// Attack, speed and the rest
+	{ 800014000, 1, 400 },   // Attack+ Scroll
+	{ 800015000, 1, 200 },   // Speed+ Potion
+	{ 800060000, 1, 300 },   // Weight Scroll
+	{ 800061000, 1, 500 },   // Weapon Enchant Scroll
+	{ 800062000, 1, 500 },   // Armor Enchant Scroll
+	{ 800022000, 1, 300 },   // Duration Item
+	// Stat, defense and HP scrolls (S)
+	{ 800023000, 1, 100 },   // STR+
+	{ 800024000, 1, 100 },   // HP+
+	{ 800025000, 1, 100 },   // DEX+
+	{ 800026000, 1, 100 },   // INT+
+	{ 800027000, 1, 100 },   // MP+
+	{ 800028000, 1, 200 },   // Power of Lion
+	{ 800029000, 1, 100 },   // 150 Defense+
+	{ 800030000, 1, 100 },   // 500 HP+
+	{ 800031000, 1, 150 },   // 1000 HP+
+	// Potions and food
+	{ 800052000, 1, 100 },   // Vegetable Dumplings
+	{ 800053000, 1, 100 },   // Normal Dumplings
+	{ 800054000, 1, 100 },   // Fish Dumplings
+	// Teleporting and resurrection
+	{ 800002000, 1, 50 },    // Re-Spawn Teleport Scroll
+	{ 800021000, 1, 100 },   // Scroll of teleport friend
+	{ 800036000, 1, 200 },   // 60% re-spawn scroll
+	{ 800041000, 5, 200 },   // Resurrection Scroll(50)
+	// Monster summoning
+	{ 700004000, 1, 800 },   // Monster Summon Staff
+	{ 700006000, 1, 800 },   // Monster Summon Staff(Event)
+	// Clan leaders' guardians
+	{ 800056000, 1, 1500 },  // Leader's Guardian [Karus]
+	{ 800057000, 1, 1500 },  // Leader's Guardian [El Morad]
+	{ 800058000, 1, 1000 },  // Co-Leader's Guardian [Karus]
+	{ 800059000, 1, 1000 },  // Co-Leader's Guardian [El Morad]
+	{ 800064000, 1, 6000 },  // Leader's Guardian [Karus 5]
+	{ 800065000, 1, 6000 },  // Leader's Guardian [El Morad 5]
+	{ 800066000, 1, 4000 },  // Co-Leader's Guardian [Karus 5]
+	{ 800067000, 1, 4000 },  // Co-Leader's Guardian [El Morad 5]
+	{ 800068000, 1, 10000 }, // Leader's Guardian [Karus], 10 summons
+	{ 800069000, 1, 10000 }, // Leader's Guardian [El Morad], 10 summons
+	{ 800070000, 1, 7000 },  // Co-Leader's Guardian [Karus], 10 summons
+	{ 800071000, 1, 7000 },  // Co-Leader's Guardian [El Morad], 10 summons
+};
+// clang-format on
+
+// Whether a table is there: a query on it fails if it isn't.
+bool TableExists(PoolConnection& conn, const std::string& table)
+{
+	try
+	{
+		nanodbc::statement stmt = conn.CreateStatement("SELECT COUNT(*) FROM " + table);
+		nanodbc::result result  = stmt.execute();
+		return result.next();
+	}
+	catch (const nanodbc::database_error&)
+	{
+		return false;
+	}
+}
+
+} // namespace
+
+bool EbenezerApp::LoadItemGradeTable()
+{
+	m_ItemGradeMap.clear();
+
+	try
+	{
+		auto conn = ConnectionManager::CreatePoolConnection(modelUtil::DbType::GAME);
+		if (conn == nullptr)
+		{
+			throw db::ApplicationError(
+				"EbenezerApp::LoadItemGradeTable: failed to allocate pool connection");
+		}
+
+		// The port's game data adds it (port/db/port_game_data.py); a database without it only
+		// loses the Low and Middle Class scrolls.
+		if (!TableExists(*conn, "ITEM_GRADE"))
+		{
+			spdlog::info("EbenezerApp::LoadItemGradeTable: no ITEM_GRADE table: Low and Middle "
+						 "Class scrolls won't upgrade anything");
+			return true;
+		}
+
+		nanodbc::statement stmt = conn->CreateStatement("SELECT Num, Grade FROM ITEM_GRADE");
+		nanodbc::result result  = stmt.execute();
+		while (result.next())
+			m_ItemGradeMap[result.get<int>(0)] = static_cast<uint8_t>(result.get<int>(1));
+	}
+	catch (const nanodbc::database_error& dbErr)
+	{
+		db::utils::LogDatabaseError(dbErr, "EbenezerApp::LoadItemGradeTable()");
+		return false;
+	}
+	catch (const std::exception& ex)
+	{
+		spdlog::error("EbenezerApp::LoadItemGradeTable: {}", ex.what());
+		return false;
+	}
+
+	spdlog::info("EbenezerApp::LoadItemGradeTable: {} items with a class", m_ItemGradeMap.size());
+	return true;
+}
+
+int EbenezerApp::ItemGrade(int itemId) const
+{
+	auto itr = m_ItemGradeMap.find(itemId);
+	return itr != m_ItemGradeMap.end() ? itr->second : 0;
+}
+
+Cheats::Settings EbenezerApp::CheatSettings() const
+{
+	std::lock_guard<std::mutex> lock(_cheatMutex);
+	return _cheatSettings;
+}
+
+uint16_t EbenezerApp::CheatPct(uint16_t Cheats::Settings::* pct) const
+{
+	return Cheats::Effective(CheatSettings(), pct);
+}
+
+bool EbenezerApp::CheatFlag(bool Cheats::Settings::* flag) const
+{
+	return Cheats::EffectiveFlag(CheatSettings(), flag);
+}
+
+int EbenezerApp::CheatDamageTaken(int hpChange) const
+{
+	if (hpChange >= 0)
+		return hpChange;
+
+	return -Cheats::ScaleDamage(-hpChange, CheatPct(&Cheats::Settings::sDamageTakenPct));
+}
+
+namespace
+{
+
+// cheats.ini keys, in Cheats::Settings order
+constexpr std::string_view CHEATS_SECTION = "CHEATS";
+
+struct CheatPctKey
+{
+	std::string_view key;
+	uint16_t Cheats::Settings::* pct;
+};
+
+constexpr std::array<CheatPctKey, 7> CHEAT_PCT_KEYS { {
+	{ "EXP", &Cheats::Settings::sExpPct },
+	{ "DAMAGE_DEALT", &Cheats::Settings::sDamageDealtPct },
+	{ "DAMAGE_TAKEN", &Cheats::Settings::sDamageTakenPct },
+	{ "COINS", &Cheats::Settings::sCoinPct },
+	{ "DROPS", &Cheats::Settings::sDropPct },
+	{ "NP", &Cheats::Settings::sLoyaltyPct },
+	{ "RESPAWN", &Cheats::Settings::sRespawnPct },
+} };
+
+struct CheatFlagKey
+{
+	std::string_view key;
+	bool Cheats::Settings::* flag;
+};
+
+constexpr std::array<CheatFlagKey, 6> CHEAT_FLAG_KEYS { {
+	{ "ON", &Cheats::Settings::bOn },
+	{ "INFINITE_MP", &Cheats::Settings::bInfiniteMp },
+	{ "NO_DURABILITY_LOSS", &Cheats::Settings::bNoDurabilityLoss },
+	{ "KEEP_CONSUMABLES", &Cheats::Settings::bKeepConsumables },
+	{ "NO_WEIGHT_LIMIT", &Cheats::Settings::bNoWeightLimit },
+	{ "FREE_SHOPS", &Cheats::Settings::bFreeShops },
+} };
+
+} // namespace
+
+bool EbenezerApp::SetCheatSettings(const Cheats::Settings& settings)
+{
+	if (!Cheats::IsValid(settings))
+		return false;
+
+	Cheats::Settings before;
+	{
+		std::lock_guard<std::mutex> lock(_cheatMutex);
+		before         = _cheatSettings;
+		_cheatSettings = settings;
+		++_cheatSeq;
+
+		CIni iniFile;
+		for (const auto& [key, pct] : CHEAT_PCT_KEYS)
+			iniFile.SetInt(CHEATS_SECTION, key, settings.*pct);
+
+		for (const auto& [key, flag] : CHEAT_FLAG_KEYS)
+			iniFile.SetInt(CHEATS_SECTION, key, settings.*flag ? 1 : 0);
+
+		iniFile.SetInt(CHEATS_SECTION, "WEATHER", static_cast<int>(settings.eWeather));
+		iniFile.SetInt(CHEATS_SECTION, "HOUR", settings.cHour);
+		iniFile.Save(_cheatSettingsPath);
+	}
+
+	SendCheatSettingsToAI();
+
+	char sendBuffer[32] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, WIZ_CHEAT, sendIndex);
+	SetByte(sendBuffer, CHEAT_SETTINGS, sendIndex);
+	WriteCheatSettings(sendBuffer, settings, sendIndex);
+	Send_All(sendBuffer, sendIndex);
+
+	OnCheatSettingsChanged(before, settings);
+	return true;
+}
+
+void EbenezerApp::LoadCheatSettings()
+{
+	Cheats::Settings settings;
+
+	std::error_code ec;
+	if (std::filesystem::exists(_cheatSettingsPath, ec))
+	{
+		CIni iniFile;
+		iniFile.Load(_cheatSettingsPath);
+
+		for (const auto& [key, pct] : CHEAT_PCT_KEYS)
+			settings
+				.*pct = static_cast<uint16_t>(iniFile.GetInt(CHEATS_SECTION, key, settings.*pct));
+
+		for (const auto& [key, flag] : CHEAT_FLAG_KEYS)
+			settings.*flag = iniFile.GetBool(CHEATS_SECTION, key, settings.*flag);
+
+		settings.eWeather = static_cast<Cheats::Weather>(
+			iniFile.GetInt(CHEATS_SECTION, "WEATHER", static_cast<int>(settings.eWeather)));
+		settings.cHour = static_cast<int8_t>(
+			iniFile.GetInt(CHEATS_SECTION, "HOUR", settings.cHour));
+
+		if (!Cheats::IsValid(settings))
+		{
+			spdlog::warn("EbenezerApp::LoadCheatSettings: {} has a value that isn't allowed; "
+						 "using the defaults",
+				_cheatSettingsPath.string());
+			settings = {};
+		}
+	}
+
+	// A server that doesn't allow cheats keeps the saved settings but applies none of them: the
+	// player could neither see nor change them.
+	if (!m_bCheatsAllowed)
+		settings.bOn = false;
+
+	std::lock_guard<std::mutex> lock(_cheatMutex);
+	_cheatSettings = settings;
+}
+
+void EbenezerApp::WriteCheatSettings(char* buf, const Cheats::Settings& settings, int& index)
+{
+	std::array<uint8_t, Cheats::SETTINGS_SIZE> bytes {};
+	Cheats::Write(settings, bytes);
+	for (uint8_t byte : bytes)
+		SetByte(buf, byte, index);
+}
+
+std::optional<Cheats::Settings> EbenezerApp::ReadCheatSettings(const char* buf, int len, int& index)
+{
+	if (len - index < static_cast<int>(Cheats::SETTINGS_SIZE))
+		return std::nullopt;
+
+	std::array<uint8_t, Cheats::SETTINGS_SIZE> bytes {};
+	for (uint8_t& byte : bytes)
+		byte = GetByte(buf, index);
+
+	return Cheats::Read(bytes);
+}
+
+int EbenezerApp::BuildCheatSettingsAI(char* buf) const
+{
+	std::lock_guard<std::mutex> lock(_cheatMutex);
+
+	int sendIndex = 0;
+	SetByte(buf, AG_CHEAT_SETTINGS, sendIndex);
+	SetDWORD(buf, _cheatSeq, sendIndex);
+	WriteCheatSettings(buf, _cheatSettings, sendIndex);
+	return sendIndex;
+}
+
+void EbenezerApp::SendCheatSettingsToAI()
+{
+	char sendBuffer[32] {};
+	int sendIndex = BuildCheatSettingsAI(sendBuffer);
+	Send_AIServer(1000, sendBuffer, sendIndex);
+}
+
+std::optional<Cheats::WeatherOverride> EbenezerApp::CheatWeather() const
+{
+	const Cheats::Settings settings = CheatSettings();
+	if (!settings.bOn)
+		return std::nullopt;
+
+	return Cheats::WeatherFor(settings.eWeather);
+}
+
+int EbenezerApp::CheatHour() const
+{
+	const Cheats::Settings settings = CheatSettings();
+	return settings.bOn ? settings.cHour : Cheats::HOUR_NORMAL;
+}
+
+int EbenezerApp::BuildTimePacket(char* buf) const
+{
+	const int hour = CheatHour();
+
+	int sendIndex  = 0;
+	SetByte(buf, WIZ_TIME, sendIndex);
+	SetShort(buf, m_nYear, sendIndex);
+	SetShort(buf, m_nMonth, sendIndex);
+	SetShort(buf, m_nDate, sendIndex);
+	SetShort(buf, hour != Cheats::HOUR_NORMAL ? hour : m_nHour, sendIndex);
+	SetShort(buf, hour != Cheats::HOUR_NORMAL ? 0 : m_nMin, sendIndex);
+	return sendIndex;
+}
+
+int EbenezerApp::BuildWeatherPacket(char* buf) const
+{
+	const auto weather = CheatWeather();
+
+	int sendIndex      = 0;
+	SetByte(buf, WIZ_WEATHER, sendIndex);
+	if (weather.has_value())
+	{
+		SetByte(buf, weather->byType, sendIndex);
+		SetShort(buf, weather->sAmount, sendIndex);
+	}
+	else
+	{
+		SetByte(buf, static_cast<uint8_t>(m_nWeather), sendIndex);
+		SetShort(buf, m_nAmount, sendIndex);
+	}
+
+	return sendIndex;
+}
+
+bool EbenezerApp::IsAIServerConnected()
+{
+	std::lock_guard<std::mutex> lock(_aiSocketMutex);
+	return std::ranges::any_of(
+		_aiSocketMap, [](const auto& entry) { return entry.second != nullptr; });
+}
+
+void EbenezerApp::OnCheatSettingsChanged(
+	const Cheats::Settings& before, const Cheats::Settings& after)
+{
+	char sendBuffer[32] {};
+
+	// The client is told the weather and time whenever what's in effect changes.
+	auto weatherOf = [](const Cheats::Settings& settings)
+	{ return settings.bOn ? Cheats::WeatherFor(settings.eWeather) : std::nullopt; };
+	if (weatherOf(before) != weatherOf(after))
+		Send_All(sendBuffer, BuildWeatherPacket(sendBuffer));
+
+	auto hourOf = [](const Cheats::Settings& settings)
+	{ return settings.bOn ? settings.cHour : Cheats::HOUR_NORMAL; };
+	if (hourOf(before) != hourOf(after))
+		Send_All(sendBuffer, BuildTimePacket(sendBuffer));
+
+	// The weight limit is part of each player's abilities, which the client is told about.
+	if (Cheats::EffectiveFlag(before, &Cheats::Settings::bNoWeightLimit)
+		!= Cheats::EffectiveFlag(after, &Cheats::Settings::bNoWeightLimit))
+	{
+		int socketCount = GetUserSocketCount();
+		for (int i = 0; i < socketCount; i++)
+		{
+			auto pUser = GetUserPtrUnchecked(i);
+			if (pUser == nullptr || pUser->GetState() != CONNECTION_STATE_GAMESTART)
+				continue;
+
+			pUser->SetUserAbility();
+			pUser->SendStatsUpdate();
+		}
+	}
+}
+
+bool EbenezerApp::LoadShoppingMallTable()
+{
+	m_ShoppingMallItems.clear();
+
+	try
+	{
+		auto conn = ConnectionManager::CreatePoolConnection(modelUtil::DbType::GAME);
+		if (conn == nullptr)
+		{
+			throw db::ApplicationError(
+				"EbenezerApp::LoadShoppingMallTable: failed to allocate pool connection");
+		}
+
+		if (!TableExists(*conn, "KNIGHT_CASH"))
+		{
+			spdlog::info("EbenezerApp::LoadShoppingMallTable: creating KNIGHT_CASH");
+			nanodbc::statement stmt = conn->CreateStatement(CREATE_KNIGHT_CASH);
+			stmt.execute();
+		}
+
+		if (!TableExists(*conn, "KNIGHT_CASH_SHOP"))
+		{
+			spdlog::info("EbenezerApp::LoadShoppingMallTable: creating KNIGHT_CASH_SHOP");
+			nanodbc::statement create = conn->CreateStatement(CREATE_KNIGHT_CASH_SHOP);
+			create.execute();
+
+			nanodbc::statement insert = conn->CreateStatement(
+				"INSERT INTO KNIGHT_CASH_SHOP (sIndex, ItemID, sCount, nPrice) VALUES (?, ?, ?, "
+				"?)");
+			int index = 0;
+			for (const _SHOPPING_MALL_ITEM& item : SHOPPING_MALL_ITEMS)
+			{
+				int itemId    = item.itemId;
+				int16_t count = item.count;
+				int price     = item.price;
+				++index;
+				insert.bind(0, &index);
+				insert.bind(1, &itemId);
+				insert.bind(2, &count);
+				insert.bind(3, &price);
+				insert.execute();
+			}
+		}
+
+		nanodbc::statement stmt = conn->CreateStatement(
+			"SELECT ItemID, sCount, nPrice FROM KNIGHT_CASH_SHOP ORDER BY sIndex");
+		nanodbc::result result = stmt.execute();
+		while (result.next())
+		{
+			_SHOPPING_MALL_ITEM item {};
+			item.itemId         = result.get<int>(0);
+			item.count          = static_cast<int16_t>(result.get<int>(1));
+			item.price          = result.get<int>(2);
+
+			// Only what can be given: the item is in ITEM, and the server can stack that many.
+			model::Item* pTable = m_ItemTableMap.GetData(item.itemId);
+			if (pTable == nullptr || item.count < 1 || item.count > MAX_ITEM_COUNT
+				|| (pTable->Countable == 0 && item.count != 1) || item.price < 0)
+			{
+				spdlog::warn("EbenezerApp::LoadShoppingMallTable: skipped invalid item [itemId={} "
+							 "count={} price={}]",
+					item.itemId, item.count, item.price);
+				continue;
+			}
+
+			m_ShoppingMallItems.push_back(item);
+		}
+	}
+	catch (const nanodbc::database_error& dbErr)
+	{
+		db::utils::LogDatabaseError(dbErr, "EbenezerApp::LoadShoppingMallTable()");
+		return false;
+	}
+	catch (const std::exception& ex)
+	{
+		spdlog::error("EbenezerApp::LoadShoppingMallTable: {}", ex.what());
+		return false;
+	}
+
+	spdlog::info(
+		"EbenezerApp::LoadShoppingMallTable: {} items for sale", m_ShoppingMallItems.size());
+	return true;
+}
+
+const _SHOPPING_MALL_ITEM* EbenezerApp::GetShoppingMallItem(int itemId) const
+{
+	for (const _SHOPPING_MALL_ITEM& item : m_ShoppingMallItems)
+	{
+		if (item.itemId == itemId)
+			return &item;
+	}
+
+	return nullptr;
+}
+
+void EbenezerApp::KnightCashAddToAgent(int socketId, const char* accountId, int amount, bool notify)
+{
+	char sendBuffer[128] {};
+	int sendIndex = 0;
+	SetByte(sendBuffer, DB_OPENKO_CUSTOM, sendIndex);
+	SetShort(sendBuffer, socketId, sendIndex);
+	SetByte(sendBuffer, DB_CUSTOM_KNIGHT_CASH_ADD_REQUEST, sendIndex);
+	SetString1(sendBuffer, accountId, sendIndex);
+	SetInt(sendBuffer, amount, sendIndex);
+	SetByte(sendBuffer, notify ? 1 : 0, sendIndex);
+	m_LoggerSendQueue.PutData(sendBuffer, sendIndex);
 }
 
 bool EbenezerApp::LoadAllKnights()

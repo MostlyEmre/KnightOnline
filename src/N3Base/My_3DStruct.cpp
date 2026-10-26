@@ -4,6 +4,7 @@
 #include "ColorValue.inl"
 #include "Material.inl"
 #include "VertexTypes.inl"
+#include "Platform/Input.h"
 
 D3DCOLOR _RGB_To_D3DCOLOR(COLORREF cr, uint32_t dwAlpha)
 {
@@ -61,10 +62,10 @@ D3DCOLORVALUE _D3DCOLOR_To_D3DCOLORVALUE(D3DCOLOR cr)
 
 int16_t _IsKeyDown(int iVirtualKey)
 {
-	return (GetAsyncKeyState(iVirtualKey) & 0xff00);
+	return (Platform::GetAsyncKeyState(iVirtualKey) & 0xff00);
 }
 
 int16_t _IsKeyDowned(int iVirtualKey)
 {
-	return (GetAsyncKeyState(iVirtualKey) & 0x00ff);
+	return (Platform::GetAsyncKeyState(iVirtualKey) & 0x00ff);
 }

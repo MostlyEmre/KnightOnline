@@ -5,6 +5,8 @@
 #include "StdAfx.h"
 #include "BirdMng.h"
 
+#include <N3Base/Platform/FileSystem.h>
+
 CBirdMng::CBirdMng()
 {
 }
@@ -25,7 +27,7 @@ void CBirdMng::LoadFromFile(const std::string& szFN)
 	if (szFN.empty())
 		return;
 
-	FILE* stream = fopen(szFN.c_str(), "r"); //text파일로 만든다
+	FILE* stream = Platform::OpenFile(szFN, "r"); //text파일로 만든다
 	if (stream == nullptr)
 		return;
 

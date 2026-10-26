@@ -10,8 +10,6 @@
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 
-//
-static WSAData s_WSData;
 int CAPISocket::s_nInstanceCount = 0;
 
 #ifdef _CRYPTION
@@ -28,14 +26,14 @@ const uint16_t PACKET_TAIL   = 0X55AA;
 #include <N3Base/LogWriter.h>
 #endif
 
+#include <N3Base/Platform/Window.h>
+
 CAPISocket::CAPISocket() : m_SendBuf(SEND_BUF_SIZE), m_RecvBuf(RECV_BUF_SIZE), m_CB(RECV_BUF_SIZE)
 {
-	m_hSocket    = INVALID_SOCKET;
 	m_hWndTarget = nullptr;
 	m_dwPort     = 0;
 
-	if (s_nInstanceCount++ == 0)
-		(void) WSAStartup(0x0101, &s_WSData);
+	s_nInstanceCount++;
 
 	m_iSendByteCount = 0;
 	m_bConnected     = FALSE;
@@ -49,8 +47,7 @@ CAPISocket::~CAPISocket()
 {
 	Release();
 
-	if (--s_nInstanceCount == 0)
-		WSACleanup();
+	--s_nInstanceCount;
 }
 
 void CAPISocket::Release()
@@ -68,10 +65,8 @@ void CAPISocket::Release()
 
 void CAPISocket::Disconnect()
 {
-	if (m_hSocket != INVALID_SOCKET)
-		closesocket(m_hSocket);
+	m_Socket.Close();
 
-	m_hSocket    = INVALID_SOCKET;
 	m_hWndTarget = nullptr;
 	m_szIP.clear();
 	m_dwPort      = 0;
@@ -89,65 +84,12 @@ int CAPISocket::Connect(HWND hWnd, const std::string& szIP, uint32_t dwPort)
 	if (szIP.empty() || dwPort == 0)
 		return -1;
 
-	if (m_hSocket != INVALID_SOCKET)
+	if (m_Socket.IsOpen())
 		Disconnect();
 
-	//
-	struct sockaddr_in server {};
-	struct hostent* hp = nullptr;
-
-	if ((szIP[0] >= '0') && (szIP[0] <= '9'))
-	{
-		server.sin_family      = AF_INET;
-		server.sin_addr.s_addr = inet_addr(szIP.c_str());
-		server.sin_port        = htons((u_short) dwPort);
-	}
-	else
-	{
-		hp = gethostbyname(szIP.c_str());
-		if (hp == nullptr)
-		{
-#ifdef _DEBUG
-			std::string msg = fmt::format("Error: Connecting to {}.", szIP);
-			MessageBoxA(hWnd, msg.c_str(), "socket error", MB_OK | MB_ICONSTOP);
-#endif
-			return -1;
-		}
-
-		memcpy(&server.sin_addr, hp->h_addr, hp->h_length);
-		server.sin_family = hp->h_addrtype;
-		server.sin_port   = htons((u_short) dwPort);
-	} // else
-
-	// create socket
-	SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock == INVALID_SOCKET)
-	{
-		int iErrCode = ::WSAGetLastError();
-#ifdef _DEBUG
-		char msg[] = "Error opening stream socket";
-		MessageBoxA(hWnd, msg, "socket error", MB_OK | MB_ICONSTOP);
-#endif
+	int iErrCode = m_Socket.Connect(hWnd, szIP, static_cast<uint16_t>(dwPort), RECV_BUF_SIZE);
+	if (iErrCode != 0)
 		return iErrCode;
-	}
-
-	m_hSocket          = sock;
-
-	// 소켓 옵션
-	int iRecvBufferLen = RECV_BUF_SIZE;
-	setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char*) &iRecvBufferLen, 4);
-
-	if (connect(sock, (struct sockaddr*) &server, sizeof(server)) != 0)
-	{
-		int iErrCode = ::WSAGetLastError();
-
-		closesocket(sock);
-		m_hSocket = INVALID_SOCKET;
-
-		return iErrCode;
-	}
-
-	WSAAsyncSelect(sock, hWnd, WM_SOCKETMSG, FD_CONNECT | FD_READ | FD_CLOSE);
 
 	m_hWndTarget = hWnd;
 	m_szIP       = szIP;
@@ -164,22 +106,21 @@ int CAPISocket::ReConnect()
 
 void CAPISocket::Receive()
 {
-	if (INVALID_SOCKET == (SOCKET) m_hSocket || FALSE == m_bConnected)
+	if (!m_Socket.IsOpen() || FALSE == m_bConnected)
 		return;
 
-	u_long dwPktSize = 0;
-	u_long dwRead    = 0;
+	size_t dwPktSize = m_Socket.AvailableBytes();
+	size_t dwRead    = 0;
 	int count        = 0;
 
-	ioctlsocket((SOCKET) m_hSocket, FIONREAD, &dwPktSize);
 	while (dwRead < dwPktSize)
 	{
-		count = recv((SOCKET) m_hSocket, m_RecvBuf.data(), static_cast<int>(m_RecvBuf.size()), 0);
-		if (count == SOCKET_ERROR)
+		count = m_Socket.Receive(m_RecvBuf.data(), static_cast<int>(m_RecvBuf.size()));
+		if (count == -1)
 		{
 			__ASSERT(0, "socket receive error!");
 #ifdef _N3GAME
-			int iErr = ::GetLastError();
+			int iErr = Platform::TcpSocket::LastError();
 			CLogWriter::Write("socket receive error! : {}", iErr);
 #endif
 			break;
@@ -258,7 +199,7 @@ void CAPISocket::Send(uint8_t* pData, int nSize)
 {
 	if (!m_bEnableSend)
 		return; // 보내기 가능..?
-	if (INVALID_SOCKET == (SOCKET) m_hSocket || FALSE == m_bConnected)
+	if (!m_Socket.IsOpen() || FALSE == m_bConnected)
 		return;
 
 #ifdef _CRYPTION
@@ -301,14 +242,14 @@ void CAPISocket::Send(uint8_t* pData, int nSize)
 	int count                 = 0;
 	while (nSent < nTotalSize)
 	{
-		count = send((SOCKET) m_hSocket, m_SendBuf.data(), nTotalSize, 0);
-		if (count == SOCKET_ERROR)
+		count = m_Socket.Send(m_SendBuf.data(), nTotalSize);
+		if (count == -1)
 		{
 			__ASSERT(0, "socket send error!");
 #ifdef _N3GAME
-			int iErr = ::GetLastError();
+			int iErr = Platform::TcpSocket::LastError();
 			CLogWriter::Write("socket send error! : {}", iErr);
-			PostQuitMessage(-1);
+			Platform::PostQuitMessage(-1);
 #endif
 			break;
 		}

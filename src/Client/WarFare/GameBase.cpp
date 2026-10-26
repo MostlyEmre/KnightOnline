@@ -10,6 +10,7 @@
 #include "PlayerMySelf.h"
 
 #include <N3Base/N3ShapeMgr.h>
+#include <N3Base/Platform/Shell.h>
 
 #include <ranges>
 #include <algorithm>
@@ -43,7 +44,7 @@ CGameBase::~CGameBase()
 void CGameBase::StaticMemberInit()
 {
 	std::string szLangTail = "_us.tbl";
-	int iLangID            = ::GetUserDefaultLangID();
+	int iLangID            = Platform::GetUserDefaultLangID();
 	if (0x0404 == iLangID)
 		szLangTail = "_TW.tbl"; // Taiwan Language
 

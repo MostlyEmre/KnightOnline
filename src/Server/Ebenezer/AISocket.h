@@ -38,6 +38,9 @@ public:
 	void RecvNpcInfo(char* pBuf);
 	void RecvUserHP(char* pBuf);
 	void RecvUserExp(char* pBuf);
+
+	/// \brief AG_USER_EXP's work, without the socket: a kill's EXP and NP for a user.
+	static void HandleUserExp(EbenezerApp* main, char* pBuf);
 	void RecvSystemMsg(char* pBuf);
 	void RecvNpcGiveItem(char* pBuf);
 	void RecvUserFail(char* pBuf);

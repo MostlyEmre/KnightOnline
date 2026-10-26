@@ -78,6 +78,7 @@ void CGameProcCharacterCreate::Render()
 	s_pPlayer->InventoryChrRender(m_rcChr); // 캐릭터 그리기..
 
 	s_pMsgBoxMgr->Render();                 //MessageBox를 그려준다.
+	RenderModalWindows();
 	if (s_pGameCursor)
 		s_pGameCursor->Render();
 

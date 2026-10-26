@@ -132,8 +132,11 @@
     <ClCompile Include="GameProcLogIn_1098.cpp" />
     <ClCompile Include="GameProcMain.cpp" />
     <ClCompile Include="GameProcNationSelect.cpp" />
+    <ClCompile Include="Cheats.cpp" />
+    <ClCompile Include="Genie.cpp" />
     <ClCompile Include="IconItemSkill.cpp" />
     <ClCompile Include="ItemRepairMgr.cpp" />
+    <ClCompile Include="LayoutChecks.cpp" />
     <ClCompile Include="LightMgr.cpp" />
     <ClCompile Include="LocalInput.cpp" />
     <ClCompile Include="MagicSkillMng.cpp" />
@@ -165,6 +168,7 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="SubProcPerTrade.cpp" />
+    <ClCompile Include="UIArt.cpp" />
     <ClCompile Include="UICharacterCreate.cpp" />
     <ClCompile Include="UICharacterSelect.cpp" />
     <ClCompile Include="UIChat.cpp" />
@@ -177,6 +181,8 @@
     <ClCompile Include="UIDroppedItemDlg.cpp" />
     <ClCompile Include="UIEndingDisplay.cpp" />
     <ClCompile Include="UIExitMenu.cpp" />
+    <ClCompile Include="UICheats.cpp" />
+    <ClCompile Include="UIGenie.cpp" />
     <ClCompile Include="UIHelp.cpp" />
     <ClCompile Include="UIHotKeyDlg.cpp" />
     <ClCompile Include="UIImageTooltipDlg.cpp" />
@@ -196,11 +202,13 @@
     <ClCompile Include="UINotice.cpp" />
     <ClCompile Include="UINPCChangeEvent.cpp" />
     <ClCompile Include="UINPCEvent.cpp" />
+    <ClCompile Include="UIOptions.cpp" />
     <ClCompile Include="UIPartyBBS.cpp" />
     <ClCompile Include="UIPartyBBSSelector.cpp" />
     <ClCompile Include="UIPartyOrForce.cpp" />
     <ClCompile Include="UIPerTradeDlg.cpp" />
     <ClCompile Include="UIPointInitDlg.cpp" />
+    <ClCompile Include="UIPowerUpStore.cpp" />
     <ClCompile Include="UIQuestMenu.cpp" />
     <ClCompile Include="UIQuestTalk.cpp" />
     <ClCompile Include="UIRepairTooltipDlg.cpp" />
@@ -241,6 +249,11 @@
     <ClInclude Include="GameProcLogIn_1098.h" />
     <ClInclude Include="GameProcMain.h" />
     <ClInclude Include="GameProcNationSelect.h" />
+    <ClInclude Include="CheatRules.h" />
+    <ClInclude Include="Cheats.h" />
+    <ClInclude Include="Genie.h" />
+    <ClInclude Include="GenieRules.h" />
+    <ClInclude Include="GenieSettings.h" />
     <ClInclude Include="IconItemSkill.h" />
     <ClInclude Include="N3ClientShapeMgr.h" />
     <ClInclude Include="N3Pond.h" />
@@ -278,6 +291,7 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="ServerMesh.h" />
     <ClInclude Include="SubProcPerTrade.h" />
+    <ClInclude Include="UIArt.h" />
     <ClInclude Include="UICharacterCreate.h" />
     <ClInclude Include="UICharacterSelect.h" />
     <ClInclude Include="UIChat.h" />
@@ -288,6 +302,8 @@
     <ClInclude Include="UIDroppedItemDlg.h" />
     <ClInclude Include="UIEndingDisplay.h" />
     <ClInclude Include="UIExitMenu.h" />
+    <ClInclude Include="UICheats.h" />
+    <ClInclude Include="UIGenie.h" />
     <ClInclude Include="UIHelp.h" />
     <ClInclude Include="UIHotKeyDlg.h" />
     <ClInclude Include="UIImageTooltipDlg.h" />
@@ -307,11 +323,13 @@
     <ClInclude Include="UINotice.h" />
     <ClInclude Include="UINPCChangeEvent.h" />
     <ClInclude Include="UINPCEvent.h" />
+    <ClInclude Include="UIOptions.h" />
     <ClInclude Include="UIPartyBBS.h" />
     <ClInclude Include="UIPartyBBSSelector.h" />
     <ClInclude Include="UIPartyOrForce.h" />
     <ClInclude Include="UIPerTradeDlg.h" />
     <ClInclude Include="UIPointInitDlg.h" />
+    <ClInclude Include="UIPowerUpStore.h" />
     <ClInclude Include="UIQuestMenu.h" />
     <ClInclude Include="UIQuestTalk.h" />
     <ClInclude Include="UIRepairTooltipDlg.h" />

@@ -3,14 +3,13 @@
 
 #pragma once
 
-#include <wincrypt.h>
+#include "Platform/Crypto.h"
 
 class File;
 class CWinCrypt
 {
 public:
-	constexpr const static TCHAR Provider[] = MS_ENHANCED_PROV;
-	constexpr const static char Cipher[]    = "owsd9012%$1as!wpow1033b%!@%12";
+	constexpr const static char Cipher[] = "owsd9012%$1as!wpow1033b%!@%12";
 
 	inline bool IsLoaded() const
 	{
@@ -25,9 +24,7 @@ public:
 
 protected:
 	bool m_bIsLoaded;
-	HCRYPTPROV m_hCryptProvider;
-	HCRYPTHASH m_hCryptHash;
-	HCRYPTKEY m_hCryptKey;
+	Platform::Rc4Decryptor m_Decryptor;
 };
 
 #endif // #define N3BASE_WINCRYPT_H

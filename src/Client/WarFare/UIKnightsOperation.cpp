@@ -13,6 +13,7 @@
 #include <N3Base/N3UIEdit.h>
 #include <N3Base/N3UIList.h>
 #include <N3Base/N3UIScrollBar.h>
+#include <N3Base/Platform/Input.h>
 
 CUIKnightsOperation::CUIKnightsOperation()
 {
@@ -77,7 +78,7 @@ bool CUIKnightsOperation::ReceiveMessage(CN3UIBase* pSender, uint32_t dwMsg)
 	if (dwMsg == UIMSG_BUTTON_CLICK)
 	{
 		POINT pt;
-		::GetCursorPos(&pt);
+		Platform::GetCursorPos(&pt);
 
 		if (pSender == m_pBtn_Up)
 		{

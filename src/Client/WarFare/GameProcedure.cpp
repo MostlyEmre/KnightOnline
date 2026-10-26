@@ -16,10 +16,16 @@
 #include "GameProcCharacterCreate.h"
 #include "GameProcCharacterSelect.h"
 #include "GameProcMain.h"
+#include "Cheats.h"
+#include "Genie.h"
 #include "UILoading.h"
 #include "UIMessageBox.h"
 #include "UIMessageBoxManager.h"
 #include "UIManager.h"
+#include "UIOptions.h"
+#include "UIPowerUpStore.h"
+#include "UICheats.h"
+#include "UIGenie.h"
 #include "UINotice.h"
 #include "UIHelp.h"
 #include "UIHotKeyDlg.h"
@@ -38,6 +44,12 @@
 #include <N3Base/N3FXBundle.h>
 
 #include <N3Base/BitMapFile.h>
+#include <N3Base/Platform/Input.h>
+#include <N3Base/Platform/ScreenCapture.h>
+#include <N3Base/Platform/Settings.h>
+#include <N3Base/Platform/Shell.h>
+#include <N3Base/Platform/Time.h>
+#include <N3Base/Platform/Window.h>
 
 #include <JpegFile/JpegFile.h>
 
@@ -55,6 +67,10 @@ CN3FXMgr* CGameProcedure::s_pFX                                  = nullptr;
 CUIManager* CGameProcedure::s_pUIMgr                             = nullptr; // UI Manager
 CUILoading* CGameProcedure::s_pUILoading                         = nullptr; // 로딩바..
 CUIMessageBoxManager* CGameProcedure::s_pMsgBoxMgr               = nullptr; // MessageBox Manager
+CUIOptions* CGameProcedure::s_pUIOptions                         = nullptr;
+CUIPowerUpStore* CGameProcedure::s_pUIPowerUpStore               = nullptr;
+CUIGenie* CGameProcedure::s_pUIGenie                             = nullptr;
+CUICheats* CGameProcedure::s_pUICheats                           = nullptr;
 //bool				CGameProcedure::s_bUseSpeedHack = false;
 
 CGameProcedure* CGameProcedure::s_pProcPrev                      = nullptr;
@@ -120,40 +136,17 @@ void CGameProcedure::StaticMemberInit(HINSTANCE hInstance, HWND hWndMain)
 	s_bWindowed = true;
 	// #if _DEBUG
 
-	if (s_Options.bWindowMode)
-	{
-		DEVMODE dm {};
-		EnumDisplaySettings(nullptr, ENUM_REGISTRY_SETTINGS, &dm);
-		if (dm.dmBitsPerPel != (DWORD) s_Options.iViewColorDepth)
-		{
-			dm.dmSize       = sizeof(DEVMODE);
-			dm.dmPelsWidth  = s_Options.iViewWidth;
-			dm.dmPelsHeight = s_Options.iViewHeight;
-			dm.dmBitsPerPel = s_Options.iViewColorDepth;
-			dm.dmFields     = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
-			::ChangeDisplaySettings(&dm, CDS_FULLSCREEN);
-		}
-	}
-	else
-	{
-		DEVMODE dm {};
-		dm.dmSize       = sizeof(DEVMODE);
-		dm.dmPelsWidth  = s_Options.iViewWidth;
-		dm.dmPelsHeight = s_Options.iViewHeight;
-		dm.dmBitsPerPel = s_Options.iViewColorDepth;
-		dm.dmFields     = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
-		::ChangeDisplaySettings(&dm, CDS_FULLSCREEN);
-	}
+	Platform::EnterDisplayMode(s_Options.bWindowMode, s_Options.iViewWidth, s_Options.iViewHeight, s_Options.iViewColorDepth);
 
 	s_pEng = new CGameEng();
 	if (!s_pEng->Init(s_bWindowed, hWndMain, s_Options.iViewWidth, s_Options.iViewHeight, s_Options.iViewColorDepth, TRUE))
 		exit(-1);
 
 	// 게임 기본 3D 엔진 만들기..
-	::SetFocus(hWndMain); // Set focus this window..
+	Platform::SetFocus(hWndMain); // Set focus this window..
 
 	RECT rc;
-	::GetClientRect(s_hWndBase, &rc);
+	Platform::GetClientRect(s_hWndBase, &rc);
 	RECT rcTmp   = rc;
 	rcTmp.left   = (rc.right - rc.left) / 2;
 	rcTmp.bottom = rcTmp.top + 30;
@@ -170,13 +163,13 @@ void CGameProcedure::StaticMemberInit(HINSTANCE hInstance, HWND hWndMain)
 	s_pSocketSub       = new CAPISocket();
 
 	// 커서 만들기..
-	s_hCursorNormal    = LoadCursor(hInstance, MAKEINTRESOURCE(IDC_CURSOR_NORMAL));
-	s_hCursorNormal1   = LoadCursor(hInstance, MAKEINTRESOURCE(IDC_CURSOR_NORMAL1));
-	s_hCursorClick     = LoadCursor(hInstance, MAKEINTRESOURCE(IDC_CURSOR_CLICK));
-	s_hCursorClick1    = LoadCursor(hInstance, MAKEINTRESOURCE(IDC_CURSOR_CLICK1));
-	s_hCursorAttack    = LoadCursor(hInstance, MAKEINTRESOURCE(IDC_CURSOR_ATTACK));
-	s_hCursorPreRepair = LoadCursor(hInstance, MAKEINTRESOURCE(IDC_CURSOR_PRE_REPAIR));
-	s_hCursorNowRepair = LoadCursor(hInstance, MAKEINTRESOURCE(IDC_CURSOR_NOW_REPAIR));
+	s_hCursorNormal    = Platform::LoadCursorResource(hInstance, IDC_CURSOR_NORMAL);
+	s_hCursorNormal1   = Platform::LoadCursorResource(hInstance, IDC_CURSOR_NORMAL1);
+	s_hCursorClick     = Platform::LoadCursorResource(hInstance, IDC_CURSOR_CLICK);
+	s_hCursorClick1    = Platform::LoadCursorResource(hInstance, IDC_CURSOR_CLICK1);
+	s_hCursorAttack    = Platform::LoadCursorResource(hInstance, IDC_CURSOR_ATTACK);
+	s_hCursorPreRepair = Platform::LoadCursorResource(hInstance, IDC_CURSOR_PRE_REPAIR);
+	s_hCursorNowRepair = Platform::LoadCursorResource(hInstance, IDC_CURSOR_NOW_REPAIR);
 
 	if (!CN3Base::s_Options.bWindowCursor)
 	{
@@ -261,33 +254,9 @@ void CGameProcedure::StaticMemberRelease()
 	// 엔딩화면 보이기..
 	////////////////////////////////////////////////////////////////////////
 
-	Sleep(1000);
+	Platform::Sleep(1000);
 
-	if (s_Options.bWindowMode)
-	{
-		DEVMODE dm {};
-		::EnumDisplaySettings(nullptr, ENUM_REGISTRY_SETTINGS, &dm);
-
-		if (dm.dmBitsPerPel != (DWORD) s_Options.iViewColorDepth)
-		{
-			dm.dmSize   = sizeof(DEVMODE);
-			dm.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
-			::ChangeDisplaySettings(&dm, CDS_FULLSCREEN);
-		}
-	}
-	else
-	{
-		DEVMODE dm {};
-		::EnumDisplaySettings(nullptr, ENUM_REGISTRY_SETTINGS, &dm);
-
-		if (dm.dmPelsWidth != (DWORD) s_Options.iViewWidth || dm.dmPelsHeight != (DWORD) s_Options.iViewHeight
-			|| dm.dmBitsPerPel != (DWORD) s_Options.iViewColorDepth)
-		{
-			dm.dmSize   = sizeof(DEVMODE);
-			dm.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
-			::ChangeDisplaySettings(&dm, CDS_FULLSCREEN);
-		}
-	}
+	Platform::LeaveDisplayMode(s_Options.bWindowMode, s_Options.iViewWidth, s_Options.iViewHeight, s_Options.iViewColorDepth);
 
 	//	if ( (s_pProcMain) && (s_pProcMain->m_pUIHotKeyDlg) )
 	//			s_pProcMain->m_pUIHotKeyDlg->CloseIconRegistry();
@@ -320,11 +289,24 @@ void CGameProcedure::StaticMemberRelease()
 	delete s_pUILoading;
 	s_pUILoading = nullptr;
 
+	delete s_pUIOptions;
+	s_pUIOptions = nullptr;
+	delete s_pUIPowerUpStore;
+	s_pUIPowerUpStore = nullptr;
+	delete s_pUIGenie;
+	s_pUIGenie = nullptr;
+	delete s_pUICheats;
+	s_pUICheats = nullptr;
+
 	delete s_pMsgBoxMgr;
 	s_pMsgBoxMgr = nullptr;
 
 	delete s_pUIMgr;
 	s_pUIMgr = nullptr;
+
+	// Made in StaticMemberInit() for every scene, so it goes with the rest. (The main scene used to
+	// destroy it on leaving the game, which left character selection and creation without one.)
+	CN3UIBase::DestroyTooltip();
 
 	delete s_pLocalInput;
 	s_pLocalInput = nullptr;
@@ -338,10 +320,22 @@ void CGameProcedure::StaticMemberRelease()
 
 void CGameProcedure::Tick()
 {
+	s_pLocalInput->Mute(false);
 	s_pLocalInput->Tick(); // 키보드와 마우스로부터 입력을 받는다.
 
 	if (s_pGameCursor != nullptr)
 		s_pGameCursor->Tick();
+
+	// The Options window goes first, and keeps the input from the rest while it's open. So does the
+	// Power-up Store, under it.
+	if (s_pUIOptions != nullptr)
+		s_pUIOptions->TakeInput(s_pLocalInput);
+	if (s_pUIPowerUpStore != nullptr)
+		s_pUIPowerUpStore->TakeInput(s_pLocalInput);
+	if (s_pUIGenie != nullptr)
+		s_pUIGenie->TakeInput(s_pLocalInput);
+	if (s_pUICheats != nullptr)
+		s_pUICheats->TakeInput(s_pLocalInput);
 
 	ProcessUIKeyInput();
 
@@ -382,7 +376,7 @@ void CGameProcedure::Tick()
 	if (s_pLocalInput->IsKeyPress(DIK_NUMPADMINUS))
 	{
 		SYSTEMTIME st;
-		::GetLocalTime(&st);
+		Platform::GetLocalTime(&st);
 
 		std::string szFN = fmt::format("{}_{}_{}_{}.{}.{}.ksc", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 		CaptureScreenAndSaveToFile(szFN);
@@ -419,6 +413,7 @@ void CGameProcedure::Render()
 		s_pUIMgr->Render(); // UI 들 렌더링..
 
 	s_pMsgBoxMgr->Render();
+	RenderModalWindows();
 	if (s_pGameCursor)
 		s_pGameCursor->Render();
 }
@@ -456,10 +451,7 @@ bool CGameProcedure::CaptureScreenAndSaveToFile(const std::string& szFN)
 
 	CJpegFile file;
 
-	RECT wndRect {};
-	GetWindowRect(s_hWndBase, &wndRect);
-
-	HANDLE hDIB = file.CopyScreenToDIB(&wndRect);
+	HANDLE hDIB = Platform::CaptureWindowToDIB(s_hWndBase);
 	if (hDIB == nullptr)
 		return false;
 
@@ -499,6 +491,46 @@ void CGameProcedure::ProcActiveSet(CGameProcedure* pProc)
 	s_pProcActive = pProc;
 }
 
+void CGameProcedure::ShowOptions()
+{
+	// Not before the game is set up (the Settings menu is there from the start).
+	if (s_pUIMgr == nullptr)
+		return;
+
+	if (s_pUIOptions == nullptr)
+		s_pUIOptions = new CUIOptions();
+	s_pUIOptions->Open();
+}
+
+bool CGameProcedure::IsOptionsOpen()
+{
+	return s_pUIOptions != nullptr && s_pUIOptions->IsVisible();
+}
+
+bool CGameProcedure::IsModalWindowOpen()
+{
+	return IsOptionsOpen() || (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
+		   || (s_pUIGenie != nullptr && s_pUIGenie->IsVisible()) || (s_pUICheats != nullptr && s_pUICheats->IsVisible());
+}
+
+void CGameProcedure::RenderModalWindows()
+{
+	if (!IsModalWindowOpen())
+		return;
+
+	// The Options window over the store and Genie's window.
+	CUIManager::RenderStateSet();
+	if (s_pUIGenie != nullptr && s_pUIGenie->IsVisible())
+		s_pUIGenie->Render();
+	if (s_pUICheats != nullptr && s_pUICheats->IsVisible())
+		s_pUICheats->Render();
+	if (s_pUIPowerUpStore != nullptr && s_pUIPowerUpStore->IsVisible())
+		s_pUIPowerUpStore->Render();
+	if (IsOptionsOpen())
+		s_pUIOptions->Render();
+	CUIManager::RenderStateRestore();
+}
+
 void CGameProcedure::ReConnect()
 {
 	s_bNeedReportConnectionClosed = false; // 서버접속이 끊어진걸 보고해야 하는지..
@@ -524,33 +556,9 @@ void CGameProcedure::MessageBoxClose(int iMsgBoxIndex)
 
 bool CGameProcedure::RegPutSetting(const char* ValueName, void* pValueData, long length)
 {
-	HKEY hKey = nullptr;
-
-	if (RegOpenKey(HKEY_CURRENT_USER, GetStrRegKeySetting().c_str(), &hKey) != ERROR_SUCCESS)
-	{
-		if (RegCreateKey(HKEY_CURRENT_USER, GetStrRegKeySetting().c_str(), &hKey) != ERROR_SUCCESS)
-		{
-			__ASSERT(0, "Registry Create Failed!!!");
-			return false;
-		}
-		if (RegOpenKey(HKEY_CURRENT_USER, GetStrRegKeySetting().c_str(), &hKey) != ERROR_SUCCESS)
-		{
-			__ASSERT(0, "Registry Open Failed!!!");
-			return false;
-		}
-	}
-
-	// set the value
-	if (RegSetValueEx(hKey, ValueName, 0, REG_BINARY, (const uint8_t*) pValueData, length) != ERROR_SUCCESS)
+	if (!Platform::WriteUserSetting(GetStrRegKeySetting(), ValueName, pValueData, length))
 	{
 		__ASSERT(0, "Registry Write Failed!!!");
-		RegCloseKey(hKey);
-		return false;
-	}
-
-	if (RegCloseKey(hKey) != ERROR_SUCCESS)
-	{
-		__ASSERT(0, "Registry Close Failed!!!");
 		return false;
 	}
 
@@ -559,31 +567,7 @@ bool CGameProcedure::RegPutSetting(const char* ValueName, void* pValueData, long
 
 bool CGameProcedure::RegGetSetting(const char* ValueName, void* pValueData, long length)
 {
-	HKEY hKey  = nullptr;
-	DWORD Type = 0;
-	DWORD len  = length;
-
-	if (RegOpenKey(HKEY_CURRENT_USER, GetStrRegKeySetting().c_str(), &hKey) != ERROR_SUCCESS)
-	{
-		//		__ASSERT(0, "Registry Open Failed!!!");
-		return false;
-	}
-
-	// get the value
-	if (RegQueryValueEx(hKey, ValueName, nullptr, &Type, (uint8_t*) pValueData, &len) != ERROR_SUCCESS)
-	{
-		//		__ASSERT(0, "Registry Query Failed!!!");
-		RegCloseKey(hKey);
-		return false;
-	}
-
-	if (RegCloseKey(hKey) != ERROR_SUCCESS)
-	{
-		//		__ASSERT(0, "Registry Close Failed!!!");
-		return false;
-	}
-
-	return true;
+	return Platform::ReadUserSetting(GetStrRegKeySetting(), ValueName, pValueData, length);
 }
 
 void CGameProcedure::UIPostData_Write(const std::string& szKey, CN3UIBase* pUI)
@@ -668,14 +652,14 @@ void CGameProcedure::SetGameCursor(HCURSOR hCursor, bool bLocked)
 			return;
 		else if (((m_bCursorLocked) && bLocked) || ((!m_bCursorLocked) && !bLocked))
 		{
-			SetCursor(hCursor);
+			Platform::SetCursor(hCursor);
 			return;
 		}
 		else if ((!m_bCursorLocked) && bLocked)
 		{
-			m_hPrevGameCursor = GetCursor();
+			m_hPrevGameCursor = Platform::GetCursor();
 			m_bCursorLocked   = true;
-			SetCursor(hCursor);
+			Platform::SetCursor(hCursor);
 		}
 	}
 }
@@ -702,7 +686,7 @@ void CGameProcedure::RestoreGameCursor()
 		if (m_bCursorLocked)
 			m_bCursorLocked = false;
 
-		SetCursor(m_hPrevGameCursor);
+		Platform::SetCursor(m_hPrevGameCursor);
 	}
 }
 
@@ -756,9 +740,15 @@ void CGameProcedure::MsgRecv_ServerChange(Packet& pkt)
 	int iVictoryNation             = pkt.read<uint8_t>();
 	CGameProcedure::LoadingUIChange(iVictoryNation);
 
+	// The next server says for itself whether it allows Genie and cheats.
+	if (s_pProcMain != nullptr && s_pProcMain->m_pGenie != nullptr)
+		s_pProcMain->m_pGenie->OnAvailable(false);
+	if (s_pProcMain != nullptr && s_pProcMain->m_pCheats != nullptr)
+		s_pProcMain->m_pCheats->OnLeaveGame();
+
 	s_bNeedReportConnectionClosed = false; // 서버접속이 끊어진걸 보고해야 하는지..
 	s_pSocket->Disconnect();               // 끊고...
-	Sleep(2000);                           // 2초 딜레이.. 서버가 처리할 시간을 준다.
+	Platform::Sleep(2000);                 // 2초 딜레이.. 서버가 처리할 시간을 준다.
 	int iErr                      = s_pSocket->Connect(s_hWndBase, szIP, dwPort);
 	s_bNeedReportConnectionClosed = true;  // 서버접속이 끊어진걸 보고해야 하는지..
 
@@ -919,7 +909,7 @@ int CGameProcedure::MsgRecv_VersionCheck(Packet& pkt) // virtual
 	{
 		std::string szMsg;
 
-		int iLangID = ::GetUserDefaultLangID();
+		int iLangID = Platform::GetUserDefaultLangID();
 
 		// Taiwan Language
 		if (0x0404 == iLangID)

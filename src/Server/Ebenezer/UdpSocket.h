@@ -6,6 +6,8 @@
 #include "Define.h"
 #include "RecvUDPThread.h"
 
+#include <string>
+
 namespace Ebenezer
 {
 
@@ -19,7 +21,7 @@ public:
 	CUdpSocket(EbenezerApp* main = nullptr);
 	virtual ~CUdpSocket();
 
-	bool CreateSocket();
+	bool CreateSocket(const std::string& address);
 	void AsyncReceive();
 	int SendUDPPacket(const std::string& strAddress, char* pBuf, int len);
 	bool PacketProcess(int len);

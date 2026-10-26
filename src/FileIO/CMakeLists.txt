@@ -4,6 +4,10 @@ add_library(FileIO STATIC
   FileReader.h
   FileWriter.cpp
   FileWriter.h
+  MemoryReader.cpp
+  MemoryReader.h
+  PathResolver.cpp
+  PathResolver.h
 )
 
 set_target_properties(FileIO PROPERTIES

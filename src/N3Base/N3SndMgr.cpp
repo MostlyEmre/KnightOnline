@@ -9,6 +9,7 @@
 #include "WaveFormat.h"
 #include "AudioAsset.h"
 #include "al_wrapper.h"
+#include "Platform/Shell.h"
 
 #include <shared/StringUtils.h>
 
@@ -55,7 +56,7 @@ bool CN3SndMgr::InitOpenAL()
 	_alcDevice = alcOpenDevice(deviceName);
 	if (_alcDevice == nullptr)
 	{
-		MessageBoxW(nullptr, L"Failed to open sound device for playback", L"Error", MB_OK);
+		Platform::ShowMessageBox(nullptr, L"Failed to open sound device for playback", L"Error");
 		return false;
 	}
 
@@ -82,7 +83,7 @@ bool CN3SndMgr::InitOpenAL()
 		_alcContext = nullptr;
 		_alcDevice  = nullptr;
 
-		MessageBoxW(nullptr, L"Unable to generate sound sources.", L"Error", MB_OK);
+		Platform::ShowMessageBox(nullptr, L"Unable to generate sound sources.", L"Error");
 		return false;
 	}
 

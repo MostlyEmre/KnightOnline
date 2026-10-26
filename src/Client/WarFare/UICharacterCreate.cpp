@@ -544,7 +544,8 @@ uint32_t CUICharacterCreate::MouseProc(uint32_t dwFlags, const POINT& ptCur, con
 		}
 	}
 
-	CN3UIBase::s_pTooltipCtrl->SetVisible(false);
+	if (CN3UIBase::s_pTooltipCtrl != nullptr)
+		CN3UIBase::s_pTooltipCtrl->SetVisible(false);
 
 	return CN3UIBase::MouseProc(dwFlags, ptCur, ptOld);
 }

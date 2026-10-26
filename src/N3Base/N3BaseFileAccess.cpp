@@ -4,6 +4,7 @@
 
 #include "StdAfxBase.h"
 #include "N3BaseFileAccess.h"
+#include "Platform/Shell.h"
 
 #include <FileIO/FileReader.h>
 #include <FileIO/FileWriter.h>
@@ -140,7 +141,7 @@ bool CN3BaseFileAccess::SaveToFile()
 	if (m_szFileName.empty())
 	{
 		std::string szErr = m_szName + " Can't open file (write) - NULL String";
-		MessageBox(s_hWndBase, szErr.c_str(), "File Open Error", MB_OK);
+		Platform::ShowMessageBox(s_hWndBase, szErr.c_str(), "File Open Error");
 		return false;
 	}
 
@@ -165,7 +166,7 @@ bool CN3BaseFileAccess::SaveToFile()
 	if (!file.Create(szFullPath))
 	{
 		std::string szErr = szFullPath + " - Can't open file(write)";
-		MessageBox(s_hWndBase, szErr.c_str(), "File Handle error", MB_OK);
+		Platform::ShowMessageBox(s_hWndBase, szErr.c_str(), "File Handle error");
 		return false;
 	}
 

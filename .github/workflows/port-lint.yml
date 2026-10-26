@@ -1,0 +1,79 @@
+# clang-tidy for the macOS port's code under src/ that upstream's clang-tidy-check can't see
+# (it only builds the Windows/ODBC configuration): same .clang-tidy, same clang-tidy major
+# version, with a compile database from a SQLite-backend configuration.
+
+name: "Port: clang-tidy (SQLite backend, macOS platform code)"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - macos-port
+    paths:
+      - '.github/workflows/port-lint.yml'
+      - '.clang-tidy'
+      - 'src/db-library/**'
+      - 'src/N3Base/Platform/**'
+      - 'src/FileIO/**'
+      - 'port/app/**'
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  tidy:
+    runs-on: ubuntu-latest
+    name: "clang-tidy 19 (src/db-library/sqlite)"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Configure (SQLite backend, compile database)
+        run: |
+          sudo apt-get install -y clang
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE -DOPENKO_BUILD_TESTS=OFF \
+            -DOPENKO_DB_BACKEND=SQLITE -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: clang-tidy
+        run: |
+          pip install --quiet clang-tidy==19.1.0
+          status=0
+          for f in src/db-library/sqlite/*.cpp src/db-library/sqlite/tools/*.cpp; do
+            clang-tidy -p build --quiet "$f" || status=1
+          done
+          exit $status
+
+  tidy-macos:
+    runs-on: macos-latest
+    name: "clang-tidy 19 (src/N3Base/Platform macOS + Compat)"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'false'
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Configure (macOS client, compile database without PCH)
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENKO_BUILD_MACOS_CLIENT=ON -DOPENKO_BUILD_SERVERS=OFF -DOPENKO_BUILD_TESTS=OFF \
+            -DOPENKO_FETCH_CLIENT_ASSETS=FALSE -DCMAKE_DISABLE_PRECOMPILE_HEADERS=TRUE \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: clang-tidy
+        run: |
+          python3 -m venv tidy && tidy/bin/pip install --quiet clang-tidy==19.1.0
+          sdk="$(xcrun --show-sdk-path)"
+          status=0
+          for f in src/FileIO/PathResolver.cpp src/FileIO/MemoryReader.cpp src/N3Base/Platform/FileSystem.cpp src/N3Base/Platform/Compat/*.cpp src/N3Base/Platform/macOS/*.cpp src/N3Base/Platform/macOS/Cocoa/*.cpp port/app/ko-servers/*.cpp; do
+            tidy/bin/clang-tidy -p build --quiet --extra-arg=-isysroot --extra-arg="$sdk" "$f" || status=1
+          done
+          exit $status

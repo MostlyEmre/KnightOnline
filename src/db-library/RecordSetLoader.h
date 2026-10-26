@@ -102,6 +102,9 @@ protected:
 				}
 			}
 
+			spdlog::info(
+				"recordset_loader: {}: {} rows", ModelType::TableName(), recordset.rowsFetched());
+
 			_error.Type = EnumErrorType::None;
 			_error.Message.clear();
 

@@ -1974,6 +1974,10 @@ void CNpc::Dead(int iDeadType)
 	m_bFirstLive = false;
 	m_byDeadType = 100; // 전쟁이벤트중에서 죽는 경우
 
+	// OpenKO: the cheats menu's respawn speed.
+	m_Delay      = Cheats::ScaleRegenTime(
+        m_sRegenTime, m_pMain->_cheatRespawnPct.load(std::memory_order_relaxed));
+
 	if (m_iRegion_X > pMap->GetXRegionMax() || m_iRegion_Z > pMap->GetZRegionMax())
 	{
 		spdlog::error("Npc::Dead: out of region bounds [serial={} npcId={} x={} z={}]",
@@ -3396,6 +3400,9 @@ int CNpc::Attack()
 		if (m_pMain->_testMode)
 			nDamage = 10;
 
+		// OpenKO: the cheats menu's damage taken.
+		nDamage = m_pMain->ScaleTaken(nDamage);
+
 		//TRACE(_T("Npc-Attack() : [mon: x=%.2f, z=%.2f], [user : x=%.2f, z=%.2f]\n"), m_fCurX, m_fCurZ, pUser->m_curx, pUser->m_curz);
 
 		if (nDamage > 0)
@@ -3648,6 +3655,9 @@ int CNpc::TracingAttack() // 0:attack fail, 1:attack success
 		// sungyong test
 		if (m_pMain->_testMode)
 			nDamage = 1;
+
+		// OpenKO: the cheats menu's damage taken.
+		nDamage = m_pMain->ScaleTaken(nDamage);
 
 		if (nDamage > 0)
 		{
@@ -6011,6 +6021,10 @@ void CNpc::GiveNpcHaveItem()
 			if (iPer == 0)
 				continue;
 
+			// OpenKO: the cheats menu's drop chance.
+			iPer = Cheats::ScaleDropChance(
+				iPer, m_pMain->_cheatDropPct.load(std::memory_order_relaxed));
+
 			int iItemID = m_pMain->_npcItem.m_ppItem[i][j];
 
 			// 우선 기본테이블를 참조하기위해
@@ -6814,6 +6828,27 @@ void CNpc::ChangeMonsterInfo(int iChangeType)
 	Load(pNpcTable, false);
 }
 
+void CNpc::CheatKill()
+{
+	const int userId = m_iCheatKillBy.exchange(-1, std::memory_order_relaxed);
+	if (userId < 0 || m_NpcState == NPC_DEAD || m_iHP <= 0)
+		return;
+
+	CUser* pUser = m_pMain->GetUserPtr(userId);
+	if (pUser == nullptr)
+		return;
+
+	// All of its HP, unscaled: a boss with more HP than one hit can carry still dies.
+	const int hp = m_iHP;
+	if (!SetDamage(0, hp, pUser->m_strUserID, userId + USER_BAND))
+	{
+		SendExpToUserList();
+		SendDead();
+		pUser->SendAttackSuccess(m_sNid + NPC_BAND, MAGIC_ATTACK_TARGET_DEAD,
+			static_cast<int16_t>(std::min(hp, Cheats::MAX_DAMAGE)), m_iHP, MAGIC_ATTACK);
+	}
+}
+
 void CNpc::DurationMagic_3(double currentTime)
 {
 	for (int i = 0; i < MAX_MAGIC_TYPE3; i++)
@@ -6832,7 +6867,9 @@ void CNpc::DurationMagic_3(double currentTime)
 		if (m_MagicType3[i].sHPAmount < 0)
 		{
 			int duration_damage = m_MagicType3[i].sHPAmount;
-			duration_damage     = abs(duration_damage);
+
+			// OpenKO: the cheats menu's damage dealt.
+			duration_damage     = m_pMain->ScaleDealt(abs(duration_damage));
 
 			// Npc가 죽은 경우,,
 			if (!SetDamage(0, duration_damage, "**duration**", m_MagicType3[i].sHPAttackUserID))

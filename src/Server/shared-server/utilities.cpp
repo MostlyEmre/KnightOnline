@@ -49,32 +49,48 @@ uint8_t GetByte(const char* sBuf, int& index)
 
 int GetShort(const char* sBuf, int& index)
 {
+	int16_t value = 0;
+	// packet fields aren't aligned
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+	memcpy(&value, sBuf + index, sizeof(value));
 	index += 2;
-	return *(int16_t*) (sBuf + index - 2);
+	return value;
 }
 
 int GetInt(const char* sBuf, int& index)
 {
+	int value = 0;
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+	memcpy(&value, sBuf + index, sizeof(value));
 	index += 4;
-	return *(int*) (sBuf + index - 4);
+	return value;
 }
 
 uint32_t GetDWORD(const char* sBuf, int& index)
 {
+	uint32_t value = 0;
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+	memcpy(&value, sBuf + index, sizeof(value));
 	index += 4;
-	return *(uint32_t*) (sBuf + index - 4);
+	return value;
 }
 
 float GetFloat(const char* sBuf, int& index)
 {
+	float value = 0.0f;
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+	memcpy(&value, sBuf + index, sizeof(value));
 	index += 4;
-	return *(float*) (sBuf + index - 4);
+	return value;
 }
 
 int64_t GetInt64(const char* sBuf, int& index)
 {
+	int64_t value = 0;
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+	memcpy(&value, sBuf + index, sizeof(value));
 	index += 8;
-	return *(int64_t*) (sBuf + index - 8);
+	return value;
 }
 
 void SetString(char* tBuf, const char* sBuf, int len, int& index)

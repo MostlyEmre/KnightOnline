@@ -23,17 +23,25 @@ TcpServerSocketManager::~TcpServerSocketManager()
 	}
 }
 
-bool TcpServerSocketManager::Listen(int port)
+bool TcpServerSocketManager::Listen(int port, const std::string& address)
 {
 	try
 	{
 		asio::error_code ec;
 
+		asio::ip::address_v4 listenAddress = asio::ip::make_address_v4(address, ec);
+		if (ec)
+		{
+			spdlog::error("TcpServerSocketManager({})::Listen: invalid address {}. [error={}]",
+				_implName, address, ec.message());
+			return false;
+		}
+
 		// Attempt to setup the acceptor.
 		_acceptor = std::make_unique<asio::ip::tcp::acceptor>(_workerPool->get_executor());
 
-		// Setup the endpoint for TCPv4 0.0.0.0:port
-		asio::ip::tcp::endpoint endpoint(asio::ip::tcp::v4(), port);
+		// Setup the endpoint for TCPv4 address:port
+		asio::ip::tcp::endpoint endpoint(listenAddress, static_cast<asio::ip::port_type>(port));
 
 		// Attempt to open the socket.
 		_acceptor->open(endpoint.protocol(), ec);
@@ -44,13 +52,26 @@ bool TcpServerSocketManager::Listen(int port)
 			return false;
 		}
 
+#if !defined(_WIN32)
+		// Connections from a previous run stay in TIME_WAIT for a while after a server stops.
+		// Windows binds over them anyway; POSIX systems only do when SO_REUSEADDR is set before
+		// bind(). (On Windows it would also let another socket share the port, so not there.)
+		_acceptor->set_option(asio::socket_base::reuse_address(true), ec);
+		if (ec)
+		{
+			spdlog::error(
+				"TcpServerSocketManager({})::Listen: set_option(reuse_address) failed. [error={}]",
+				_implName, ec.message());
+			return false;
+		}
+#endif
+
 		// Attempt to bind the socket.
 		_acceptor->bind(endpoint, ec);
 		if (ec)
 		{
-			spdlog::error(
-				"TcpServerSocketManager({})::Listen: bind() failed on 0.0.0.0:{}. [error={}]",
-				_implName, port, ec.message());
+			spdlog::error("TcpServerSocketManager({})::Listen: bind() failed on {}:{}. [error={}]",
+				_implName, address, port, ec.message());
 			return false;
 		}
 

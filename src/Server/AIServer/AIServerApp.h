@@ -14,6 +14,9 @@
 
 #include "Extern.h" // 전역 객체
 
+#include <shared/CheatSettings.h>
+
+#include <atomic>
 #include <list>
 #include <vector>
 
@@ -138,6 +141,26 @@ public:
 	uint8_t _nightMode                 = 1; // 밤인지,, 낮인지를 판단... 1:낮, 2:밤
 	uint8_t _testMode                  = 0;
 
+	/// \brief The cheats menu's multipliers in effect here (100 = normal), from Ebenezer's
+	/// AG_CHEAT_SETTINGS snapshots; NPC threads read them.
+	std::atomic<uint16_t> _cheatDamageDealtPct { 100 };
+	std::atomic<uint16_t> _cheatDamageTakenPct { 100 };
+	std::atomic<uint16_t> _cheatDropPct { 100 };
+	std::atomic<uint16_t> _cheatRespawnPct { 100 };
+
+	/// \brief The last snapshot applied: Ebenezer's sockets don't keep messages in order.
+	std::atomic<uint32_t> _cheatSeq { 0 };
+
+	/// \brief Applies a cheat settings snapshot, unless a newer one was already applied.
+	/// \returns whether it was applied
+	bool ApplyCheatSettings(uint32_t seq, const Cheats::Settings& settings);
+
+	/// \returns a player's hit on a monster with the cheats menu's damage dealt applied
+	int ScaleDealt(int damage) const;
+
+	/// \returns a monster's hit on a player with the cheats menu's damage taken applied
+	int ScaleTaken(int damage) const;
+
 	AISocketManager _serverSocketManager;
 
 private:
@@ -156,6 +179,9 @@ private:
 
 	std::filesystem::path _eventDir;
 	std::string _overrideEventDir;
+
+	/// \brief Pause between the batches of NPC info sent to Ebenezer at startup (--npc-info-interval)
+	int _npcInfoIntervalMs = 50;
 
 	std::shared_ptr<spdlog::logger> _itemLogger;
 	std::shared_ptr<spdlog::logger> _userLogger;

@@ -4,34 +4,14 @@
 #include "StdAfxBase.h"
 #include "DFont.h"
 
-const int MAX_NUM_VERTICES   = 50 * 6;
-const float Z_DEFAULT        = 0.9f;
-const float RHW_DEFAULT      = 1.0f;
+const int MAX_NUM_VERTICES = 50 * 6;
+const float Z_DEFAULT      = 0.9f;
+const float RHW_DEFAULT    = 1.0f;
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
-HDC CDFont::s_hDC            = nullptr;
-int CDFont::s_iInstanceCount = 0;
-HFONT CDFont::s_hFontOld     = nullptr;
-
 CDFont::CDFont(const std::string& szFontName, uint32_t dwHeight, uint32_t dwFlags)
 {
-	if (0 == s_iInstanceCount)
-	{
-		s_hDC       = CreateCompatibleDC(nullptr);
-
-		// 임시 폰트를 만들고 s_hFontOld를 얻는다.
-		HFONT hFont = CreateFont(0, 0, 0, 0, 0, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-			OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, VARIABLE_PITCH, "굴림");
-		if (hFont != nullptr)
-		{
-			s_hFontOld = (HFONT) (SelectObject(s_hDC, hFont));
-			SelectObject(s_hDC, s_hFontOld);
-			DeleteObject(hFont);
-		}
-	}
-	s_iInstanceCount++;
-
 	__ASSERT(!szFontName.empty(), "??");
 
 	m_szFontName      = szFontName;
@@ -49,7 +29,6 @@ CDFont::CDFont(const std::string& szFontName, uint32_t dwHeight, uint32_t dwFlag
 	m_iPrimitiveCount = 0;
 	m_PrevLeftTop.x = m_PrevLeftTop.y = 0;
 
-	m_hFont                           = nullptr;
 	m_dwFontColor                     = 0xffffffff;
 	m_Size.cx                         = 0;
 	m_Size.cy                         = 0;
@@ -59,48 +38,25 @@ CDFont::~CDFont()
 {
 	InvalidateDeviceObjects();
 	DeleteDeviceObjects();
-
-	s_iInstanceCount--;
-	if (s_iInstanceCount <= 0)
-	{
-		if (s_hFontOld)
-			SelectObject(s_hDC, s_hFontOld);
-		DeleteDC(s_hDC);
-		s_hDC = nullptr;
-	}
 }
 
 HRESULT CDFont::SetFont(const std::string& szFontName, uint32_t dwHeight, uint32_t dwFlags)
 {
 	__ASSERT(!szFontName.empty(), "");
-	if (nullptr == s_hDC)
-	{
-		__ASSERT(0, "NULL DC Handle");
-		return E_FAIL;
-	}
 
 	m_szFontName   = szFontName;
 	m_dwFontHeight = dwHeight;
 	m_dwFontFlags  = dwFlags;
 
-	if (m_hFont)
-	{
-		if (s_hFontOld)
-			SelectObject(s_hDC, s_hFontOld);
-		DeleteObject(m_hFont);
-		m_hFont = nullptr;
-	}
+	m_pFont.reset();
 
 	// Create a font.  By specifying ANTIALIASED_QUALITY, we might get an
 	// antialiased font, but this is not guaranteed.
 	INT nHeight = -MulDiv(
-		m_dwFontHeight, (INT) (GetDeviceCaps(s_hDC, LOGPIXELSY) * m_fTextScale), 72);
-	uint32_t dwBold   = (m_dwFontFlags & D3DFONT_BOLD) ? FW_BOLD : FW_NORMAL;
-	uint32_t dwItalic = (m_dwFontFlags & D3DFONT_ITALIC) ? TRUE : FALSE;
-	m_hFont = CreateFont(nHeight, 0, 0, 0, dwBold, dwItalic, FALSE, FALSE, DEFAULT_CHARSET,
-		OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, VARIABLE_PITCH,
-		m_szFontName.c_str());
-	if (nullptr == m_hFont)
+		m_dwFontHeight, (INT) (Platform::FontRasterizer::GetLogPixelsY() * m_fTextScale), 72);
+	m_pFont = Platform::FontRasterizer::Create(m_szFontName, nHeight,
+		(m_dwFontFlags & D3DFONT_BOLD) != 0, (m_dwFontFlags & D3DFONT_ITALIC) != 0);
+	if (nullptr == m_pFont)
 	{
 		__ASSERT(0, "NULL Font Handle");
 		return E_FAIL;
@@ -123,27 +79,15 @@ HRESULT CDFont::RestoreDeviceObjects()
 
 	m_iPrimitiveCount = 0;
 
-	//	__ASSERT(nullptr == s_hDC && nullptr == m_hFont, "??");
-	//	m_hDC = CreateCompatibleDC(nullptr);
-	__ASSERT(nullptr == m_hFont, "??");
-
-	if (nullptr == s_hDC)
-	{
-		__ASSERT(0, "Can't Create DC");
-		return E_FAIL;
-	}
-	SetMapMode(s_hDC, MM_TEXT);
+	__ASSERT(nullptr == m_pFont, "??");
 
 	// Create a font.  By specifying ANTIALIASED_QUALITY, we might get an
 	// antialiased font, but this is not guaranteed.
 	INT nHeight = -MulDiv(
-		m_dwFontHeight, (INT) (GetDeviceCaps(s_hDC, LOGPIXELSY) * m_fTextScale), 72);
-	uint32_t dwBold   = (m_dwFontFlags & D3DFONT_BOLD) ? FW_BOLD : FW_NORMAL;
-	uint32_t dwItalic = (m_dwFontFlags & D3DFONT_ITALIC) ? TRUE : FALSE;
-	m_hFont = CreateFont(nHeight, 0, 0, 0, dwBold, dwItalic, FALSE, FALSE, DEFAULT_CHARSET,
-		OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, VARIABLE_PITCH,
-		m_szFontName.c_str());
-	if (nullptr == m_hFont)
+		m_dwFontHeight, (INT) (Platform::FontRasterizer::GetLogPixelsY() * m_fTextScale), 72);
+	m_pFont = Platform::FontRasterizer::Create(m_szFontName, nHeight,
+		(m_dwFontFlags & D3DFONT_BOLD) != 0, (m_dwFontFlags & D3DFONT_ITALIC) != 0);
+	if (nullptr == m_pFont)
 		return E_FAIL;
 
 	// Create vertex buffer for the letters
@@ -165,13 +109,7 @@ HRESULT CDFont::InvalidateDeviceObjects()
 		m_pVB = nullptr;
 	}
 
-	if (m_hFont)
-	{
-		if (s_hDC && s_hFontOld)
-			SelectObject(s_hDC, s_hFontOld);
-		DeleteObject(m_hFont);
-		m_hFont = nullptr;
-	}
+	m_pFont.reset();
 	return S_OK;
 }
 
@@ -189,7 +127,7 @@ HRESULT CDFont::DeleteDeviceObjects()
 
 HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 {
-	if (nullptr == s_hDC || nullptr == m_hFont)
+	if (nullptr == m_pFont)
 		return E_FAIL;
 
 	if (szText.empty())
@@ -209,7 +147,6 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 	// \n을 빼고 한줄로 만들어서 글자 길이 계산하기
 	int iCount     = 0;
 	int iTempCount = 0;
-	SIZE size;
 
 	std::string szTemp(iStrLen, '?');
 	while (iCount < iStrLen)
@@ -244,19 +181,17 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 										   //	szTemp[iTempCount] = 0x00;
 
 	// 텍스쳐 사이즈 결정하기
-	SelectObject(s_hDC, m_hFont);
-	GetTextExtentPoint32(s_hDC, szTemp.c_str(), static_cast<int>(szTemp.size()), &size);
-	szTemp = "";
+	SIZE size = m_pFont->MeasureText(szTemp);
+	szTemp    = "";
 
 	if (size.cx <= 0 || size.cy <= 0)
 	{
 		__ASSERT(0, "Invalid Text Size - ?????");
 		return E_FAIL;
 	}
-	int iExtent = size.cx * size.cy;
+	int iExtent      = size.cx * size.cy;
 
-	SIZE size2; // 한글 반글자의 크기..
-	GetTextExtentPoint32(s_hDC, "진", lstrlen("진"), &size2);
+	SIZE size2       = m_pFont->MeasureText("진"); // 한글 반글자의 크기..
 	size2.cx         = ((size2.cx / 2) + (size2.cx % 2));
 
 	int iTexSizes[7] = { 32, 64, 128, 256, 512, 1024, 2048 };
@@ -309,21 +244,8 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 			return hr;
 	}
 
-	// Prepare to create a bitmap
-	uint32_t* pBitmapBits = nullptr;
-	BITMAPINFO bmi {};
-	bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-	bmi.bmiHeader.biWidth       = (int) m_dwTexWidth;
-	bmi.bmiHeader.biHeight      = -(int) m_dwTexHeight;
-	bmi.bmiHeader.biPlanes      = 1;
-	bmi.bmiHeader.biCompression = BI_RGB;
-	bmi.bmiHeader.biBitCount    = 32;
-
-	// Create a DC and a bitmap for the font
-	HBITMAP hbmBitmap           = CreateDIBSection(
-        s_hDC, &bmi, DIB_RGB_COLORS, (VOID**) &pBitmapBits, nullptr, 0);
-
-	if (nullptr == hbmBitmap)
+	// Create a bitmap for the font
+	if (!m_pFont->BeginCanvas(m_dwTexWidth, m_dwTexHeight))
 	{
 		__ASSERT(0, "CreateDIBSection 실패");
 		if (m_pTexture)
@@ -334,16 +256,10 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 		return E_FAIL;
 	}
 
-	HGDIOBJ hObjPrev = ::SelectObject(s_hDC, hbmBitmap);
-
-	// Set text properties
-	SetTextColor(s_hDC, RGB(255, 255, 255));
-	SetBkColor(s_hDC, RGB(0, 0, 0));
-	SetTextAlign(s_hDC, TA_TOP);
-
 	// Loop through all printable character and output them to the bitmap..
 	// Meanwhile, keep track of the corresponding tex coords for each character.
 	Make2DVertex(size.cy, szText);
+	const uint32_t* pBitmapBits = m_pFont->CanvasPixels();
 
 	// Lock the surface and write the alpha values for the set pixels
 	D3DLOCKED_RECT d3dlr;
@@ -366,8 +282,7 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 	// Done updating texture, so clean up used objects
 	m_pTexture->UnlockRect(0);
 
-	::SelectObject(s_hDC, hObjPrev); // 반드시 전의걸 선택해야..
-	DeleteObject(hbmBitmap);         // 제대로 지워진다..
+	m_pFont->EndCanvas();
 
 	////////////////////////////////////////////////////////////
 	// 필터링 텍스처는... MipMap 만든다..
@@ -401,7 +316,7 @@ HRESULT CDFont::SetText(const std::string& szText, uint32_t dwFlags)
 
 void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 {
-	if (m_pVB == nullptr || s_hDC == nullptr || m_hFont == nullptr)
+	if (m_pVB == nullptr || m_pFont == nullptr)
 	{
 		__ASSERT(0, "NULL Vertex Buffer or DC or Font Handle ");
 		return;
@@ -426,9 +341,8 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 	int iCount         = 0;
 
 	char szTempChar[3] = "";
-	uint32_t dwColor   = 0xffffffff; // 폰트의 색
+	uint32_t dwColor   = 0xffffffff;  // 폰트의 색
 	m_dwFontColor      = 0xffffffff;
-	SIZE size;
 
 	float fMaxX = 0.0f, fMaxY = 0.0f; // 글씨가 찍히는 범위의 최대 최소값을 조사하기 위해서.
 
@@ -496,8 +410,7 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 			szTempChar[1]  = 0x00;
 		}
 
-		SelectObject(s_hDC, m_hFont);
-		GetTextExtentPoint32(s_hDC, szTempChar, lstrlen(szTempChar), &size);
+		SIZE size = m_pFont->MeasureText(szTempChar);
 		if ((x + size.cx) > m_dwTexWidth)
 		{ // vertex 만들고 다음 줄로 넘기기..
 			// vertex 만들기
@@ -551,8 +464,7 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 		}
 
 		// dc에 찍기
-		SelectObject(s_hDC, m_hFont);
-		ExtTextOut(s_hDC, x, y, ETO_OPAQUE, nullptr, szTempChar, lstrlen(szTempChar), nullptr);
+		m_pFont->DrawString(x, y, szTempChar);
 		x += size.cx;
 	}
 
@@ -605,7 +517,7 @@ void CDFont::Make2DVertex(const int iFontHeight, const std::string& szText)
 
 HRESULT CDFont::DrawText(FLOAT sx, FLOAT sy, uint32_t dwColor, uint32_t dwFlags)
 {
-	if (m_pVB == nullptr || s_hDC == nullptr || m_hFont == nullptr)
+	if (m_pVB == nullptr || m_pFont == nullptr)
 	{
 		//__ASSERT(0, "NULL Vertex Buffer or DC or Font Handle ");
 		return E_FAIL;
@@ -768,11 +680,12 @@ HRESULT CDFont::DrawText(FLOAT sx, FLOAT sy, uint32_t dwColor, uint32_t dwFlags)
 
 BOOL CDFont::GetTextExtent(const std::string& szString, int iStrLen, SIZE* pSize)
 {
-	if (nullptr == s_hDC)
+	if (nullptr == m_pFont || iStrLen < 0)
 		return FALSE;
 
-	SelectObject(s_hDC, m_hFont);
-	return ::GetTextExtentPoint32(s_hDC, szString.c_str(), iStrLen, pSize);
+	*pSize = m_pFont->MeasureText(
+		std::string_view(szString).substr(0, static_cast<size_t>(iStrLen)));
+	return TRUE;
 }
 
 HRESULT CDFont::SetFontColor(uint32_t dwColor)

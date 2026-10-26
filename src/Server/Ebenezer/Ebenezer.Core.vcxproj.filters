@@ -53,10 +53,16 @@
     <ClCompile Include="User.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="UserCheat.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="EbenezerResourceFormatter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="OperationMessage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LayoutChecks.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="KnightsSiegeWar.cpp">
@@ -101,6 +107,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="GameEvent.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ItemUpgradeRules.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Knights.h">

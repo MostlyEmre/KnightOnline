@@ -9,35 +9,52 @@
 #include "GameProcMain.h"
 #include "N3WorldManager.h"
 
+#include <FileIO/PathResolver.h>
 #include <shared/Ini.h>
 
 #include <ctime>
 
 #include "UIManager.h"
 #include "UIMessageBoxManager.h"
+#include "UICheats.h"
+#include "UIPowerUpStore.h"
 
 #include <N3Base/DFont.h>
 #include <N3Base/N3SndMgr.h>
 #include <N3Base/N3UIEdit.h>
+#include <N3Base/Platform/Application.h>
+#include <N3Base/Platform/Window.h>
 
-#include <windowsx.h>
+static int WarFareMain(HINSTANCE hInstance, int nShowCmd);
+static Platform::EventHandlers CreateEventHandlers();
 
-HWND CreateMainWindow(HINSTANCE hInstance);
-LRESULT CALLBACK WndProcMain(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
-
+#if defined(_WIN32)
 int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance*/, _In_ LPSTR /*lpCmdLine*/, _In_ int nShowCmd)
 {
+	return WarFareMain(hInstance, nShowCmd);
+}
+#else
+int main()
+{
+	return WarFareMain(nullptr, 0);
+}
+#endif
+
+static int WarFareMain(HINSTANCE hInstance, int nShowCmd)
+{
+	if (!Platform::InitializeProcess())
+		return -1;
+
 	// NOTE: get the current directory and make it known to CN3Base
-	char szPath[_MAX_PATH] = "";
-	GetCurrentDirectory(_MAX_PATH, szPath);
-	CN3Base::PathSet(szPath);
+	std::error_code ec;
+	CN3Base::PathSet(std::filesystem::current_path(ec).string());
 
 	// NOTE: we are anticipating an Options file to exist within this directory
 	char szIniPath[_MAX_PATH] = "";
 	lstrcpy(szIniPath, CN3Base::PathGet().c_str());
 	lstrcat(szIniPath, "Option.ini");
 
-	CIni ini(szIniPath);
+	CIni ini(PathResolver::Resolve(szIniPath));
 
 	// NOTE: what is the texture quality?
 	CN3Base::s_Options.iTexLOD_Chr = ini.GetInt("Texture", "LOD_Chr", 0);
@@ -131,15 +148,20 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstanc
 	srand((uint32_t) time(nullptr));
 
 	// 메인 윈도우를 만들고..
-	HWND hWndMain = CreateMainWindow(hInstance);
+	Platform::MainWindowDesc desc;
+	desc.szTitle         = "Knight OnLine Client";
+	desc.iClientWidth    = CN3Base::s_Options.iViewWidth;
+	desc.iClientHeight   = CN3Base::s_Options.iViewHeight;
+	desc.bWindowed       = CN3Base::s_Options.bWindowMode;
+	desc.iIconResourceId = IDI_MAIN;
+	desc.iShowCommand    = nShowCmd; // 보여준다..
+
+	HWND hWndMain        = Platform::CreateMainWindow(hInstance, desc, CreateEventHandlers());
 	if (hWndMain == nullptr)
 	{
 		CLogWriter::Write("Cannot create window.");
 		exit(-1);
 	}
-
-	::ShowWindow(hWndMain, nShowCmd); // 보여준다..
-	::SetActiveWindow(hWndMain);
 
 	CGameProcedure::s_bWindowed = true;
 
@@ -149,247 +171,176 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstanc
 	// set the game's current procedure to s_pProcLogIn
 	CGameProcedure::ProcActiveSet((CGameProcedure*) CGameProcedure::s_pProcLogIn);
 
-#if _DEBUG
-	HACCEL hAccel = LoadAccelerators(nullptr, MAKEINTRESOURCE(IDR_MAIN_ACCELATOR));
-	HDC hDC       = GetDC(hWndMain);
-#endif // #if _DEBUG
-
-	MSG msg {};
-	BOOL bGotMsg = FALSE;
-
-	while (WM_QUIT != msg.message)
-	{
-		// Use PeekMessage() if the app is active, so we can use idle time to
-		// render the scene. Else, use GetMessage() to avoid eating CPU time.
-		bGotMsg = PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE);
-		if (bGotMsg)
-		{
-#if _DEBUG
-			if (0 == TranslateAccelerator(hWndMain, hAccel, &msg))
-			{
-				TranslateMessage(&msg);
-				DispatchMessage(&msg);
-			}
-#else
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-#endif // #if _DEBUG
-		}
-		else
-		{
-			// Render a frame during idle time (no messages are waiting)
-			CGameProcedure::TickActive();
-			CGameProcedure::RenderActive();
-		}
-	}
-
-#if _DEBUG
-	ReleaseDC(hWndMain, hDC);
-	DestroyAcceleratorTable(hAccel);
-#endif // #if _DEBUG
+	int iExitCode = Platform::RunEventLoop(hWndMain, IDR_MAIN_ACCELATOR);
 
 	CGameProcedure::StaticMemberRelease();
 
-	return static_cast<int>(msg.wParam);
+	return iExitCode;
 }
 
-HWND CreateMainWindow(HINSTANCE hInstance)
+// The edit box text changed (typed into the platform's text input field).
+static void OnTextInputChanged()
 {
-	WNDCLASSEXA wc;
+	CN3UIEdit* pEdit = CN3UIEdit::GetFocusedEdit();
+	if (pEdit == nullptr)
+		return;
 
-	//  only register the window class once - use hInstance as a flag.
-	wc.cbSize        = sizeof(WNDCLASSEXA);
-	wc.style         = 0;
-	wc.lpfnWndProc   = (WNDPROC) WndProcMain;
-	wc.cbClsExtra    = 0;
-	wc.cbWndExtra    = 0;
-	wc.hInstance     = hInstance;
-	wc.hIcon         = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_MAIN));
-	wc.hCursor       = nullptr;
-	wc.hbrBackground = (HBRUSH) GetStockObject(NULL_BRUSH);
-	wc.lpszMenuName  = nullptr;
-	wc.lpszClassName = "Knight OnLine Client";
-	wc.hIconSm       = nullptr;
+	pEdit->UpdateTextFromEditCtrl();
+	pEdit->UpdateCaretPosFromEditCtrl();
+	CGameProcedure::SetGameCursor(CGameProcedure::s_hCursorNormal);
+}
 
-	if (0 == ::RegisterClassExA(&wc))
+static void OnSocketEvent(Platform::SocketEvent eEvent)
+{
+	switch (eEvent)
 	{
-		CLogWriter::Write("Cannot register window class.");
-		exit(-1);
+		case Platform::SocketEvent::Connected:
+			TRACE("Socket connected");
+			break;
+
+		case Platform::SocketEvent::Closed:
+			CGameProcedure::ReportServerConnectionClosed(true);
+			TRACE("Socket closed");
+			break;
+
+		case Platform::SocketEvent::Readable:
+			CGameProcedure::s_pSocket->Receive();
+			break;
 	}
+}
 
-	DWORD style    = 0;
-	int iViewWidth = 0, iViewHeight = 0;
-	if (CN3Base::s_Options.bWindowMode)
+static void OnActivate(HWND hWnd, bool bActive)
+{
+	if (bActive)
 	{
-		style = WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_GROUP;
+		Platform::SetFocus(hWnd);
 
-		RECT rc;
-		rc.left   = 0;
-		rc.right  = CN3Base::s_Options.iViewWidth;
-		rc.top    = 0;
-		rc.bottom = CN3Base::s_Options.iViewHeight;
+		CN3UIEdit* pUIFocused = CN3UIBase::GetFocusedEdit();
+		if (pUIFocused != nullptr)
+		{
+			pUIFocused->KillFocus();
+			pUIFocused->SetFocus();
+		}
 
-		AdjustWindowRect(&rc, style, FALSE);
-
-		iViewWidth  = rc.right - rc.left;
-		iViewHeight = rc.bottom - rc.top;
+		CGameProcedure::s_bIsWindowInFocus = true;
 	}
 	else
 	{
-		style       = WS_POPUP | WS_CLIPCHILDREN;
-		iViewWidth  = CN3Base::s_Options.iViewWidth;
-		iViewHeight = CN3Base::s_Options.iViewHeight;
-	}
+		CGameProcedure::s_bIsWindowInFocus = false;
 
-	return ::CreateWindowExA(
-		0, wc.lpszClassName, "Knight OnLine Client", style, 0, 0, iViewWidth, iViewHeight, nullptr, nullptr, hInstance, nullptr);
+		if (!CGameProcedure::s_bWindowed)
+		{
+			CLogWriter::Write("WA_INACTIVE.");
+			Platform::PostQuitMessage(0);
+		}
+	}
 }
 
-/*
-	WndProcMain processes the messages for the main window
-*/
-LRESULT CALLBACK WndProcMain(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+// Returns true to keep the window open.
+static bool OnCloseRequested()
 {
-	switch (message)
+	if (CGameProcedure::s_pProcActive != nullptr && CGameProcedure::s_pProcActive == CGameProcedure::s_pProcMain)
 	{
-		case WM_COMMAND:
+		if (!_IsKeyDown(VK_MENU))
 		{
-			uint16_t wNotifyCode = HIWORD(wParam); // notification code
-			CN3UIEdit* pEdit     = CN3UIEdit::GetFocusedEdit();
-
-			if (wNotifyCode == EN_CHANGE && pEdit)
-			{
-				// NOLINTNEXTLINE(performance-no-int-to-ptr)
-				HWND hwndCtl = (HWND) lParam;
-
-				if (CN3UIEdit::s_hWndEdit == hwndCtl)
-				{
-					pEdit->UpdateTextFromEditCtrl();
-					pEdit->UpdateCaretPosFromEditCtrl();
-					CGameProcedure::SetGameCursor(CGameProcedure::s_hCursorNormal);
-				}
-			}
+			CGameProcedure::s_pProcMain->RequestExit();
+			return true;
 		}
-		break;
 
-		case WM_SOCKETMSG:
+		if (CGameProcedure::s_pProcMain->m_fExitTimer != -1.0f)
 		{
-			switch (WSAGETSELECTEVENT(lParam))
+			if (CGameProcedure::s_pProcMain->m_pUIChatDlg != nullptr)
 			{
-				case FD_CONNECT:
-					TRACE("Socket connected");
-					break;
-
-				case FD_CLOSE:
-					CGameProcedure::ReportServerConnectionClosed(true);
-					TRACE("Socket closed");
-					break;
-
-				case FD_READ:
-					CGameProcedure::s_pSocket->Receive();
-					break;
-
-				default:
-					__ASSERT(0, "WM_SOCKETMSG: unknown socket flag.");
-					break;
-			}
-		}
-		break;
-
-		case WM_ACTIVATE:
-		{
-			int iActive = LOWORD(wParam); // activation flag
-			switch (iActive)
-			{
-				case WA_CLICKACTIVE:
-				case WA_ACTIVE:
-				{
-					SetFocus(hWnd);
-
-					CN3UIEdit* pUIFocused = CN3UIBase::GetFocusedEdit();
-					if (pUIFocused != nullptr)
-					{
-						pUIFocused->KillFocus();
-						pUIFocused->SetFocus();
-					}
-
-					CGameProcedure::s_bIsWindowInFocus = true;
-				}
-					return 1;
-
-				case WA_INACTIVE:
-					CGameProcedure::s_bIsWindowInFocus = false;
-
-					if (!CGameProcedure::s_bWindowed)
-					{
-						CLogWriter::Write("WA_INACTIVE.");
-						PostQuitMessage(0);
-					}
-					break;
-
-				default:
-					break;
-			}
-		}
-		break;
-
-		case WM_CLOSE:
-		case WM_DESTROY:
-		case WM_QUIT:
-		{
-			if (CGameProcedure::s_pProcActive != nullptr && CGameProcedure::s_pProcActive == CGameProcedure::s_pProcMain)
-			{
-				if (!_IsKeyDown(VK_MENU))
-				{
-					CGameProcedure::s_pProcMain->RequestExit();
-					return 1;
-				}
-
-				if (CGameProcedure::s_pProcMain->m_fExitTimer != -1.0f)
-				{
-					if (CGameProcedure::s_pProcMain->m_pUIChatDlg != nullptr)
-					{
-						std::string szMsg = fmt::format_text_resource(IDS_CANNOT_EXIT_DURING_A_BATTLE);
-						CGameProcedure::s_pProcMain->m_pUIChatDlg->AddChatMsg(N3_CHAT_NORMAL, szMsg, 0xFFFF0000);
-						CGameProcedure::s_pProcMain->m_eExitType = EXIT_TYPE_QUIT;
-					}
-
-					return 1;
-				}
+				std::string szMsg = fmt::format_text_resource(IDS_CANNOT_EXIT_DURING_A_BATTLE);
+				CGameProcedure::s_pProcMain->m_pUIChatDlg->AddChatMsg(N3_CHAT_NORMAL, szMsg, 0xFFFF0000);
+				CGameProcedure::s_pProcMain->m_eExitType = EXIT_TYPE_QUIT;
 			}
 
-			CGameProcedure::s_pSocket->Disconnect();
-			CGameProcedure::s_pSocketSub->Disconnect();
-
-			PostQuitMessage(0);
+			return true;
 		}
-		break;
-
-		case WM_MOUSEWHEEL:
-		{
-			CN3UIBase* pUI = nullptr;
-			if (CGameProcedure::s_pMsgBoxMgr != nullptr)
-				pUI = CGameProcedure::s_pMsgBoxMgr->GetFocusMsgBox();
-
-			short delta = GET_WHEEL_DELTA_WPARAM(wParam);
-
-			if (pUI != nullptr && pUI->IsVisible() && pUI->OnMouseWheelEvent(delta))
-				break;
-
-			if (CGameProcedure::s_pUIMgr != nullptr)
-				pUI = CGameProcedure::s_pUIMgr->GetFocusedUI();
-
-			if (pUI != nullptr && pUI->IsVisible() && pUI->OnMouseWheelEvent(delta))
-				break;
-
-			if (CGameProcedure::s_pProcActive == CGameProcedure::s_pProcMain)
-				CGameProcedure::s_pEng->CameraZoom(delta * 0.05f);
-		}
-		break;
-
-		default:
-			break;
 	}
 
-	return DefWindowProc(hWnd, message, wParam, lParam);
+	CGameProcedure::s_pSocket->Disconnect();
+	CGameProcedure::s_pSocketSub->Disconnect();
+
+	Platform::PostQuitMessage(0);
+	return false;
+}
+
+static void OnMouseWheel(short delta)
+{
+	// Under a modal window only the Power-up Store and the cheats menu scroll (their pages).
+	if (CGameProcedure::IsModalWindowOpen())
+	{
+		if (CGameProcedure::IsOptionsOpen())
+			return;
+
+		if (CGameProcedure::s_pUICheats != nullptr && CGameProcedure::s_pUICheats->IsVisible())
+			CGameProcedure::s_pUICheats->OnMouseWheelEvent(delta);
+		else if (CGameProcedure::s_pUIPowerUpStore != nullptr && CGameProcedure::s_pUIPowerUpStore->IsVisible())
+			CGameProcedure::s_pUIPowerUpStore->OnMouseWheelEvent(delta);
+		return;
+	}
+
+	CN3UIBase* pUI = nullptr;
+	if (CGameProcedure::s_pMsgBoxMgr != nullptr)
+		pUI = CGameProcedure::s_pMsgBoxMgr->GetFocusMsgBox();
+
+	if (pUI != nullptr && pUI->IsVisible() && pUI->OnMouseWheelEvent(delta))
+		return;
+
+	if (CGameProcedure::s_pUIMgr != nullptr)
+		pUI = CGameProcedure::s_pUIMgr->GetFocusedUI();
+
+	if (pUI != nullptr && pUI->IsVisible() && pUI->OnMouseWheelEvent(delta))
+		return;
+
+	if (CGameProcedure::s_pProcActive == CGameProcedure::s_pProcMain)
+		CGameProcedure::s_pEng->CameraZoom(delta * 0.05f);
+}
+
+// Sideways scrolling (two fingers across a trackpad, a tilted wheel) turns the view like dragging
+// with the right button held does: 10 degrees per notch.
+static void OnMouseHWheel(short delta)
+{
+	if (CGameProcedure::s_pProcActive != CGameProcedure::s_pProcMain || CGameProcedure::s_pPlayer == nullptr
+		|| !CGameProcedure::s_pPlayer->IsAlive() || CGameProcedure::IsModalWindowOpen())
+		return;
+
+	float fRot = DegreesToRadians(10.0f) * (delta / 120.0f);
+	if (VP_THIRD_PERSON == CGameProcedure::s_pEng->ViewPoint())
+		CGameProcedure::s_pEng->CameraYawAdd(fRot);
+	else if (!CGameProcedure::s_pPlayer->m_bStun)
+		CGameProcedure::s_pPlayer->RotAdd(fRot);
+}
+
+static Platform::EventHandlers CreateEventHandlers()
+{
+	Platform::EventHandlers handlers;
+
+	// Render a frame during idle time (no messages are waiting)
+	handlers.OnIdle = []
+	{
+		CGameProcedure::TickActive();
+		CGameProcedure::RenderActive();
+	};
+
+	handlers.OnActivate         = OnActivate;
+	handlers.OnCloseRequested   = OnCloseRequested;
+	handlers.OnMouseWheel       = OnMouseWheel;
+	handlers.OnMouseHWheel      = OnMouseHWheel;
+	handlers.OnTextInputChanged = OnTextInputChanged;
+	handlers.OnSocketEvent      = OnSocketEvent;
+	handlers.OnShowOptions      = [] { CGameProcedure::ShowOptions(); };
+	handlers.OnShowGenie        = []
+	{
+		if (CGameProcedure::s_pProcMain != nullptr && CGameProcedure::s_pProcActive == CGameProcedure::s_pProcMain)
+			CGameProcedure::s_pProcMain->CommandToggleUIGenie();
+	};
+	handlers.OnShowCheats = []
+	{
+		if (CGameProcedure::s_pProcMain != nullptr && CGameProcedure::s_pProcActive == CGameProcedure::s_pProcMain)
+			CGameProcedure::s_pProcMain->CommandToggleUICheats();
+	};
+	return handlers;
 }

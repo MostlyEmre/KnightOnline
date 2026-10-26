@@ -79,6 +79,9 @@ void AppThread::SetupCommandLineArgParser(argparse::ArgumentParser& parser)
 	parser.add_argument("--telnet-address")
 		.help("sets the address for the telnet command server to listen on, overriding config")
 		.store_into(_overrideTelnetAddress);
+	parser.add_argument("--listen-address")
+		.help("sets the IPv4 address the game listeners bind to (default 0.0.0.0, all addresses)")
+		.store_into(_listenAddress);
 }
 
 bool AppThread::ProcessCommandLineArgs(const argparse::ArgumentParser& /*parser*/)

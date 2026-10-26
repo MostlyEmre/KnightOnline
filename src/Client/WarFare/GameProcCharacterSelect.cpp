@@ -17,6 +17,7 @@
 #include "UILoading.h"
 
 #include <N3Base/N3SndObj.h>
+#include <N3Base/Platform/Input.h>
 #include <N3Base/N3Shape.h>
 #include <N3Base/N3Camera.h>
 #include <N3Base/N3Light.h>
@@ -63,7 +64,7 @@ CGameProcCharacterSelect::~CGameProcCharacterSelect()
 	delete m_pActiveBg;
 	delete m_pUICharacterSelect;
 
-	::ShowCursor(TRUE);
+	Platform::ShowCursor(TRUE);
 }
 
 void CGameProcCharacterSelect::Release()
@@ -90,7 +91,7 @@ void CGameProcCharacterSelect::Release()
 	m_pUICharacterSelect = nullptr;
 	CN3Base::s_SndMgr.ReleaseObj(&m_pSnd_Rotate);
 
-	::ShowCursor(TRUE);
+	Platform::ShowCursor(TRUE);
 }
 
 void CGameProcCharacterSelect::Init()

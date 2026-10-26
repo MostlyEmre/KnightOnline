@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <dinput.h>
-
 #include <N3Base/My_3DStruct.h>
+#include <N3Base/Platform/Input.h>
+#include <N3Base/Platform/KeyCodes.h>
 
 inline constexpr int DK_NONE         = 0;
 inline constexpr int DK_RELEASE      = 1;
@@ -38,8 +38,7 @@ private:
 	void UnacquireKeyboard();
 
 protected:
-	LPDIRECTINPUT8 m_lpDI;
-	LPDIRECTINPUTDEVICE8 m_lpDIDKeyboard;
+	Platform::KeyboardDevice m_Keyboard;
 
 	HWND m_hWnd;
 
@@ -62,7 +61,17 @@ protected:
 
 	uint32_t m_dwTickKeyPress[NUMDIKEYS];
 
+	bool m_bMuted = false;
+
 public:
+	// Hides the keys and mouse buttons from everything that asks until Mute(false): a modal window
+	// (the Options window) has taken them. Unlike clearing them, presses and releases are still
+	// tracked, so none are lost or repeated when the input comes back.
+	void Mute(bool bMute)
+	{
+		m_bMuted = bMute;
+	}
+
 	// 키보드 입력을 무효화 시킨다.. 기본값은 몽땅 무효화이다..
 	void KeyboardClearInput(int iIndex = -1)
 	{
@@ -87,7 +96,7 @@ public:
 	// 키보드가 눌려있는지... "DInput.h" 에 정의 되어 있는 DIK_???? 스캔코드를 참조..
 	BOOL IsKeyDown(int iIndex) const
 	{
-		if (iIndex < 0 || iIndex >= NUMDIKEYS)
+		if (m_bMuted || iIndex < 0 || iIndex >= NUMDIKEYS)
 			return FALSE;
 
 		return m_byCurKeys[iIndex];
@@ -96,7 +105,7 @@ public:
 	// 키보드를 누르는 순간... "DInput.h" 에 정의 되어 있는 DIK_???? 스캔코드를 참조..
 	BOOL IsKeyPress(int iIndex) const
 	{
-		if (iIndex < 0 || iIndex >= NUMDIKEYS)
+		if (m_bMuted || iIndex < 0 || iIndex >= NUMDIKEYS)
 			return FALSE;
 
 		return m_bKeyPresses[iIndex];
@@ -105,7 +114,7 @@ public:
 	// 키보드를 누르고나서 떼는 순간... "DInput.h" 에 정의 되어 있는 DIK_???? 스캔코드를 참조..
 	BOOL IsKeyPressed(int iIndex) const
 	{
-		if (iIndex < 0 || iIndex >= NUMDIKEYS)
+		if (m_bMuted || iIndex < 0 || iIndex >= NUMDIKEYS)
 			return FALSE;
 
 		return m_bKeyPresseds[iIndex];
@@ -148,12 +157,12 @@ public:
 	// Mouse Flag 의 or 연산으로 조합되어 있다.
 	int MouseGetFlag() const
 	{
-		return m_nMouseFlag;
+		return m_bMuted ? 0 : m_nMouseFlag;
 	}
 
 	int MouseGetFlagOld() const
 	{
-		return m_nMouseFlagOld;
+		return m_bMuted ? 0 : m_nMouseFlagOld;
 	}
 
 	// 특정한 Mouse Flag 제거

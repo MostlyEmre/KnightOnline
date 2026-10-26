@@ -19,12 +19,23 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="EventExec_test.cpp" />
     <ClCompile Include="EventLogic_test.cpp" />
+    <ClCompile Include="Genie_test.cpp" />
     <ClCompile Include="data\ItemExchange_test_data.h" />
     <ClCompile Include="ItemExchange_test.cpp" />
     <ClCompile Include="data\ItemUpgrade_test_data.h" />
     <ClCompile Include="ItemUpgrade_test.cpp" />
     <ClCompile Include="RankStipendReward_test.cpp" />
+    <ClCompile Include="ShoppingMall_test.cpp" />
+    <ClCompile Include="CheatHandshake_test.cpp" />
+    <ClCompile Include="CheatHooks_test.cpp" />
+    <ClCompile Include="CheatCharacter_test.cpp" />
+    <ClCompile Include="CheatItems_test.cpp" />
+    <ClCompile Include="CheatSettings_test.cpp" />
+    <ClCompile Include="CheatWorld_test.cpp" />
+    <ClCompile Include="SpellDamage_test.cpp" />
+    <ClCompile Include="UpgradeScrolls_test.cpp" />
     <ClCompile Include="data\UserKnightsRank_test_data.h" />
     <ClCompile Include="data\UserPersonalRank_test_data.h" />
   </ItemGroup>

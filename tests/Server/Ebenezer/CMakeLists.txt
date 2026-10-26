@@ -1,8 +1,19 @@
 add_executable(Ebenezer.Tests
+  CheatCharacter_test.cpp
+  CheatHandshake_test.cpp
+  CheatHooks_test.cpp
+  CheatItems_test.cpp
+  CheatSettings_test.cpp
+  CheatWorld_test.cpp
+  EventExec_test.cpp
   EventLogic_test.cpp
+  Genie_test.cpp
   ItemExchange_test.cpp
   ItemUpgrade_test.cpp
   RankStipendReward_test.cpp
+  ShoppingMall_test.cpp
+  SpellDamage_test.cpp
+  UpgradeScrolls_test.cpp
 )
 
 target_link_libraries(Ebenezer.Tests PRIVATE

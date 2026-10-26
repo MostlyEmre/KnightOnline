@@ -42,6 +42,10 @@ option(OPENKO_BUILD_SERVERS "Build the server projects (default on)" ON)
 option(OPENKO_BUILD_TESTS "Build the test projects (default on)" ON)
 option(OPENKO_COMPILE_WARNINGS_AS_ERROR "Enable treating warnings as errors (default on)" ON)
 option(OPENKO_FETCH_CLIENT_ASSETS "Enable fetching client assets (default on)" ON)
+option(OPENKO_BUILD_PORT_TOOLS "Build the macOS port's verification tools under port/ (default off)" OFF)
+option(OPENKO_BUILD_MACOS_CLIENT "Build the client natively on macOS (the port; default off)" OFF)
+set(OPENKO_DB_BACKEND "ODBC" CACHE STRING "Database backend for the servers: ODBC (SQL Server via nanodbc) or SQLITE")
+set_property(CACHE OPENKO_DB_BACKEND PROPERTY STRINGS ODBC SQLITE)
 
 # Define the bin directory; defaults to repo/bin
 set(OPENKO_BIN_DIR "${CMAKE_BINARY_DIR}/bin" CACHE PATH "Directory for final binaries")
@@ -55,11 +59,20 @@ if(WIN32)
     set(OPENKO_BUILD_CLIENT_TOOLS OFF)
     set(OPENKO_BUILD_TOOLS OFF)
   endif()
+elseif(APPLE AND OPENKO_BUILD_MACOS_CLIENT)
+  # The macOS port builds the client itself; the client tools & development tools stay Windows-only.
+  set(OPENKO_BUILD_CLIENT_TOOLS OFF)
+  set(OPENKO_BUILD_TOOLS OFF)
 else()
   # Client & tool projects are currently only supported on Windows.
   set(OPENKO_BUILD_CLIENT OFF)
   set(OPENKO_BUILD_CLIENT_TOOLS OFF)
   set(OPENKO_BUILD_TOOLS OFF)
+endif()
+
+# The macOS client's platform layer has Objective-C++ (AppKit) sources.
+if(APPLE AND OPENKO_BUILD_CLIENT)
+  enable_language(OBJCXX)
 endif()
 
 message(STATUS "OpenKO feature: OPENKO_BUILD_CLIENT - ${OPENKO_BUILD_CLIENT}")
@@ -69,6 +82,7 @@ message(STATUS "OpenKO feature: OPENKO_BUILD_SERVERS - ${OPENKO_BUILD_SERVERS}")
 message(STATUS "OpenKO feature: OPENKO_BUILD_TESTS - ${OPENKO_BUILD_TESTS}")
 message(STATUS "OpenKO feature: OPENKO_COMPILE_WARNINGS_AS_ERROR - ${OPENKO_COMPILE_WARNINGS_AS_ERROR}")
 message(STATUS "OpenKO feature: OPENKO_FETCH_CLIENT_ASSETS - ${OPENKO_FETCH_CLIENT_ASSETS}")
+message(STATUS "OpenKO feature: OPENKO_DB_BACKEND - ${OPENKO_DB_BACKEND}")
 message(STATUS "OpenKO feature: OPENKO_BIN_DIR - ${OPENKO_BIN_DIR}")
 
 if(WIN32)
@@ -132,7 +146,9 @@ add_subdirectory(src/MathUtils)
 if(OPENKO_BUILD_CLIENT OR OPENKO_BUILD_TOOLS)
   # Dependencies
   set(CMAKE_FOLDER "N3Base/_deps")
-  require_config_package(dx9sdk)
+  if(WIN32)
+    require_config_package(dx9sdk)
+  endif()
 
   set(CMAKE_FOLDER "N3Base/_deps/mpg123")
   require_package(Mpg123)
@@ -160,6 +176,11 @@ if(OPENKO_BUILD_CLIENT)
 
   set(CMAKE_FOLDER "Client")
   add_subdirectory(src/Client/WarFare)
+
+  # The macOS app's server supervisor (port/app/make_app.py builds the bundle).
+  if(APPLE AND OPENKO_BUILD_MACOS_CLIENT)
+    add_subdirectory(port/app)
+  endif()
 endif()
 
 if(OPENKO_BUILD_CLIENT_TOOLS)
@@ -197,7 +218,17 @@ if(OPENKO_BUILD_SERVERS)
   require_package(Argparse)
 
   set(CMAKE_FOLDER "Server/_deps")
-  require_package(Nanodbc)
+  if(OPENKO_DB_BACKEND STREQUAL "SQLITE")
+    # Provides the `nanodbc` target on top of SQLite instead of ODBC.
+    require_package(SQLite3Amalgamation)
+    set(CMAKE_FOLDER "Server")
+    add_subdirectory(src/db-library/sqlite)
+    set(CMAKE_FOLDER "Server/_deps")
+  elseif(OPENKO_DB_BACKEND STREQUAL "ODBC")
+    require_package(Nanodbc)
+  else()
+    message(FATAL_ERROR "OPENKO_DB_BACKEND must be ODBC or SQLITE (got '${OPENKO_DB_BACKEND}')")
+  endif()
   require_config_package(db-models)
   require_config_package(djb2)
   add_subdirectory(src/db-library)
@@ -219,6 +250,11 @@ if(OPENKO_BUILD_SERVERS)
   add_subdirectory(src/Server/Ebenezer)
   add_subdirectory(src/Server/ItemManager)
   add_subdirectory(src/Server/VersionManager)
+
+  if(OPENKO_BUILD_PORT_TOOLS)
+    set(CMAKE_FOLDER "Port")
+    add_subdirectory(port/db/parity)
+  endif()
 endif()
 
 if(OPENKO_BUILD_TESTS)
@@ -230,8 +266,22 @@ if(OPENKO_BUILD_TESTS)
   set(CMAKE_FOLDER "Tests")
   add_subdirectory(tests/FileIO)
   add_subdirectory(tests/MathUtils)
+  add_subdirectory(tests/Client/Cheats)
+  add_subdirectory(tests/Client/Genie)
   
   if(OPENKO_BUILD_SERVERS)
     add_subdirectory(tests/Server/Ebenezer)
+
+    if(OPENKO_DB_BACKEND STREQUAL "SQLITE")
+      add_subdirectory(src/db-library/sqlite/tests)
+
+      # The port's game data script (port/db/port_game_data.py), when Python is around.
+      find_package(Python3 COMPONENTS Interpreter QUIET)
+      if(Python3_Interpreter_FOUND)
+        add_test(NAME PortGameDataTests
+          COMMAND "${Python3_EXECUTABLE}" -m unittest test_port_game_data
+          WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/port/db")
+      endif()
+    endif()
   endif() 
 endif()

@@ -600,7 +600,10 @@ void CAISocket::RecvNpcAttack(char* pBuf)
 			pSrcUser->SendTargetHP(0, tid, -damage);
 			if (attackType != MAGIC_ATTACK && attackType != DURATION_ATTACK)
 			{
-				pSrcUser->ItemWoreOut(DURABILITY_TYPE_ATTACK, damage);
+				// OpenKO: weapons wear as if the cheats menu's damage multiplier weren't there.
+				pSrcUser->ItemWoreOut(DURABILITY_TYPE_ATTACK,
+					Cheats::UnscaleDamage(
+						damage, _main->CheatPct(&Cheats::Settings::sDamageDealtPct)));
 
 				// LEFT HAND!!! by Yookozuna
 				tempDamage = damage * pSrcUser->m_bMagicTypeLeftHand / 100;
@@ -1107,12 +1110,19 @@ void CAISocket::RecvUserHP(char* pBuf)
 
 void CAISocket::RecvUserExp(char* pBuf)
 {
+	HandleUserExp(_main, pBuf);
+}
+
+void CAISocket::HandleUserExp(EbenezerApp* main, char* pBuf)
+{
+	// OpenKO: EXP and NP are full-size; as int16s, a monster worth more than 32767 EXP (from about
+	// level 30) arrived wrapped and was refused.
 	int index        = 0;
 	int userId       = GetShort(pBuf, index);
-	int16_t sExp     = GetShort(pBuf, index);
-	int16_t sLoyalty = GetShort(pBuf, index);
+	int32_t sExp     = static_cast<int32_t>(GetDWORD(pBuf, index));
+	int32_t sLoyalty = static_cast<int32_t>(GetDWORD(pBuf, index));
 
-	auto pUser       = _main->GetUserPtr(userId);
+	auto pUser       = main->GetUserPtr(userId);
 	if (pUser == nullptr)
 	{
 		spdlog::error(
@@ -1129,17 +1139,16 @@ void CAISocket::RecvUserExp(char* pBuf)
 		return;
 	}
 
-	CurrencyChange(pUser->m_pUserData->m_iLoyalty, sLoyalty);
-	pUser->ExpChange(sExp);
-
+	// OpenKO: both are multiplied by the cheats menu, and the NP update goes out in the format the
+	// client reads.
 	if (sLoyalty > 0)
-	{
-		char sendBuffer[128] {};
-		int sendIndex = 0;
-		SetByte(sendBuffer, WIZ_LOYALTY_CHANGE, sendIndex);
-		SetDWORD(sendBuffer, pUser->m_pUserData->m_iLoyalty, sendIndex);
-		pUser->Send(sendBuffer, sendIndex);
-	}
+		pUser->LoyaltyGain(sLoyalty);
+
+	pUser->ExpGain(sExp);
+
+	// The experience is for a kill: it earns Knight Cash too (from the unmultiplied EXP).
+	if (sExp > 0)
+		pUser->AddKnightCash(std::clamp(sExp / KNIGHT_CASH_KILL_EXP, 1, KNIGHT_CASH_KILL_MAX));
 }
 
 void CAISocket::RecvSystemMsg(char* pBuf)
