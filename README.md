@@ -82,6 +82,7 @@ When you open the app, it starts the game servers in the background, which takes
 
 - Quest level requirements and the Beginner Helper reward match the official client.
 - Monsters worth more than 32,767 EXP now give their EXP.
+- Damage spells hurt monsters with very high resistance, such as Hyde, Antares and most bosses, instead of healing them. Resistance now stops at 200, the most the spell formula was built for.
 - Going back from the game to character selection no longer crashes character creation.
 - On macOS and Linux, the servers can restart right away, instead of waiting about 30 seconds for their ports to free up.
 
